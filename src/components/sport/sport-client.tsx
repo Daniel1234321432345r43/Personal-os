@@ -1,0 +1,236 @@
+"use client";
+
+import { useState } from "react";
+import { useData } from "@/components/providers/data-provider";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
+import { formatDate, formatDuration, todayKey } from "@/lib/format";
+import { WorkoutForm } from "@/components/forms/workout-form";
+import { HabitForm } from "@/components/forms/habit-form";
+import { Check, Dumbbell, Plus, Trash2 } from "lucide-react";
+import { cn } from "@/lib/utils";
+
+function daysAgoKey(days: number): string {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function LoadingState() {
+  return (
+    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+      <Skeleton className="h-8 w-40" />
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
+        <Skeleton className="h-20" />
+      </div>
+      <Skeleton className="h-48" />
+    </div>
+  );
+}
+
+export function SportClient() {
+  const { data, hydrated, actions } = useData();
+  const [showWorkout, setShowWorkout] = useState(false);
+  const [showHabit, setShowHabit] = useState(false);
+
+  if (!hydrated) return <LoadingState />;
+
+  const today = todayKey();
+
+  const weekWorkouts = data.workouts.filter((w) => w.date >= daysAgoKey(6));
+  const totalMinutes = weekWorkouts.reduce((s, w) => s + w.duration_minutes, 0);
+  const todayMinutes = data.workouts
+    .filter((w) => w.date === today)
+    .reduce((s, w) => s + w.duration_minutes, 0);
+
+  const activityCount = new Map<string, number>();
+  data.workouts.forEach((w) =>
+    activityCount.set(w.activity_type, (activityCount.get(w.activity_type) ?? 0) + 1),
+  );
+  const favorite =
+    [...activityCount.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "—";
+
+  const completedToday = data.habitCompletions.filter(
+    (c) => c.completed_on === today,
+  ).length;
+
+  const sorted = [...data.workouts].sort((a, b) => b.date.localeCompare(a.date));
+
+  const stats = [
+    { label: "Entrenamientos (7 días)", value: String(weekWorkouts.length) },
+    { label: "Minutos esta semana", value: formatDuration(totalMinutes) },
+    { label: "Hoy", value: todayMinutes ? formatDuration(todayMinutes) : "—" },
+    { label: "Actividad favorita", value: favorite },
+  ];
+
+  return (
+    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Deporte</h1>
+        <p className="text-sm text-muted-foreground">
+          Registra tus entrenamientos y hábitos diarios.
+        </p>
+      </header>
+
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        {stats.map((s) => (
+          <Card key={s.label}>
+            <CardContent className="p-4">
+              <p className="truncate text-xs text-muted-foreground">{s.label}</p>
+              <p className="truncate text-lg font-semibold tracking-tight">
+                {s.value}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Entrenamientos */}
+        <Card className="lg:col-span-2">
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-base">Entrenamientos</CardTitle>
+            <Button size="sm" onClick={() => setShowWorkout((v) => !v)}>
+              <Plus className="h-4 w-4" />
+              Nuevo
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {showWorkout && (
+              <div className="mb-4 rounded-lg border bg-muted/30 p-4">
+                <WorkoutForm onDone={() => setShowWorkout(false)} />
+              </div>
+            )}
+
+            {sorted.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Aún no has registrado entrenamientos.
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {sorted.map((w) => (
+                  <li
+                    key={w.id}
+                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                      <Dumbbell className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium">
+                        {w.activity_type}
+                        {w.title ? ` — ${w.title}` : ""}
+                      </p>
+                      {w.notes && (
+                        <p className="truncate text-xs text-muted-foreground">
+                          {w.notes}
+                        </p>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="text-sm font-medium">
+                        {formatDuration(w.duration_minutes)}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatDate(w.date)}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      onClick={() => actions.deleteWorkout(w.id)}
+                      title="Eliminar"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Hábitos */}
+        <Card>
+          <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+            <CardTitle className="text-base">Hábitos</CardTitle>
+            <Button size="sm" variant="outline" onClick={() => setShowHabit((v) => !v)}>
+              <Plus className="h-4 w-4" />
+              Añadir
+            </Button>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {showHabit && (
+              <div className="rounded-lg border bg-muted/30 p-4">
+                <HabitForm onDone={() => setShowHabit(false)} />
+              </div>
+            )}
+
+            {data.habits.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                Sin hábitos. Añade uno para empezar a seguirlo.
+              </p>
+            ) : (
+              <div>
+                <p className="mb-2 text-sm text-muted-foreground">
+                  {completedToday} de {data.habits.length} completados hoy.
+                </p>
+                <ul className="space-y-1">
+                  {data.habits.map((h) => {
+                    const done = data.habitCompletions.some(
+                      (c) => c.habit_id === h.id && c.completed_on === today,
+                    );
+                    return (
+                      <li key={h.id} className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => actions.toggleHabit(h.id)}
+                          className={cn(
+                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                            done
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-input hover:border-primary",
+                          )}
+                          aria-pressed={done}
+                          aria-label={`Marcar ${h.name}`}
+                        >
+                          {done && <Check className="h-3.5 w-3.5" />}
+                        </button>
+                        <span className="text-sm">{h.emoji}</span>
+                        <span
+                          className={cn(
+                            "min-w-0 flex-1 truncate text-sm",
+                            done && "text-muted-foreground line-through",
+                          )}
+                        >
+                          {h.name}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                          onClick={() => actions.deleteHabit(h.id)}
+                          title="Eliminar hábito"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
