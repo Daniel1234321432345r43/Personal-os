@@ -564,10 +564,11 @@ export function CalendarClient() {
                           {examsList.slice(0, 2).map((exam) => (
                             <div
                               key={exam.id}
-                              className="truncate rounded bg-red-500/15 px-1 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300 border border-red-500/20"
+                              className="flex items-center gap-1 truncate rounded bg-red-500/15 px-1 py-0.5 text-[10px] font-medium text-red-700 dark:text-red-300 border border-red-500/20"
                               title={`Examen: ${exam.title}`}
                             >
-                              🔴 {exam.title}
+                              <GraduationCap className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{exam.title}</span>
                             </div>
                           ))}
 
@@ -575,10 +576,11 @@ export function CalendarClient() {
                           {assignmentsList.slice(0, 2).map((assign) => (
                             <div
                               key={assign.id}
-                              className="truncate rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 border border-amber-500/20"
+                              className="flex items-center gap-1 truncate rounded bg-amber-500/15 px-1 py-0.5 text-[10px] font-medium text-amber-700 dark:text-amber-300 border border-amber-500/20"
                               title={`Entrega: ${assign.title}`}
                             >
-                              📙 {assign.title}
+                              <FileText className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{assign.title}</span>
                             </div>
                           ))}
 
@@ -586,10 +588,11 @@ export function CalendarClient() {
                           {studySessionsList.slice(0, 2).map((study) => (
                             <div
                               key={study.id}
-                              className="truncate rounded bg-indigo-500/15 px-1 py-0.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300 border border-indigo-500/20"
+                              className="flex items-center gap-1 truncate rounded bg-indigo-500/15 px-1 py-0.5 text-[10px] font-medium text-indigo-700 dark:text-indigo-300 border border-indigo-500/20"
                               title={`Sesión de estudio: ${study.title}`}
                             >
-                              📖 {study.title}
+                              <BookOpen className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{study.title}</span>
                             </div>
                           ))}
 
@@ -597,23 +600,30 @@ export function CalendarClient() {
                           {tasksList.slice(0, 1).map((t) => (
                             <div
                               key={t.id}
-                              className="truncate rounded bg-blue-500/15 px-1 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300 border border-blue-500/20"
+                              className="flex items-center gap-1 truncate rounded bg-blue-500/15 px-1 py-0.5 text-[10px] font-medium text-blue-700 dark:text-blue-300 border border-blue-500/20"
                               title={`Tarea: ${t.title}`}
                             >
-                              📋 {t.title}
+                              <CheckSquare className="h-3 w-3 shrink-0" />
+                              <span className="truncate">{t.title}</span>
                             </div>
                           ))}
 
                           {/* Gastos / Ingresos */}
                           {expensesList.length > 0 && (
-                            <div className="truncate rounded bg-rose-500/15 px-1 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-300">
-                              💸 -{formatCurrency(expensesList.reduce((a, b) => a + Number(b.amount), 0))}
+                            <div className="flex items-center gap-1 truncate rounded bg-rose-500/15 px-1 py-0.5 text-[10px] font-medium text-rose-700 dark:text-rose-300">
+                              <ArrowDownRight className="h-3 w-3 shrink-0" />
+                              <span className="truncate">
+                                -{formatCurrency(expensesList.reduce((a, b) => a + Number(b.amount), 0))}
+                              </span>
                             </div>
                           )}
 
                           {incomesList.length > 0 && (
-                            <div className="truncate rounded bg-emerald-500/15 px-1 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
-                              💰 +{formatCurrency(incomesList.reduce((a, b) => a + Number(b.amount), 0))}
+                            <div className="flex items-center gap-1 truncate rounded bg-emerald-500/15 px-1 py-0.5 text-[10px] font-medium text-emerald-700 dark:text-emerald-300">
+                              <ArrowUpRight className="h-3 w-3 shrink-0" />
+                              <span className="truncate">
+                                +{formatCurrency(incomesList.reduce((a, b) => a + Number(b.amount), 0))}
+                              </span>
                             </div>
                           )}
 
@@ -621,10 +631,13 @@ export function CalendarClient() {
                           {workoutsList.slice(0, 1).map((w) => (
                             <div
                               key={w.id}
-                              className="truncate rounded bg-purple-500/15 px-1 py-0.5 text-[10px] font-medium text-purple-700 dark:text-purple-300"
+                              className="flex items-center gap-1 truncate rounded bg-purple-500/15 px-1 py-0.5 text-[10px] font-medium text-purple-700 dark:text-purple-300"
                               title={`Entrenamiento: ${w.activity_type}`}
                             >
-                              🏃 {w.activity_type} ({w.duration_minutes}m)
+                              <Dumbbell className="h-3 w-3 shrink-0" />
+                              <span className="truncate">
+                                {w.activity_type} ({w.duration_minutes}m)
+                              </span>
                             </div>
                           ))}
 
@@ -748,7 +761,10 @@ export function CalendarClient() {
                             key={w.id}
                             className="flex items-center justify-between rounded-md bg-purple-500/10 p-2 text-xs text-purple-900 dark:text-purple-200"
                           >
-                            <span className="font-medium">🏃 {w.activity_type}</span>
+                            <span className="flex items-center gap-1 font-medium">
+                              <Dumbbell className="h-3.5 w-3.5" />
+                              {w.activity_type}
+                            </span>
                             <span>{w.duration_minutes} min</span>
                           </div>
                         ))}
@@ -911,7 +927,11 @@ export function CalendarClient() {
                                         {sub.name}
                                       </span>
                                     )}
-                                    {t.estimated_minutes && <span>⏱️ {t.estimated_minutes} min</span>}
+                                    {t.estimated_minutes && (
+                                      <span className="flex items-center gap-1">
+                                        <Clock className="h-3 w-3" /> {t.estimated_minutes} min
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>

@@ -413,16 +413,7 @@ export function SecretaryChat() {
             <div className="space-y-1">
               <p className="text-sm font-medium">Secretario {assistantName}</p>
               <p className="text-sm text-muted-foreground">
-                ¡Hola! Soy {assistantName}, tu Secretario IA. Puedes decirme directamente tus
-                asignaturas, exámenes, notas o tareas pendientes (ej.{" "}
-                <em>
-                  &ldquo;He sacado un 8 en el examen de Mates que cuenta un 20%&rdquo;
-                </em>{" "}
-                o{" "}
-                <em>
-                  &ldquo;Tengo examen de Física el 10 de octubre&rdquo;
-                </em>
-                ) y los registraré automáticamente en tu sistema. 👋
+                ¡Hola! Soy {assistantName}, tu Secretario IA.
               </p>
             </div>
           </div>
