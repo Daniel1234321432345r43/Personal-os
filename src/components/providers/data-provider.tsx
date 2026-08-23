@@ -52,6 +52,7 @@ export type TaskInput = {
   category?: TaskCategory;
   priority?: TaskPriority;
   due_date?: string | null;
+  start_time?: string | null;
   estimated_minutes?: number | null;
   subject_id?: string | null;
   subject_name?: string | null;
@@ -64,6 +65,7 @@ export type TaskInput = {
 export type WorkoutInput = {
   activity_type: string;
   date?: string;
+  start_time?: string | null;
   duration_minutes: number;
   title?: string | null;
   notes?: string | null;
@@ -273,9 +275,9 @@ async function syncStateToSupabase(state: DataState, userId: string): Promise<bo
   const operations: Array<[string, unknown]> = [
     ["subjects", state.subjects.map(({ id, name, color, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, classroom_course_id, classroom_name, created_at }))],
     ["habits", state.habits.map(({ id, name, emoji, frequency, created_at }) => ({ id, user_id: userId, name, emoji, frequency, created_at }))],
-    ["tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, estimated_minutes, subject_id, classroom_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, estimated_minutes, subject_id, classroom_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at }))],
+    ["tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, start_time, estimated_minutes, subject_id, classroom_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, start_time: start_time ?? null, estimated_minutes, subject_id, classroom_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at }))],
     ["notes", state.notes.map(({ id, title, content, file_name, file_type, file_data, created_at, updated_at }) => ({ id, user_id: userId, title, content, file_name, file_type, file_data, created_at, updated_at }))],
-    ["workouts", state.workouts.map(({ id, activity_type, title, date, duration_minutes, notes, created_at }) => ({ id, user_id: userId, activity_type, title, date, duration_minutes, notes, created_at }))],
+    ["workouts", state.workouts.map(({ id, activity_type, title, date, start_time, duration_minutes, notes, created_at }) => ({ id, user_id: userId, activity_type, title, date, start_time: start_time ?? null, duration_minutes, notes, created_at }))],
     ["transactions", state.transactions.map(({ id, type, amount, category, description, date, created_at }) => ({ id, user_id: userId, type, amount, category, description, date, created_at }))],
     ["habit_completions", state.habitCompletions.map(({ id, habit_id, completed_on }) => ({ id, user_id: userId, habit_id, completed_on }))],
     ["grades", state.grades.map(({ id, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }) => ({ id, user_id: userId, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }))],
@@ -359,12 +361,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
         tasks: (tasks as Record<string, unknown>[]).map((t) => ({
           ...t,
           due_date: normDate(t.due_date),
+          start_time: typeof t.start_time === "string" && t.start_time.length >= 5
+            ? t.start_time.slice(0, 5)
+            : null,
           session_index: t.session_index ?? null,
           total_sessions: t.total_sessions ?? null,
           parent_task_id: t.parent_task_id ?? null,
         } as unknown as Task)),
         notes: notes as Note[],
-        workouts: (workouts as Record<string, unknown>[]).map((w) => ({ ...w, date: normDate(w.date) } as unknown as Workout)),
+        workouts: (workouts as Record<string, unknown>[]).map((w) => ({
+          ...w,
+          date: normDate(w.date),
+          start_time: typeof w.start_time === "string" && w.start_time.length >= 5
+            ? w.start_time.slice(0, 5)
+            : null,
+        } as unknown as Workout)),
         habits: habits as Habit[],
         habitCompletions: (habitCompletions as Record<string, unknown>[]).map((h) => ({ ...h, completed_on: normDate(h.completed_on) } as unknown as HabitCompletion)),
         transactions: (transactions as Record<string, unknown>[]).map((t) => ({ ...t, date: normDate(t.date) } as unknown as Transaction)),
@@ -597,6 +608,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 type: input.type ?? "study_session",
                 category: input.category ?? (resolvedSubjectId ? "academic" : "personal"),
                 due_date: dateStr || null,
+                start_time: input.start_time ?? null,
                 estimated_minutes: input.estimated_minutes ?? null,
                 subject_id: resolvedSubjectId, classroom_id: null,
                 session_index: idx + 1, total_sessions: total, parent_task_id: parentId,
@@ -612,6 +624,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               type: input.type ?? "task",
               category: input.category ?? (resolvedSubjectId ? "academic" : "personal"),
               due_date: input.due_date ?? (input.session_dates?.[0] || null),
+              start_time: input.start_time ?? null,
               estimated_minutes: input.estimated_minutes ?? null,
               subject_id: resolvedSubjectId, classroom_id: null,
               session_index: input.session_index ?? null,
@@ -641,6 +654,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             type: t.type,
             category: t.category,
             due_date: t.due_date,
+            start_time: t.start_time,
             estimated_minutes: t.estimated_minutes,
             subject_id: t.subject_id,
             classroom_id: t.classroom_id,
@@ -724,6 +738,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                   type: input.type ?? "study_session",
                   category: input.category ?? (resolvedSubjectId ? "academic" : "personal"),
                   due_date: dateStr || null,
+                  start_time: input.start_time ?? null,
                   estimated_minutes: input.estimated_minutes ?? null,
                   subject_id: resolvedSubjectId, classroom_id: null,
                   session_index: idx + 1, total_sessions: total, parent_task_id: parentId,
@@ -739,6 +754,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 type: input.type ?? "task",
                 category: input.category ?? (resolvedSubjectId ? "academic" : "personal"),
                 due_date: input.due_date ?? (input.session_dates?.[0] || null),
+                start_time: input.start_time ?? null,
                 estimated_minutes: input.estimated_minutes ?? null,
                 subject_id: resolvedSubjectId, classroom_id: null,
                 session_index: input.session_index ?? null,
@@ -770,6 +786,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             type: t.type,
             category: t.category,
             due_date: t.due_date,
+            start_time: t.start_time,
             estimated_minutes: t.estimated_minutes,
             subject_id: t.subject_id,
             classroom_id: t.classroom_id,
@@ -880,18 +897,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
           ...prev,
           workouts: [
             ...prev.workouts,
-            { id, user_id: userId, activity_type: input.activity_type.trim(), title: input.title ?? null, date, duration_minutes: input.duration_minutes, notes: input.notes ?? null, created_at: iso } as Workout,
+            { id, user_id: userId, activity_type: input.activity_type.trim(), title: input.title ?? null, date, start_time: input.start_time ?? null, duration_minutes: input.duration_minutes, notes: input.notes ?? null, created_at: iso } as Workout,
           ],
         }));
         if (userId !== "local") {
-          syncSupabase(_supabase.from("workouts").insert({ id, user_id: userId, activity_type: input.activity_type.trim(), title: input.title ?? null, date, duration_minutes: input.duration_minutes, notes: input.notes ?? null, created_at: iso }));
+          syncSupabase(_supabase.from("workouts").insert({ id, user_id: userId, activity_type: input.activity_type.trim(), title: input.title ?? null, date, start_time: input.start_time ?? null, duration_minutes: input.duration_minutes, notes: input.notes ?? null, created_at: iso }));
         }
       },
 
       addWorkouts: (inputs) => {
         const iso = nowIso();
         const userId = uid();
-        const newWorkouts = inputs.map((input) => ({ id: newId(), user_id: userId, activity_type: input.activity_type.trim(), title: input.title ?? null, date: input.date ?? todayKey(), duration_minutes: input.duration_minutes, notes: input.notes ?? null, created_at: iso } as Workout));
+        const newWorkouts = inputs.map((input) => ({ id: newId(), user_id: userId, activity_type: input.activity_type.trim(), title: input.title ?? null, date: input.date ?? todayKey(), start_time: input.start_time ?? null, duration_minutes: input.duration_minutes, notes: input.notes ?? null, created_at: iso } as Workout));
         setState((prev) => ({ ...prev, workouts: [...prev.workouts, ...newWorkouts] }));
         if (userId !== "local" && newWorkouts.length > 0) {
           void syncSupabase(_supabase.from("workouts").insert(newWorkouts), "guardar entrenamientos");

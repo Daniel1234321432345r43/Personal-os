@@ -30,6 +30,7 @@ export function WorkoutForm({
   const [activity, setActivity] = useState("");
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(initialDate || todayKey());
+  const [startTime, setStartTime] = useState("");
   const [duration, setDuration] = useState("");
   const [notes, setNotes] = useState("");
 
@@ -42,11 +43,13 @@ export function WorkoutForm({
       activity_type: activity.trim(),
       title: title.trim() || null,
       date,
+      start_time: startTime || null,
       duration_minutes: minutes,
       notes: notes.trim() || null,
     });
     setActivity("");
     setTitle("");
+    setStartTime("");
     setDuration("");
     setNotes("");
     setDate(todayKey());
@@ -110,17 +113,33 @@ export function WorkoutForm({
         </div>
 
         <div className={fieldClass}>
-          <label className={labelClass} htmlFor="wk-title">
-            Título
+          <label className={labelClass} htmlFor="wk-start-time">
+            Hora de inicio (opcional)
           </label>
           <input
-            id="wk-title"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Opcional (ej. Fuerza tren superior)"
+            id="wk-start-time"
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
             className={inputClass}
           />
+          <p className="text-[11px] text-muted-foreground">
+            Se usa para recordarte por notificación antes del entreno.
+          </p>
         </div>
+      </div>
+
+      <div className={fieldClass}>
+        <label className={labelClass} htmlFor="wk-title">
+          Título
+        </label>
+        <input
+          id="wk-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="Opcional (ej. Fuerza tren superior)"
+          className={inputClass}
+        />
       </div>
 
       <div className={fieldClass}>

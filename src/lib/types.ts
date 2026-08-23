@@ -42,6 +42,8 @@ export interface Task {
   type: TaskType;
   category: TaskCategory;
   due_date: string | null;
+  /** Hora de inicio en formato HH:MM (opcional). Usada para recordatorios push. */
+  start_time: string | null;
   estimated_minutes: number | null;
   subject_id: string | null;
   classroom_id: string | null;
@@ -59,6 +61,8 @@ export interface Workout {
   activity_type: string;
   title: string | null;
   date: string; // YYYY-MM-DD
+  /** Hora de inicio en formato HH:MM (opcional). Usada para recordatorios push. */
+  start_time: string | null;
   duration_minutes: number;
   notes: string | null;
   created_at: string;

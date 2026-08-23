@@ -63,6 +63,7 @@ Ejecuta las migraciones desde **Supabase Dashboard → SQL Editor**, en este ord
 3. `supabase/migrations/00003_notes.sql`
 4. `supabase/migrations/00004_task_sessions.sql`
 5. `supabase/migrations/00005_backfill_user_profiles.sql`
+6. `supabase/migrations/00006_reminders.sql`
 
 El esquema incluye:
 
@@ -71,6 +72,9 @@ El esquema incluye:
 - Trigger para crear automáticamente el perfil público al registrarse.
 - Políticas RLS para que cada usuario solo acceda a sus propios datos.
 - Columnas de sesiones multi-día para tareas.
+- Columna `start_time` (hora de inicio) en tareas y entrenamientos.
+- Tabla `push_subscriptions` para las suscripciones de notificaciones push.
+- Tabla `reminder_log` para no repetir recordatorios.
 - Reparación de perfiles de usuarios creados antes de instalar el trigger.
 
 La migración `00005_backfill_user_profiles.sql` es importante si el usuario aparece en **Authentication → Users**, pero no existe en `public.users`. Las tablas de la aplicación tienen una clave extranjera hacia `public.users`.
@@ -193,6 +197,55 @@ OMNIROUTE_AUTH_TOKEN=omniroute-local
 OMNIROUTE_MODEL=auto
 ```
 
+## Notificaciones push (recordatorios)
+
+La aplicación puede avisarte **aunque esté cerrada** cuando va a empezar una sesión de estudio, un examen o un entrenamiento que tenga hora de inicio. En Ajustes puedes añadir hora a cualquier tarea o entreno desde sus formularios, y luego activar las notificaciones en **Ajustes → Notificaciones**.
+
+El flujo completo es:
+
+1. **Claves VAPID** (una vez):
+
+```bash
+npm run vapid:keys
+```
+
+Añade las tres variables a `.env.local` (y a Netlify para producción):
+
+```env
+NEXT_PUBLIC_VAPID_PUBLIC_KEY=...
+VAPID_PUBLIC_KEY=...
+VAPID_PRIVATE_KEY=...
+VAPID_SUBJECT=mailto:tu@email.com
+```
+
+2. **Migración**: aplica `supabase/migrations/00006_reminders.sql` desde el SQL Editor de Supabase.
+
+3. **Edge Function** (el cron que envía los recordatorios). Necesitas la CLI de Supabase:
+
+```bash
+# Secretos de la función (usa las mismas claves VAPID)
+supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:tu@email.com
+
+# Despliegue programado cada 5 minutos
+supabase functions deploy send-reminders --no-verify-jwt --schedule "*/5 * * * *"
+```
+
+La función consulta las tareas y entrenamientos con `start_time` de los próximos 20 minutos y envía la notificación. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm).
+
+4. **En la app**: inicia sesión, ve a **Ajustes → Notificaciones** y pulsa **Activar notificaciones**. Usa **Enviar notificación de prueba** para comprobar que todo funciona.
+
+Para probar la implementación de Web Push localmente:
+
+```bash
+node scripts/test-web-push.mjs
+```
+
+### Requisitos
+
+- Navegador con soporte de Service Worker y Push API (Chrome, Edge, Firefox, Safari 16.4+).
+- Sesión iniciada con Supabase (el endpoint guarda la suscripción asociada al usuario).
+- Edge Function desplegada para que los recordatorios lleguen con la app cerrada.
+
 ## Diagnóstico de sincronización
 
 Si el usuario puede iniciar sesión, pero los datos no aparecen en Supabase:
@@ -259,14 +312,17 @@ supabase/migrations/         # Esquema SQL, RLS y reparación de perfiles
 ## Scripts
 
 ```bash
-npm run dev      # Servidor de desarrollo
-npm run build    # Build de producción y comprobación de tipos
-npm run start    # Servir el build de producción
-npm run lint     # ESLint
+npm run dev          # Servidor de desarrollo
+npm run build        # Build de producción y comprobación de tipos
+npm run start        # Servir el build de producción
+npm run lint         # ESLint
+npm run vapid:keys   # Generar claves VAPID para notificaciones push
+node scripts/test-web-push.mjs  # Prueba end-to-end del protocolo Web Push
 ```
 
 ## PWA
 
 - `src/app/manifest.ts` genera el Web App Manifest.
 - `src/app/icon.svg` es el icono de la aplicación.
+- `public/sw.js` es el Service Worker que recibe las notificaciones push.
 - `next/font` proporciona la tipografía Geist.

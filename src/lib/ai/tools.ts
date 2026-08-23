@@ -68,6 +68,13 @@ export const secretaryTools = {
               .describe(
                 "Fecha límite o fecha del examen en formato ISO YYYY-MM-DD (ej. 2026-09-15)",
               ),
+            start_time: z
+              .string()
+              .nullable()
+              .optional()
+              .describe(
+                "Hora de inicio en formato HH:MM (ej. 17:30). Úsala cuando el usuario diga a qué hora empieza o cuándo tiene algo, para poder avisarle antes.",
+              ),
             session_dates: z
               .array(z.string())
               .optional()
@@ -163,6 +170,13 @@ export const secretaryTools = {
             .string()
             .optional()
             .describe("Fecha en formato YYYY-MM-DD"),
+          start_time: z
+            .string()
+            .nullable()
+            .optional()
+            .describe(
+              "Hora de inicio en formato HH:MM (ej. 18:00). Úsala cuando el usuario diga a qué hora entrena.",
+            ),
           title: z.string().optional().nullable().describe("Título opcional"),
           notes: z.string().optional().nullable().describe("Notas opcionales"),
         }),

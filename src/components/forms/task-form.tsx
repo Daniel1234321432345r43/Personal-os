@@ -47,6 +47,7 @@ export function TaskForm({
   const [subjectId, setSubjectId] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [dueDate, setDueDate] = useState(initialDueDate || todayKey());
+  const [startTime, setStartTime] = useState("");
   const [minutes, setMinutes] = useState("");
   const [description, setDescription] = useState("");
 
@@ -95,6 +96,7 @@ export function TaskForm({
         priority,
         subject_id: subjectId || null,
         session_dates: sessionDates,
+        start_time: startTime || null,
         estimated_minutes: minutes ? Number(minutes) : null,
         description: description.trim() || null,
       });
@@ -106,6 +108,7 @@ export function TaskForm({
         priority,
         subject_id: subjectId || null,
         due_date: dueDate || null,
+        start_time: startTime || null,
         estimated_minutes: minutes ? Number(minutes) : null,
         description: description.trim() || null,
       });
@@ -116,6 +119,7 @@ export function TaskForm({
     setSubjectId("");
     setPriority("medium");
     setDueDate(initialDueDate || todayKey());
+    setStartTime("");
     setMinutes("");
     setDescription("");
     setIsMultiDay(false);
@@ -307,17 +311,34 @@ export function TaskForm({
             </Button>
           </div>
         ) : (
-          <div className={fieldClass}>
-            <label className={labelClass} htmlFor="task-due">
-              Fecha
-            </label>
-            <input
-              id="task-due"
-              type="date"
-              value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
-              className={inputClass}
-            />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className={fieldClass}>
+              <label className={labelClass} htmlFor="task-due">
+                Fecha
+              </label>
+              <input
+                id="task-due"
+                type="date"
+                value={dueDate}
+                onChange={(e) => setDueDate(e.target.value)}
+                className={inputClass}
+              />
+            </div>
+            <div className={fieldClass}>
+              <label className={labelClass} htmlFor="task-start-time">
+                Hora de inicio (opcional)
+              </label>
+              <input
+                id="task-start-time"
+                type="time"
+                value={startTime}
+                onChange={(e) => setStartTime(e.target.value)}
+                className={inputClass}
+              />
+              <p className="text-[11px] text-muted-foreground">
+                Se usa para recordarte por notificación antes de empezar.
+              </p>
+            </div>
           </div>
         )}
       </div>

@@ -5,11 +5,12 @@ import { useSettings } from "@/components/providers/settings-provider";
 import { PROVIDERS, getProvider } from "@/lib/ai/models";
 import type { AiProviderId } from "@/lib/ai/settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PushManager } from "@/components/settings/push-manager";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Sparkles } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Sparkles, Bell } from "lucide-react";
 
 function LoadingState() {
   return (
@@ -287,6 +288,18 @@ export function SettingsClient() {
                   dispositivo.
                 </p>
               </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <Bell className="h-4 w-4 text-primary" />
+                Notificaciones
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <PushManager />
             </CardContent>
           </Card>
 
