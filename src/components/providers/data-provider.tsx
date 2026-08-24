@@ -129,6 +129,8 @@ export interface DataActions {
   updateGrade: (id: string, input: Partial<GradeInput>) => void;
   deleteGrade: (id: string) => void;
   deleteGrades: (ids?: string[], titles?: string[]) => void;
+  /** Restablece de fábrica: borra todos los datos del usuario (local + nube). Conserva la config de IA/API key. */
+  resetAll: () => Promise<{ ok: boolean; error?: string }>;
 }
 
 
@@ -1299,6 +1301,52 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ),
           };
         });
+      },
+
+      resetAll: async () => {
+        const userId = userIdRef.current;
+
+        // 1. Vaciar el estado local (las vistas se quedan vacías al instante).
+        setState(emptyState());
+
+        // 2. Limpiar localStorage de datos (invitado + usuario). NO se toca
+        //    "nucleo:ai-settings:v1": ahí vive la API key del usuario.
+        try {
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem(STORAGE_KEY);
+            if (userId) window.localStorage.removeItem(userStorageKey(userId));
+          }
+        } catch {
+          // Ignorar errores de cuota/acceso.
+        }
+
+        // 3. Borrar todos los registros del usuario en Supabase. El estado
+        //    vacío hace que el efecto de re-sincronización no vuelva a subir
+        //    nada, y el borrado remoto evita que los datos reaparezcan al
+        //    recargar (el merge local<->remoto se haría con datos vacíos).
+        if (!userId || userId === "local") return { ok: true };
+
+        const TABLES = [
+          "subjects",
+          "tasks",
+          "notes",
+          "workouts",
+          "habits",
+          "habit_completions",
+          "transactions",
+          "grades",
+          "budgets",
+        ] as const;
+
+        let ok = true;
+        for (const table of TABLES) {
+          const { error } = await _supabase.from(table).delete().eq("user_id", userId);
+          if (error) {
+            console.error(`[Supabase] reset: borrar ${table}: ${error.message}`);
+            ok = false;
+          }
+        }
+        return ok ? { ok: true } : { ok: false, error: "Hubo errores borrando algunos datos en la nube." };
       },
     };
   }, []);

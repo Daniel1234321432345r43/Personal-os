@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useSettings } from "@/components/providers/settings-provider";
+import { useData } from "@/components/providers/data-provider";
 import { PROVIDERS, getProvider } from "@/lib/ai/models";
 import type { AiProviderId } from "@/lib/ai/settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle } from "lucide-react";
 
 function LoadingState() {
   return (
@@ -35,9 +36,13 @@ function LoadingState() {
 
 export function SettingsClient() {
   const { settings, setSettings, configured, envConfigured, hydrated } = useSettings();
+  const { actions } = useData();
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [confirmingReset, setConfirmingReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   if (!hydrated) {
     return <LoadingState />;
@@ -87,6 +92,43 @@ export function SettingsClient() {
       });
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleResetAll() {
+    // Primer clic: armar la confirmación. Segundo clic: ejecutar.
+    if (!confirmingReset) {
+      setConfirmingReset(true);
+      setResetResult(null);
+      window.setTimeout(() => setConfirmingReset(false), 6000);
+      return;
+    }
+    setConfirmingReset(false);
+    setResetting(true);
+    setResetResult(null);
+    try {
+      const result = await actions.resetAll();
+      setResetResult(
+        result.ok
+          ? {
+              ok: true,
+              message:
+                "Todo restablecido. Se han borrado tus asignaturas, tareas, notas, entrenamientos, hábitos, transacciones y calificaciones. La API key de la IA se ha conservado.",
+            }
+          : {
+              ok: false,
+              message:
+                result.error ||
+                "Se vació este navegador, pero hubo errores al borrar algunos datos en la nube. Vuelve a intentarlo.",
+            },
+      );
+    } catch (e) {
+      setResetResult({
+        ok: false,
+        message: e instanceof Error ? e.message : "No se pudo restablecer.",
+      });
+    } finally {
+      setResetting(false);
     }
   }
 
@@ -366,6 +408,53 @@ export function SettingsClient() {
           </Card>
         </div>
       </div>
+
+      {/* Zona de peligro: restablecer de fábrica (conserva la API key) */}
+      <Card className="border-destructive/30">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-1.5 text-destructive">
+            <AlertTriangle className="h-4 w-4" />
+            Zona de peligro
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            Restablece la app de fábrica: borra <strong>todas</strong> tus
+            asignaturas, tareas, notas, entrenamientos, hábitos, transacciones
+            y calificaciones — tanto de este navegador como de tu cuenta en la
+            nube. Se conserva la <strong>API key de la IA</strong> y la
+            configuración del Secretario.
+          </p>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={handleResetAll}
+            disabled={resetting}
+          >
+            {resetting ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Trash2 className="h-4 w-4" />
+            )}
+            {confirmingReset
+              ? "¿Seguro? Se borrará todo…"
+              : resetting
+                ? "Restableciendo…"
+                : "Restablecer de fábrica"}
+          </Button>
+          {resetResult && (
+            <p
+              className={`rounded-lg border p-3 text-sm ${
+                resetResult.ok
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                  : "border-destructive/30 bg-destructive/10 text-destructive"
+              }`}
+            >
+              {resetResult.message}
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
