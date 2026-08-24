@@ -119,8 +119,9 @@ console.log("✓ JWT VAPID verificado (ES256, aud/sub/exp correctos)");
 
 // --- 3) Descifrar el payload como haría el navegador ------------------------
 const body = new Uint8Array(captured.body);
-const asPublic = body.slice(20, 85);
-const ciphertext = body.slice(85);
+const salt = body.slice(0, 16);
+const asPublic = body.slice(21, 86);
+const ciphertext = body.slice(86);
 
 const uaPrivJwk = await crypto.subtle.exportKey("jwk", uaKeys.privateKey);
 const uaPriv = await crypto.subtle.importKey(
@@ -141,11 +142,16 @@ const shared = new Uint8Array(await crypto.subtle.deriveBits({ name: "ECDH", pub
 
 const info = concat(enc.encode("WebPush: info"), new Uint8Array([0]), uaPublic, asPublic);
 const ikm = await hkdfExpand(await hkdfExtract(authSecret, shared), info, 32);
-const cek = await hkdfExpand(ikm, concat(enc.encode("WebPush: encryption"), new Uint8Array([0]), asPublic), 16);
-const nonce = await hkdfExpand(ikm, concat(enc.encode("WebPush: nonce"), new Uint8Array([0]), asPublic), 12);
+const prk2 = await hkdfExtract(salt, ikm);
+const cek = await hkdfExpand(prk2, enc.encode("Content-Encoding: aes128gcm\0"), 16);
+const nonce = await hkdfExpand(prk2, enc.encode("Content-Encoding: nonce\0"), 12);
 const aesKey = await crypto.subtle.importKey("raw", cek, { name: "AES-GCM" }, false, ["decrypt"]);
 const plaintext = new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: nonce }, aesKey, ciphertext));
-const decrypted = new TextDecoder().decode(plaintext);
+// RFC 8188 §2.2: quitar relleno (0x00 finales) y el delimitador 0x02 del último registro.
+let dataEnd = plaintext.length;
+while (dataEnd > 0 && plaintext[dataEnd - 1] === 0x00) dataEnd--;
+if (dataEnd > 0 && plaintext[dataEnd - 1] === 0x02) dataEnd--;
+const decrypted = new TextDecoder().decode(plaintext.slice(0, dataEnd));
 
 if (decrypted !== payload) {
   throw new Error(`El payload descifrado no coincide:\n  esperado: ${payload}\n  obtenido: ${decrypted}`);

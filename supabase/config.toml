@@ -1,0 +1,11 @@
+# Configuración de Supabase CLI para el proyecto Núcleo.
+# project_id: referencia del proyecto linkado (supabase/.temp/project-ref).
+project_id = "culninznvavjryhedeqc"
+
+# Edge Function de recordatorios push.
+# - verify_jwt = false: la invoca pg_cron (sin JWT de usuario).
+# - schedule: cron cada 60 s. El schedule se configura AQUÍ (no con --schedule);
+#   redesplegar sin esta sección eliminaría la programación.
+[functions.send-reminders]
+verify_jwt = false
+schedule = "* * * * *"

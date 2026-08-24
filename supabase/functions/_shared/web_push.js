@@ -166,28 +166,37 @@ async function encryptPayload(payloadBytes, p256dhB64url, authB64url) {
   const prk = await hkdfExtract(authSecret, shared);
   const ikm = await hkdfExpand(prk, info, 32);
 
-  // RFC 8188: CEK y NONCE derivados del IKM
-  const keyInfo = concat(enc.encode("WebPush: encryption"), new Uint8Array([0]), asPublic);
-  const nonceInfo = concat(enc.encode("WebPush: nonce"), new Uint8Array([0]), asPublic);
-  const cek = await hkdfExpand(ikm, keyInfo, 16);
-  const nonce = await hkdfExpand(ikm, nonceInfo, 12);
+  // RFC 8188 §3.3: CEK y NONCE = HKDF-Expand(HKDF-Extract(salt, ikm),
+  // "Content-Encoding: aes128gcm\0" / "Content-Encoding: nonce\0", ...).
+  // (Sin la clave pública en el info; es un error del draft aesgcm antiguo.)
+  const prk2 = await hkdfExtract(salt, ikm);
+  const cek = await hkdfExpand(prk2, enc.encode("Content-Encoding: aes128gcm\0"), 16);
+  const nonce = await hkdfExpand(prk2, enc.encode("Content-Encoding: nonce\0"), 12);
 
+  // RFC 8188 §2.2: el último registro del cifrado termina con un byte
+  // delimitador (0x02) seguido de relleno 0x00. Sin él, el navegador considera
+  // el padding malformado y descarta el mensaje en silencio.
+  const paddedPayload = concat(payloadBytes, new Uint8Array([2]));
   const aesKey = await crypto.subtle.importKey(
     "raw", cek, { name: "AES-GCM" }, false, ["encrypt"],
   );
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, payloadBytes),
+    await crypto.subtle.encrypt({ name: "AES-GCM", iv: nonce }, aesKey, paddedPayload),
   );
 
-  // Cuerpo: salt(16) || rs(4, big-endian = 4096) || as_public(65) || ciphertext+tag
-  const body = new Uint8Array(16 + 4 + 65 + ciphertext.length);
+  // Cuerpo: salt(16) || rs(4, big-endian = 4096) || idlen(1) || as_public(65) || ciphertext+tag
+  // RFC 8188: la clave pública efímera del servidor viaja en el campo keyid,
+  // precedida por un byte de longitud (65 = 0x41). Sin ese byte los navegadores
+  // reales parsean el header mal y descartan el mensaje en silencio.
+  const body = new Uint8Array(16 + 4 + 1 + 65 + ciphertext.length);
   body.set(salt, 0);
   body[16] = 0x00;
   body[17] = 0x00;
   body[18] = 0x10; // 4096 = 0x00001000
   body[19] = 0x00;
-  body.set(asPublic, 20);
-  body.set(ciphertext, 85);
+  body[20] = 65; // idlen: longitud del keyid (clave pública efímera)
+  body.set(asPublic, 21);
+  body.set(ciphertext, 86);
   return body;
 }
 
