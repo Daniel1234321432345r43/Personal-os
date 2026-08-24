@@ -320,6 +320,7 @@ npm run start        # Servir el build de producción
 npm run lint         # ESLint
 npm run vapid:keys   # Generar claves VAPID para notificaciones push
 node scripts/test-web-push.mjs  # Prueba end-to-end del protocolo Web Push
+node scripts/test-reminder-time.mjs  # Pruebas de las utilidades de fecha/hora de recordatorios
 ```
 
 ## PWA

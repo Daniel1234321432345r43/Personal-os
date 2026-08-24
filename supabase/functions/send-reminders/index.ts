@@ -14,6 +14,7 @@
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendWebPush } from "../_shared/web_push.js";
+import { dateKeyInTz, normalizeDate, normalizeTime, zonedDateTime } from "../_shared/reminder-time.js";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -27,10 +28,10 @@ const WORKOUT_REMIND_BEFORE_MS = 20 * 60 * 1000;
 const WORKOUT_GRACE_AFTER_MS = 3 * 60 * 1000;
 
 // Tareas: el aviso es exacto (5/10/15 min antes, columna remind_before_minutes).
-// El cron corre cada 5 minutos, así que la ventana cubre ~un periodo completo
-// alrededor del momento objetivo para no perderse ningún tick.
+// El cron corre cada 5 minutos; la ventana (7 min) garantiza que siempre cae un
+// tick dentro, incluso con algo de retraso en la ejecución programada.
 const TASK_WINDOW_BEFORE_MS = 2 * 60 * 1000;
-const TASK_WINDOW_AFTER_MS = 3 * 60 * 1000;
+const TASK_WINDOW_AFTER_MS = 5 * 60 * 1000;
 
 interface ReminderItem {
   entityType: "task" | "workout";
@@ -48,40 +49,6 @@ const TASK_LABELS: Record<string, { article: string; verb: string }> = {
   task: { article: "tu tarea", verb: "tienes" },
 };
 
-function dateKeyInTz(date: Date, tz: string): string {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: tz,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(date);
-  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-  return `${get("year")}-${get("month")}-${get("day")}`;
-}
-
-function zonedDateTime(dateStr: string, timeStr: string, tz: string): Date {
-  const target = `${dateStr}T${timeStr.slice(0, 5)}:00`;
-  const guess = new Date(`${target}Z`).getTime();
-  // Busca el timestamp UTC cuya hora local en tz coincide con la deseada.
-  for (let delta = -86400000; delta <= 86400000; delta += 3600000) {
-    const d = new Date(guess + delta);
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      timeZone: tz,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-    }).formatToParts(d);
-    const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
-    if (`${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}` === target) {
-      return d;
-    }
-  }
-  return new Date(target);
-}
-
 async function collectUpcoming(
   supabase: ReturnType<typeof createClient>,
   userId: string,
@@ -92,45 +59,88 @@ async function collectUpcoming(
   const tomorrow = dateKeyInTz(new Date(now.getTime() + 86400000), tz);
   const items: ReminderItem[] = [];
 
-  const { data: tasks } = await supabase
+  const { data: tasks, error: tasksError } = await supabase
     .from("tasks")
     .select("id, title, type, due_date, start_time, status, remind_before_minutes")
     .not("start_time", "is", null)
     .gte("due_date", yesterday)
     .lte("due_date", tomorrow);
 
-  for (const task of tasks ?? []) {
-    if (!task.due_date || !task.start_time || task.status === "done") continue;
-    const scheduled = zonedDateTime(task.due_date, task.start_time, tz);
-    const label = TASK_LABELS[task.type as string] ?? TASK_LABELS.task;
-    items.push({
-      entityType: "task",
-      entityId: task.id,
-      scheduled,
-      remindBeforeMinutes: task.remind_before_minutes ?? 10,
-      message: (minutes) =>
-        `En ${minutes} min ${label.verb} ${label.article}: ${task.title}`,
-    });
+  if (tasksError) {
+    // Si la migración 00007 no está aplicada, este select falla (columna
+    // remind_before_minutes no existe) y tasks llega vacío. Loguearlo para
+    // que no falle en silencio.
+    console.error("[send-reminders] error leyendo tareas:", tasksError.message);
   }
 
-  const { data: workouts } = await supabase
+  for (const task of tasks ?? []) {
+    try {
+      if (!task.due_date || !task.start_time || task.status === "done") continue;
+      const dateStr = normalizeDate(task.due_date);
+      const timeStr = normalizeTime(task.start_time);
+      if (!dateStr || !timeStr) {
+        console.warn(
+          `[send-reminders] tarea ${task.id}: fecha/hora no válidas (${task.due_date} / ${task.start_time}); se ignora`,
+        );
+        continue;
+      }
+      const scheduled = zonedDateTime(dateStr, timeStr, tz);
+      if (!scheduled) {
+        console.warn(`[send-reminders] tarea ${task.id}: no se pudo calcular la hora programada; se ignora`);
+        continue;
+      }
+      const label = TASK_LABELS[task.type as string] ?? TASK_LABELS.task;
+      items.push({
+        entityType: "task",
+        entityId: task.id,
+        scheduled,
+        remindBeforeMinutes: task.remind_before_minutes ?? 10,
+        message: (minutes) =>
+          `En ${minutes} min ${label.verb} ${label.article}: ${task.title}`,
+      });
+    } catch (err) {
+      console.warn(`[send-reminders] error procesando tarea ${task.id}:`, err);
+    }
+  }
+
+  const { data: workouts, error: workoutsError } = await supabase
     .from("workouts")
     .select("id, activity_type, title, date, start_time")
     .not("start_time", "is", null)
     .gte("date", yesterday)
     .lte("date", tomorrow);
 
+  if (workoutsError) {
+    console.error("[send-reminders] error leyendo entrenamientos:", workoutsError.message);
+  }
+
   for (const workout of workouts ?? []) {
-    if (!workout.date || !workout.start_time) continue;
-    const scheduled = zonedDateTime(workout.date, workout.start_time, tz);
-    const name = workout.title || workout.activity_type;
-    items.push({
-      entityType: "workout",
-      entityId: workout.id,
-      scheduled,
-      remindBeforeMinutes: 20,
-      message: (minutes) => `En ${minutes} min empieza tu entrenamiento: ${name}`,
-    });
+    try {
+      if (!workout.date || !workout.start_time) continue;
+      const dateStr = normalizeDate(workout.date);
+      const timeStr = normalizeTime(workout.start_time);
+      if (!dateStr || !timeStr) {
+        console.warn(
+          `[send-reminders] entrenamiento ${workout.id}: fecha/hora no válidas (${workout.date} / ${workout.start_time}); se ignora`,
+        );
+        continue;
+      }
+      const scheduled = zonedDateTime(dateStr, timeStr, tz);
+      if (!scheduled) {
+        console.warn(`[send-reminders] entrenamiento ${workout.id}: no se pudo calcular la hora programada; se ignora`);
+        continue;
+      }
+      const name = workout.title || workout.activity_type;
+      items.push({
+        entityType: "workout",
+        entityId: workout.id,
+        scheduled,
+        remindBeforeMinutes: 20,
+        message: (minutes) => `En ${minutes} min empieza tu entrenamiento: ${name}`,
+      });
+    } catch (err) {
+      console.warn(`[send-reminders] error procesando entrenamiento ${workout.id}:`, err);
+    }
   }
 
   return items;
@@ -171,7 +181,17 @@ Deno.serve(async () => {
   for (const userId of userIds) {
     const tz = tzById.get(userId) || "UTC";
     const userSubs = subscriptions.filter((s) => s.user_id === userId);
-    const items = await collectUpcoming(supabase, userId, tz, now);
+
+    let items: ReminderItem[] = [];
+    try {
+      items = await collectUpcoming(supabase, userId, tz, now);
+    } catch (err) {
+      console.error(`[send-reminders] error procesando usuario ${userId}:`, err);
+      continue;
+    }
+    if (items.length > 0) {
+      console.log(`[send-reminders] usuario ${userId} (tz=${tz}): ${items.length} elemento(s) próximos`);
+    }
 
     for (const item of items) {
       const nowMs = now.getTime();
