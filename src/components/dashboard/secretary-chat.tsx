@@ -428,7 +428,7 @@ export function SecretaryChat() {
   }
 
   return (
-    <div className="flex h-[420px] flex-col">
+    <div className="flex h-[340px] flex-col">
       <ScrollArea className="flex-1 pr-3">
         {!configured && (
           <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
@@ -528,22 +528,7 @@ export function SecretaryChat() {
         <div ref={bottomRef} />
       </ScrollArea>
 
-      {/* Sugerencias rápidas (solo escritorio) */}
-      {messages.length === 0 && configured && !isMobile && (
-        <div className="flex flex-wrap gap-2 py-3">
-          {suggestions.map((s) => (
-            <Button
-              key={s}
-              variant="outline"
-              size="sm"
-              className="rounded-full text-xs text-left h-auto py-1.5 px-3"
-              onClick={() => sendMessage({ text: s })}
-            >
-              {s}
-            </Button>
-          ))}
-        </div>
-      )}
+
 
       {/* Botón colapsar (móvil) */}
       {isMobile && (

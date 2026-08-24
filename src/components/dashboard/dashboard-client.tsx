@@ -28,8 +28,8 @@ function LoadingState() {
         <Skeleton className="h-20" />
       </div>
       <div className="grid gap-6 lg:grid-cols-3">
-        <Skeleton className="h-[420px] lg:col-span-2" />
-        <Skeleton className="h-[420px]" />
+        <Skeleton className="h-[340px] lg:col-span-2" />
+        <Skeleton className="h-[340px]" />
       </div>
     </div>
   );
