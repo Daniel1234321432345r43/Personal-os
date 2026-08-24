@@ -129,6 +129,8 @@ export interface DataActions {
   updateGrade: (id: string, input: Partial<GradeInput>) => void;
   deleteGrade: (id: string) => void;
   deleteGrades: (ids?: string[], titles?: string[]) => void;
+  /** Actualiza la autoevaluación (1-10) de una asignatura. */
+  setSubjectRating: (subjectId: string, rating: number | null) => void;
   /** Restablece de fábrica: borra todos los datos del usuario (local + nube). Conserva la config de IA/API key. */
   resetAll: () => Promise<{ ok: boolean; error?: string }>;
 }
@@ -276,7 +278,7 @@ function hasRecords(state: DataState): boolean {
 /** Sube datos locales en el orden correcto para respetar las claves foráneas. */
 async function syncStateToSupabase(state: DataState, userId: string): Promise<boolean> {
   const operations: Array<[string, unknown]> = [
-    ["subjects", state.subjects.map(({ id, name, color, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, classroom_course_id, classroom_name, created_at }))],
+    ["subjects", state.subjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))],
     ["habits", state.habits.map(({ id, name, emoji, frequency, created_at }) => ({ id, user_id: userId, name, emoji, frequency, created_at }))],
     ["tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, start_time, remind_before_minutes, estimated_minutes, subject_id, classroom_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, start_time: start_time ?? null, remind_before_minutes: remind_before_minutes ?? null, estimated_minutes, subject_id, classroom_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at }))],
     ["notes", state.notes.map(({ id, title, content, file_name, file_type, file_data, created_at, updated_at }) => ({ id, user_id: userId, title, content, file_name, file_type, file_data, created_at, updated_at }))],
@@ -501,12 +503,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ...prev,
             subjects: [
               ...prev.subjects,
-              { id, user_id: userId, name: input.name.trim(), color, classroom_course_id: null, classroom_name: null, created_at: iso } as Subject,
+              { id, user_id: userId, name: input.name.trim(), color, self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso } as Subject,
             ],
           };
         });
         if (userId !== "local") {
-          void syncSupabase(_supabase.from("subjects").insert({ id, user_id: userId, name: input.name.trim(), color, created_at: iso }), "guardar asignatura");
+          void syncSupabase(_supabase.from("subjects").insert({ id, user_id: userId, name: input.name.trim(), color, self_rating: null, created_at: iso }), "guardar asignatura");
         }
       },
 
@@ -528,7 +530,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               newSubjects.push({
                 id, user_id: userId, name: trimmed,
                 color: input.color || DEFAULT_COLORS[colorIndex],
-                classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
               } as Subject);
             }
           });
@@ -538,7 +540,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         });
         if (userId !== "local" && createdSubjects.length > 0) {
           void syncSupabase(
-            _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, classroom_course_id, classroom_name, created_at }))),
+            _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))),
             "guardar asignaturas",
           );
         }
@@ -606,7 +608,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               const sub: Subject = {
                 id, user_id: userId, name: trimmed,
                 color: DEFAULT_COLORS[colorIndex],
-                classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
               };
               newSubjects.push(sub);
               resolvedSubjectId = sub.id;
@@ -692,7 +694,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           void (async () => {
             if (newSubjects.length > 0) {
               const subjectResult = await syncSupabase(
-                _supabase.from("subjects").insert(newSubjects.map(({ id, name, color, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, classroom_course_id, classroom_name, created_at }))),
+                _supabase.from("subjects").insert(newSubjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))),
                 "guardar asignatura de tarea",
               );
               if (!subjectResult) return;
@@ -732,7 +734,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               const createdSub: Subject = {
                 id, user_id: userId, name: trimmed,
                 color: DEFAULT_COLORS[colorIndex],
-                classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
               };
               allSubjects.push(createdSub);
               newSubjects.push(createdSub);
@@ -827,7 +829,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           void (async () => {
             if (createdSubjects.length > 0) {
               const subjectResult = await syncSupabase(
-                _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, classroom_course_id, classroom_name, created_at }))),
+                _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))),
                 "guardar asignaturas de tareas",
               );
               if (!subjectResult) return;
@@ -1079,7 +1081,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               const createdSub: Subject = {
                 id, user_id: userId, name: trimmed,
                 color: DEFAULT_COLORS[colorIndex],
-                classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
               };
               newSubjects.push(createdSub);
               resolvedSubjectId = createdSub.id;
@@ -1093,9 +1095,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           if (!resolvedSubjectId) {
             const id = newId();
             const createdSub: Subject = {
-              id, user_id: userId, name: "General",
-              color: DEFAULT_COLORS[0],
-              classroom_course_id: null, classroom_name: null, created_at: iso,
+              id, user_id: userId, name: "General",color: DEFAULT_COLORS[0],
+                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
             };
             newSubjects.push(createdSub);
             resolvedSubjectId = createdSub.id;
@@ -1145,7 +1146,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           void (async () => {
             if (subjectToSave) {
               const subjectResult = await syncSupabase(
-                _supabase.from("subjects").insert({ id: subjectToSave.id, user_id: userId, name: subjectToSave.name, color: subjectToSave.color, created_at: subjectToSave.created_at }),
+                _supabase.from("subjects").insert({ id: subjectToSave.id, user_id: userId, name: subjectToSave.name, color: subjectToSave.color, self_rating: null, created_at: subjectToSave.created_at }),
                 "guardar asignatura de calificación",
               );
               if (!subjectResult) return;
@@ -1185,7 +1186,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               const createdSub: Subject = {
                 id, user_id: userId, name: trimmed,
                 color: DEFAULT_COLORS[colorIndex],
-                classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
               };
               allSubjects.push(createdSub);
               newSubjects.push(createdSub);
@@ -1195,9 +1196,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
             const id = newId();
             const createdSub: Subject = {
-              id, user_id: userId, name: "General",
-              color: DEFAULT_COLORS[0],
-              classroom_course_id: null, classroom_name: null, created_at: iso,
+              id, user_id: userId, name: "General",color: DEFAULT_COLORS[0],
+                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
             };
             allSubjects.push(createdSub);
             newSubjects.push(createdSub);
@@ -1250,7 +1250,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           void (async () => {
             if (createdSubjects.length > 0) {
               const subjectResult = await syncSupabase(
-                _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, classroom_course_id, classroom_name, created_at }))),
+                _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))),
                 "guardar asignaturas",
               );
               if (!subjectResult) return;
@@ -1301,6 +1301,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ),
           };
         });
+      },
+
+      setSubjectRating: (subjectId, rating) => {
+        const userId = uid();
+        setState((prev) => ({
+          ...prev,
+          subjects: prev.subjects.map((s) =>
+            s.id === subjectId ? { ...s, self_rating: rating } : s,
+          ),
+        }));
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase.from("subjects").update({ self_rating: rating }).eq("id", subjectId),
+            "guardar autoevaluación",
+          );
+        }
       },
 
       resetAll: async () => {

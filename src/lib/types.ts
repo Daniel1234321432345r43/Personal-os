@@ -22,6 +22,8 @@ export interface Subject {
   user_id: string;
   name: string;
   color: string;
+  /** Autoevaluación del 1 al 10 de cómo se lleva la asignatura. */
+  self_rating: number | null;
   classroom_course_id: string | null;
   classroom_name: string | null;
   created_at: string;

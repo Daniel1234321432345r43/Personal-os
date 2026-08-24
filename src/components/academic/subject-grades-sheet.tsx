@@ -111,6 +111,39 @@ export function SubjectGradesSheet({
               )}
             </div>
 
+            {/* Autoevaluación: dots 1-10 */}
+            <div className="pt-2 pb-1">
+              <p className="text-[11px] text-muted-foreground mb-2 font-medium">
+                ¿Cómo la llevas? ({subject.self_rating ?? "—"}/10)
+              </p>
+              <div className="flex items-center gap-1.5 justify-center">
+                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((n) => {
+                  const active = (subject.self_rating ?? 0) >= n;
+                  return (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() =>
+                        actions.setSubjectRating(
+                          subject.id,
+                          subject.self_rating === n ? null : n,
+                        )
+                      }
+                      className={cn(
+                        "h-7 w-7 rounded-full border-2 text-[11px] font-bold transition-all duration-150 flex items-center justify-center",
+                        active
+                          ? "bg-primary border-primary text-primary-foreground scale-110 shadow-sm"
+                          : "bg-background border-muted-foreground/25 text-muted-foreground hover:border-primary/60 hover:bg-primary/10",
+                      )}
+                      title={`${n}/10`}
+                    >
+                      {n}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="grid grid-cols-3 gap-2 pt-1 text-center">
               <div className="rounded-lg bg-background p-2.5 shadow-xs border">
                 <p className="text-[11px] text-muted-foreground">
