@@ -9,7 +9,7 @@ PWA (Progressive Web App) que funciona como un **Sistema Operativo Personal** co
 | **Dashboard / Secretario IA** | Panel central con chat, KPIs, tareas y rutinas del día. |
 | **Calendario** | Vista mensual y agenda con tareas, exámenes, entrenamientos e ingresos/gastos. |
 | **Estudios** | Asignaturas, tareas, sesiones de estudio y conexión opcional con Google Classroom. |
-| **Pomodoro** | Temporizador de la técnica Pomodoro con selector de tarea y notificaciones persistentes (tiempos configurables en Ajustes). |
+| **Pomodoro** | Temporizador de la técnica Pomodoro con selector de tarea, notificación persistente en pantalla de bloqueo (tipo Symetry) y aviso sonoro al completar cada sesión (tiempos configurables en Ajustes). |
 | **Deporte** | Registro de entrenamientos y seguimiento de hábitos diarios. |
 | **Finanzas** | Ingresos, gastos, categorías y presupuesto mensual. |
 | **Notas** | Apuntes con contenido de texto y archivos adjuntos opcionales. |
@@ -342,5 +342,5 @@ node scripts/test-reminder-time.mjs  # Pruebas de las utilidades de fecha/hora d
 
 - `src/app/manifest.ts` genera el Web App Manifest.
 - `src/app/icon.svg` es el icono de la aplicación.
-- `public/sw.js` es el Service Worker que recibe las notificaciones push.
+- `public/sw.js` es el Service Worker que recibe notificaciones push y gestiona la notificación persistente del Pomodoro en pantalla de bloqueo.
 - `next/font` proporciona la tipografía Geist.

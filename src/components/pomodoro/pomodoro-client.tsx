@@ -22,10 +22,10 @@ import {
 type Mode = "work" | "break";
 
 /**
- * Muestra una notificación persistente (requireInteraction): no desaparece sola,
- * hay que cerrarla. Se usa al terminar cada sesión del temporizador.
+ * Notificación persistente al terminar cada sesión (timbre).
+ * Se cierra sola o al pulsar sobre ella.
  */
-async function showPersistentNotification(title: string, body: string) {
+async function showCompletionNotification(title: string, body: string) {
   if (typeof window === "undefined" || !("Notification" in window)) return;
   if (Notification.permission !== "granted") return;
 
@@ -33,7 +33,7 @@ async function showPersistentNotification(title: string, body: string) {
     body,
     icon: "/icon.svg",
     badge: "/icon.svg",
-    tag: `pomodoro-${Date.now()}`,
+    tag: `pomodoro-done-${Date.now()}`,
     requireInteraction: true,
     data: { url: "/pomodoro" },
   };
@@ -43,12 +43,24 @@ async function showPersistentNotification(title: string, body: string) {
     if (reg) {
       await reg.showNotification(title, options);
     } else {
-      // Sin service worker: la API de Notification también soporta requireInteraction.
       new Notification(title, options);
     }
   } catch (err) {
     console.error("[pomodoro] no se pudo mostrar la notificación:", err);
   }
+}
+
+/**
+ * Enviar mensaje al service worker para actualizar la notificación persistente
+ * de pantalla de bloqueo (tag = "pomodoro-timer").
+ * body = null → cerrar la notificación.
+ */
+function postTimerNotification(body: string | null) {
+  if (!navigator.serviceWorker?.controller) return;
+  navigator.serviceWorker.controller.postMessage({
+    type: "pomodoro-update",
+    body,
+  });
 }
 
 /** Timbre corto con Web Audio API (sin archivos de audio). */
@@ -81,6 +93,11 @@ function playChime() {
   }
 }
 
+/** Formatear segundos como "MM:SS". */
+function fmt(secs: number) {
+  return `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
+}
+
 export function PomodoroClient() {
   const { data } = useData();
   const { settings } = useSettings();
@@ -97,15 +114,9 @@ export function PomodoroClient() {
   const completedRef = useRef(false);
   const originalTitleRef = useRef<string | null>(null);
   const runningRef = useRef(false);
-  const durationRef = useRef(0);
 
-  // Mantener refs al día para que los action handlers de Media Session
-  // (configurados una sola vez) lean valores frescos sin stale closures.
   useEffect(() => {
     runningRef.current = running;
-  });
-  useEffect(() => {
-    durationRef.current = durationSeconds;
   });
 
   const durationSeconds = (mode === "work" ? workMinutes : breakMinutes) * 60;
@@ -118,6 +129,11 @@ export function PomodoroClient() {
     setSecondsLeft(durationSeconds);
   }
 
+  // Registrar service worker al montar (necesario para la notificación persistente).
+  useEffect(() => {
+    void registerServiceWorker();
+  }, []);
+
   // Cuenta atrás cada segundo mientras corre.
   useEffect(() => {
     if (!running) return;
@@ -127,11 +143,30 @@ export function PomodoroClient() {
     return () => window.clearInterval(id);
   }, [running]);
 
-  // Al llegar a 0: timbre + notificación persistente + cambio de modo.
+  // ── Notificación persistente en pantalla de bloqueo (Symetry-style) ──────
+  // Se actualiza cada segundo con el tiempo restante vía postMessage al SW.
+  // El SW reemplaza la notificación con tag "pomodoro-timer" y renotify: true,
+  // lo que la mantiene visible en la pantalla de bloqueo sin volver a alertar.
+  useEffect(() => {
+    if (running) {
+      const label = mode === "work" ? "🍅 Trabajo" : "☕ Descanso";
+      const task = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
+      const taskName = task?.title ? ` — ${task.title}` : "";
+      postTimerNotification(`${label}: ${fmt(secondsLeft)}${taskName}`);
+    } else {
+      // Pausado o reseteado → cerrar la notificación
+      postTimerNotification(null);
+    }
+  }, [running, secondsLeft, mode, taskId, data.tasks]);
+
+  // Al llegar a 0: timbre + notificación de fin de sesión + cambio de modo.
   useEffect(() => {
     if (!running || secondsLeft > 0) return;
     if (completedRef.current) return;
     completedRef.current = true;
+
+    // Cerrar la notificación de timer antes de mostrar la de fin de sesión
+    postTimerNotification(null);
 
     const wasWork = mode === "work";
     const task = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
@@ -139,7 +174,7 @@ export function PomodoroClient() {
 
     playChime();
     if (wasWork) {
-      void showPersistentNotification(
+      void showCompletionNotification(
         "Pomodoro completado 🍅",
         `¡Buen trabajo! Descansa ${breakMinutes} min.${taskLabel}`,
       );
@@ -150,7 +185,7 @@ export function PomodoroClient() {
         setSecondsLeft(breakMinutes * 60);
       }, 0);
     } else {
-      void showPersistentNotification(
+      void showCompletionNotification(
         "Descanso terminado ⏰",
         `¡A por el siguiente pomodoro!${taskLabel}`,
       );
@@ -163,9 +198,7 @@ export function PomodoroClient() {
   }, [running, secondsLeft, mode, taskId, breakMinutes, workMinutes, data.tasks]);
 
   // ── Media Session: pantalla de bloqueo ─────────────────────────────────
-  // Configurar los action handlers UNA sola vez (usan refs para evitar
-  // stale closures). Los handlers usan setRunning / setSecondsLeft (setters
-  // estables de useState).
+  // Action handlers una sola vez (usan refs para evitar stale closures).
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     const ms = navigator.mediaSession;
@@ -178,14 +211,14 @@ export function PomodoroClient() {
       setRunning(false);
     });
     ms.setActionHandler("seekbackward", () => {
-      setSecondsLeft((s) => Math.min(durationRef.current, s + 30));
+      setSecondsLeft((s) => Math.min(durationSeconds, s + 30));
     });
     ms.setActionHandler("seekforward", () => {
       setSecondsLeft((s) => Math.max(0, s - 30));
     });
     ms.setActionHandler("stop", () => {
       setRunning(false);
-      setSecondsLeft(durationRef.current);
+      setSecondsLeft(durationSeconds);
     });
 
     return () => {
@@ -193,10 +226,9 @@ export function PomodoroClient() {
         ms.setActionHandler(a, null);
       }
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Actualizar metadata y posición en la pantalla de bloqueo cada vez que
-  // el temporizador cambia (cada segundo cuando corre).
+  // Actualizar metadata de Media Session cada segundo.
   useEffect(() => {
     if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
     const ms = navigator.mediaSession;
@@ -209,15 +241,12 @@ export function PomodoroClient() {
 
     ms.playbackState = running ? "playing" : "paused";
 
-    const remaining = secondsLeft;
-    const rmm = String(Math.floor(remaining / 60)).padStart(2, "0");
-    const rss = String(remaining % 60).padStart(2, "0");
-    const icon = mode === "work" ? "🍅" : "☕";
     const label = mode === "work" ? "Trabajo" : "Descanso";
+    const icon = mode === "work" ? "🍅" : "☕";
     const task = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
 
     ms.metadata = new MediaMetadata({
-      title: `${icon} ${label}: ${rmm}:${rss}${task ? ` · ${task.title}` : ""}`,
+      title: `${icon} ${label}: ${fmt(secondsLeft)}${task ? ` · ${task.title}` : ""}`,
       artist: "Núcleo",
       artwork: [{ src: "/icon.svg", sizes: "512x512", type: "image/svg+xml" }],
     });
@@ -233,9 +262,7 @@ export function PomodoroClient() {
     if (typeof document === "undefined") return;
     if (originalTitleRef.current === null) originalTitleRef.current = document.title;
     if (running) {
-      const tmm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
-      const tss = String(secondsLeft % 60).padStart(2, "0");
-      document.title = `${tmm}:${tss} · ${mode === "work" ? "Trabajo" : "Descanso"} · Núcleo`;
+      document.title = `${fmt(secondsLeft)} · ${mode === "work" ? "Trabajo" : "Descanso"} · Núcleo`;
     } else if (originalTitleRef.current !== null) {
       document.title = originalTitleRef.current;
     }
@@ -257,9 +284,6 @@ export function PomodoroClient() {
   const progress = durationSeconds > 0 ? secondsLeft / durationSeconds : 0;
   const circumference = 2 * Math.PI * 90;
   const dashOffset = circumference * (1 - progress);
-
-  const mm = String(Math.floor(secondsLeft / 60)).padStart(2, "0");
-  const ss = String(secondsLeft % 60).padStart(2, "0");
 
   const notifGranted =
     typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
@@ -304,7 +328,7 @@ export function PomodoroClient() {
   }
 
   function handleTestNotification() {
-    void showPersistentNotification(
+    void showCompletionNotification(
       "Núcleo · Pomodoro",
       "🔔 Esta notificación no desaparece sola: ciérrala cuando quieras.",
     );
@@ -357,7 +381,7 @@ export function PomodoroClient() {
                       : "text-emerald-600 dark:text-emerald-400",
                   )}
                 >
-                  {mm}:{ss}
+                  {fmt(secondsLeft)}
                 </span>
                 <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                   {mode === "work" ? (
@@ -437,8 +461,9 @@ export function PomodoroClient() {
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               {notifGranted ? (
                 <p className="font-medium text-emerald-600 dark:text-emerald-400">
-                  Permiso concedido: al terminar el temporizador recibirás un aviso que
-                  no desaparece hasta que lo cierres.
+                  Permiso concedido: al iniciar el temporizador verás una notificación
+                  persistente en la pantalla de bloqueo con la cuenta atrás. Al terminar
+                  cada sesión recibirás un aviso sonoro.
                 </p>
               ) : notifDenied ? (
                 <p className="text-destructive">
@@ -447,8 +472,8 @@ export function PomodoroClient() {
                 </p>
               ) : (
                 <p>
-                  Al pulsar “Iniciar” te pediremos permiso. Con permiso, al terminar
-                  verás una notificación persistente.
+                  Al pulsar "Iniciar" te pediremos permiso. Con permiso, el temporizador
+                  se mostrará en la pantalla de bloqueo.
                 </p>
               )}
               <Button type="button" variant="outline" size="sm" onClick={handleTestNotification}>
