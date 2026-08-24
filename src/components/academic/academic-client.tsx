@@ -53,6 +53,8 @@ export function AcademicClient() {
   if (!hydrated) return <LoadingState />;
 
   const subjectById = new Map(data.subjects.map((s) => [s.id, s]));
+  // Derivar el subject actual desde el estado vivo (no el snapshot stale de useState).
+  const currentSubject = selectedSubject ? subjectById.get(selectedSubject.id) ?? selectedSubject : null;
 
   const academicTasks = data.tasks
     .filter((t) => t.subject_id || t.category === "academic")
@@ -186,8 +188,8 @@ export function AcademicClient() {
 
       {/* Sheet de detalle de notas de la asignatura seleccionada */}
       <SubjectGradesSheet
-        subject={selectedSubject}
-        open={!!selectedSubject}
+        subject={currentSubject}
+        open={!!currentSubject}
         onOpenChange={(open) => !open && setSelectedSubject(null)}
       />
 
