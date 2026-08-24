@@ -88,6 +88,15 @@ assert(
   d3 !== null && d3.getTime() === Date.parse("2026-08-24T11:30:00Z"),
   "Madrid 13:30 en verano → 11:30Z (no se trata como UTC estricto)",
 );
+// Regresión: el resultado NO debe depender del TZ del proceso (antes, el
+// fallback usaba new Date(sin-Z) que se parseaba como hora local: en una
+// máquina Madrid "pasaba" por casualidad y en el runtime UTC fallaba 2 h).
+const dMidnight = zonedDateTime("2026-08-24", "00:30", "Europe/Madrid");
+assert(
+  dMidnight !== null && dMidnight.getTime() === Date.parse("2026-08-23T22:30:00Z"),
+  "Madrid 00:30 (medianoche) → 22:30Z del día anterior (determinista)",
+);
+
 if (d3) {
   const remindAt = new Date(d3.getTime() - 10 * 60000);
   const parts3 = new Intl.DateTimeFormat("en-CA", {

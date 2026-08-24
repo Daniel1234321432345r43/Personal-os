@@ -49,26 +49,45 @@ export function dateKeyInTz(date, tz) {
  */
 export function zonedDateTime(dateStr, timeStr, tz) {
   if (typeof dateStr !== "string" || typeof timeStr !== "string") return null;
-  const target = `${dateStr}T${timeStr.slice(0, 5)}:00`;
-  const guess = new Date(`${target}Z`).getTime();
+  // target SOLO con HH:MM (sin segundos): el match del bucle compara contra él.
+  const target = `${dateStr}T${timeStr.slice(0, 5)}`;
+  // guess SIEMPRE con Z explícito: sin él, "YYYY-MM-DDTHH:MM" se parsea como
+  // hora LOCAL del runtime (Europe/Madrid en local, UTC en Deno Deploy) y el
+  // resultado depende de dónde se ejecute.
+  const guess = new Date(`${target}:00Z`).getTime();
   if (!Number.isFinite(guess)) return null;
 
   // Busca el timestamp UTC cuya hora local en tz coincide con la deseada.
+  // Causa raíz del bug de recordatorios 2 h tarde: target incluía ":00"
+  // (segundos) pero el string del match no → la comparación nunca era igual →
+  // SIEMPRE caía al respaldo, que además usaba new Date(sin Z) y por tanto se
+  // parseaba como hora LOCAL del runtime (correcto por casualidad en una
+  // máquina Madrid, 2 h tarde en el runtime UTC de Deno Deploy).
+  // hour12:true + dayPeriod se usa por portabilidad con cualquier ICU.
   for (let delta = -86400000; delta <= 86400000; delta += 3600000) {
     const d = new Date(guess + delta);
     if (Number.isNaN(d.getTime())) continue;
     try {
-      const parts = new Intl.DateTimeFormat("en-CA", {
+      const parts = new Intl.DateTimeFormat("en-US", {
         timeZone: tz,
         year: "numeric",
         month: "2-digit",
         day: "2-digit",
-        hour: "2-digit",
+        hour: "numeric",
         minute: "2-digit",
-        hourCycle: "h23",
+        hour12: true,
       }).formatToParts(d);
       const get = (type) => parts.find((p) => p.type === type)?.value ?? "";
-      if (`${get("year")}-${get("month")}-${get("day")}T${get("hour")}:${get("minute")}` === target) {
+      let hour = Number(get("hour"));
+      if (Number.isNaN(hour)) continue;
+      // Normalizar a 24 h a partir de AM/PM. Si el runtime ignora hour12 y ya
+      // devuelve 0-23, la normalización no cambia nada (dayPeriod vacío).
+      const period = get("dayPeriod");
+      if (period === "PM" && hour < 12) hour += 12;
+      else if (period === "AM" && hour === 12) hour = 0;
+      const hh = String(hour).padStart(2, "0");
+      const mm = get("minute");
+      if (`${get("year")}-${get("month")}-${get("day")}T${hh}:${mm}` === target) {
         return d;
       }
     } catch {
@@ -76,5 +95,5 @@ export function zonedDateTime(dateStr, timeStr, tz) {
       continue;
     }
   }
-  return new Date(target); // Respaldo: interpretar la hora como UTC.
+  return new Date(`${target}:00Z`); // Respaldo determinista: interpretar la hora como UTC.
 }
