@@ -23,6 +23,7 @@ import {
   Award,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/lib/use-is-mobile";
 
 function messageText(message: UIMessage): string {
   return message.parts
@@ -289,6 +290,9 @@ const suggestions = [
   "¿Qué tareas y exámenes tengo pendientes?",
 ];
 
+/** En móvil, el chat arranca colapsado; en escritorio, expandido. */
+const SECRETARY_COLLAPSED_KEY = "nucleo:secretary-collapsed";
+
 export function SecretaryChat() {
   const { settings, configured } = useSettings();
   const { data, actions } = useData();
@@ -371,6 +375,19 @@ export function SecretaryChat() {
     }
   }, [messages, actions]);
 
+  const isMobile = useIsMobile();
+  const [collapsed, setCollapsed] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const stored = localStorage.getItem(SECRETARY_COLLAPSED_KEY);
+    if (stored !== null) return stored === "true";
+    // Primera visita: colapsado en móvil, expandido en escritorio
+    return window.innerWidth < 768;
+  });
+
+  useEffect(() => {
+    localStorage.setItem(SECRETARY_COLLAPSED_KEY, String(collapsed));
+  }, [collapsed]);
+
   const loading = status === "submitted" || status === "streaming";
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -387,6 +404,28 @@ export function SecretaryChat() {
   }, [messages.length, status]);
 
   const assistantName = settings.assistantName?.trim() || "Núcleo";
+
+  /* ── Modo colapsado (móvil) ─────────────────────────────────────────── */
+  if (collapsed) {
+    return (
+      <button
+        type="button"
+        onClick={() => setCollapsed(false)}
+        className="flex w-full items-center gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-accent/50 active:bg-accent"
+      >
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+          <Sparkles className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium">Secretario {assistantName}</p>
+          <p className="truncate text-xs text-muted-foreground">
+            Toca para hablar con tu asistente…
+          </p>
+        </div>
+        <span className="text-xs text-muted-foreground">▸</span>
+      </button>
+    );
+  }
 
   return (
     <div className="flex h-[560px] flex-col">
@@ -489,8 +528,8 @@ export function SecretaryChat() {
         <div ref={bottomRef} />
       </ScrollArea>
 
-      {/* Sugerencias rápidas */}
-      {messages.length === 0 && configured && (
+      {/* Sugerencias rápidas (solo escritorio) */}
+      {messages.length === 0 && configured && !isMobile && (
         <div className="flex flex-wrap gap-2 py-3">
           {suggestions.map((s) => (
             <Button
@@ -506,6 +545,17 @@ export function SecretaryChat() {
         </div>
       )}
 
+      {/* Botón colapsar (móvil) */}
+      {isMobile && (
+        <button
+          type="button"
+          onClick={() => setCollapsed(true)}
+          className="self-center text-xs text-muted-foreground hover:text-foreground py-1"
+        >
+          ▾ Colapsar
+        </button>
+      )}
+
       {/* Entrada */}
       <form
         onSubmit={handleSubmit}
@@ -514,7 +564,7 @@ export function SecretaryChat() {
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Ej: Tengo examen de Matemáticas el 15 sep y entrega de Redes el viernes..."
+          placeholder={isMobile ? "Escribe tu mensaje…" : "Ej: Tengo examen de Matemáticas el 15 sep y entrega de Redes el viernes..."}
           disabled={!configured || loading}
           className="flex-1"
         />

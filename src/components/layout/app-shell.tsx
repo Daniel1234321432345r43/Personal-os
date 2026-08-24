@@ -47,6 +47,17 @@ function Brand() {
   );
 }
 
+const bottomNavItems = [
+  { href: "/dashboard", label: "Hoy", icon: LayoutDashboard },
+  { href: "/calendar", label: "Calendario", icon: Calendar },
+  { href: "/academic", label: "Estudios", icon: GraduationCap },
+  { href: "/pomodoro", label: "Pomodoro", icon: Timer },
+  { href: "/notes", label: "Notas", icon: StickyNote },
+  { href: "/sport", label: "Deporte", icon: Dumbbell },
+  { href: "/finance", label: "Finanzas", icon: Wallet },
+  { href: "/settings", label: "Ajustes", icon: Settings },
+];
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -131,6 +142,30 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
   );
 
+  /* ── Barra inferior móvil (bottom navigation) ──────────────────────── */
+  const bottomBar = (
+    <nav className="fixed bottom-0 inset-x-0 z-30 flex items-center justify-around border-t bg-background/95 px-1 py-1 backdrop-blur-lg lg:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+      {bottomNavItems.map(({ href, label, icon: Icon }) => {
+        const active = pathname.startsWith(href);
+        return (
+          <Link
+            key={href}
+            href={href}
+            className={cn(
+              "flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors min-w-0",
+              active
+                ? "text-primary"
+                : "text-muted-foreground active:text-foreground",
+            )}
+          >
+            <Icon className="h-5 w-5" />
+            <span className="truncate">{label}</span>
+          </Link>
+        );
+      })}
+    </nav>
+  );
+
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar de escritorio */}
@@ -140,7 +175,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mt-auto">{footer}</div>
       </aside>
 
-      {/* Layout móvil con Sheet */}
+      {/* Layout móvil con Sheet + bottom bar */}
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur lg:hidden">
           <Sheet>
@@ -159,8 +194,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Brand />
         </header>
 
-        <main className="flex-1">{children}</main>
+        {/* Padding inferior en móvil para que el contenido no quede tapado por la bottom bar */}
+        <main className="flex-1 pb-16 lg:pb-0">{children}</main>
       </div>
+
+      {bottomBar}
     </div>
   );
 }

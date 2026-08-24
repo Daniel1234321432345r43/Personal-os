@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useIsMobile } from "@/lib/use-is-mobile";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -125,7 +126,15 @@ export function CalendarClient() {
 
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [filter, setFilter] = useState<FilterType>("all");
-  const [viewMode, setViewMode] = useState<"month" | "list">("month");
+  const isMobile = useIsMobile();
+  const [viewMode, setViewMode] = useState<"month" | "week" | "list">("month");
+
+  // En móvil, cambiar a vista semanal la primera vez que se hidrata
+  useEffect(() => {
+    if (hydrated && isMobile && viewMode === "month") {
+      setViewMode("week");
+    }
+  }, [hydrated, isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
   const [activeModal, setActiveModal] = useState<"task" | "transaction" | "workout" | null>(null);
 
   const subjectById = useMemo(
@@ -196,6 +205,27 @@ export function CalendarClient() {
     () => buildCalendarMatrix(currentDate.year, currentDate.month),
     [currentDate.year, currentDate.month],
   );
+
+  // ── Vista semanal: 7 días alrededor de hoy ─────────────────────────────
+  const weekStart = useMemo(() => {
+    const now = new Date();
+    const day = now.getDay(); // 0=Dom, 1=Lun, ...
+    const diff = day === 0 ? -6 : 1 - day; // offset hasta lunes
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diff);
+    return toDateKey(monday.getFullYear(), monday.getMonth(), monday.getDate());
+  }, []);
+
+  const weekDays = useMemo(() => {
+    const [y, m, d] = weekStart.split("-").map(Number);
+    const start = new Date(y, m - 1, d);
+    return Array.from({ length: 7 }, (_, i) => {
+      const date = new Date(start);
+      date.setDate(start.getDate() + i);
+      const key = toDateKey(date.getFullYear(), date.getMonth(), date.getDate());
+      return { key, dayNumber: date.getDate() };
+    });
+  }, [weekStart]);
 
   // Estadísticas del mes actual seleccionado
   const monthStats = useMemo(() => {
@@ -332,6 +362,18 @@ export function CalendarClient() {
               )}
             >
               Mes
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("week")}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                viewMode === "week"
+                  ? "bg-background text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Semana
             </button>
             <button
               type="button"
@@ -652,6 +694,115 @@ export function CalendarClient() {
                     );
                   })}
                 </div>
+              </CardContent>
+            </Card>
+          ) : viewMode === "week" ? (
+            /* ── Vista Semanal ────────────────────────────────────────────── */
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">
+                  Semana del {formatDateLong(weekStart)}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {weekDays.map((day) => {
+                  const ev = eventsByDate.get(day.key);
+                  const isToday = day.key === today;
+                  const isSelected = day.key === selectedDate;
+                  return (
+                    <div
+                      key={day.key}
+                      className={cn(
+                        "rounded-lg border p-3 transition-colors",
+                        isSelected && "border-primary bg-primary/5",
+                        isToday && !isSelected && "border-primary/40",
+                      )}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setSelectedDate(day.key)}
+                        className="flex items-center gap-2 text-sm font-semibold hover:underline"
+                      >
+                        <span>{formatDateLong(day.key)}</span>
+                        {isToday && (
+                          <Badge variant="default" className="text-[10px]">
+                            Hoy
+                          </Badge>
+                        )}
+                      </button>
+                      {ev ? (
+                        <div className="mt-2 space-y-1">
+                          {ev.exams.map((t) => (
+                            <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+                              <span className="font-medium">Examen:</span> {t.title}
+                              {t.subject_id && (
+                                <span className="text-muted-foreground">
+                                  ({subjectById.get(t.subject_id)?.name ?? "—"})
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          {ev.assignments.map((t) => (
+                            <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                              <span className="font-medium">Entrega:</span> {t.title}
+                              {t.subject_id && (
+                                <span className="text-muted-foreground">
+                                  ({subjectById.get(t.subject_id)?.name ?? "—"})
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          {ev.studySessions.map((t) => (
+                            <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                              <span className="font-medium">Estudio:</span> {t.title}
+                              {t.subject_id && (
+                                <span className="text-muted-foreground">
+                                  ({subjectById.get(t.subject_id)?.name ?? "—"})
+                                </span>
+                              )}
+                            </div>
+                          ))}
+                          {ev.tasks.map((t) => (
+                            <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                              <span className="font-medium">Tarea:</span> {t.title}
+                            </div>
+                          ))}
+                          {ev.incomes.map((tx) => (
+                            <div key={tx.id} className="flex items-center gap-1.5 text-xs">
+                              <ArrowUpRight className="h-3 w-3 text-emerald-500" />
+                              <span className="font-medium">+{formatCurrency(Number(tx.amount))}</span>
+                              <span className="text-muted-foreground">{tx.category}</span>
+                            </div>
+                          ))}
+                          {ev.expenses.map((tx) => (
+                            <div key={tx.id} className="flex items-center gap-1.5 text-xs">
+                              <ArrowDownRight className="h-3 w-3 text-red-500" />
+                              <span className="font-medium">-{formatCurrency(Number(tx.amount))}</span>
+                              <span className="text-muted-foreground">{tx.category}</span>
+                            </div>
+                          ))}
+                          {ev.workouts.map((w) => (
+                            <div key={w.id} className="flex items-center gap-1.5 text-xs">
+                              <Dumbbell className="h-3 w-3 text-blue-500" />
+                              <span className="font-medium">{w.activity_type}</span>
+                              {w.duration_minutes && (
+                                <span className="text-muted-foreground">{w.duration_minutes} min</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="mt-1.5 text-xs text-muted-foreground">
+                          Sin eventos
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </CardContent>
             </Card>
           ) : (
