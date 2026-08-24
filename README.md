@@ -202,7 +202,7 @@ OMNIROUTE_MODEL=auto
 
 ## Notificaciones push (recordatorios)
 
-La aplicación puede avisarte **aunque esté cerrada** cuando va a empezar una sesión de estudio, un examen o un entrenamiento que tenga hora de inicio. En Ajustes puedes añadir hora a cualquier tarea o entreno desde sus formularios, y luego activar las notificaciones en **Ajustes → Notificaciones**.
+La aplicación puede avisarte **aunque esté cerrada** cuando va a empezar una sesión de estudio o un examen que tenga hora de inicio. En Ajustes puedes añadir hora a cualquier tarea desde su formulario, y luego activar las notificaciones en **Ajustes → Notificaciones**.
 
 El flujo completo es:
 
@@ -229,11 +229,21 @@ VAPID_SUBJECT=mailto:tu@email.com
 # Secretos de la función (usa las mismas claves VAPID)
 supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=mailto:tu@email.com
 
-# Despliegue programado cada 5 minutos
-supabase functions deploy send-reminders --no-verify-jwt --schedule "*/5 * * * *"
+# Despliegue de la función
+supabase functions deploy send-reminders --no-verify-jwt
 ```
 
-La función consulta las tareas y entrenamientos con `start_time` y envía la notificación. En el formulario de tareas puedes elegir que la alarma avise **5, 10 o 15 minutos antes** (por defecto 10); los entrenamientos se avisan dentro de la ventana de 20 minutos antes de la hora de inicio. Tras un envío exitoso, la función marca `reminder_sent = true` en la tarea (migración `00008`) para no repetirla en el siguiente tick del cron, además del registro en `reminder_log`. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm).
+> **El cron se configura en `supabase/config.toml`**, no con un flag del deploy:
+>
+> ```toml
+> [functions.send-reminders]
+> verify_jwt = false
+> schedule = "* * * * *"   # cada 60 segundos; ajustable (p. ej. "*/5 * * * *")
+> ```
+>
+> La CLI actual ya no acepta `--schedule` en `functions deploy`, y **redesplegar sin la sección `[functions.send-reminders]` en `config.toml` elimina la programación** — el cron deja de ejecutarse. Si cambias el `schedule`, vuelve a desplegar para aplicarlo.
+
+La función consulta las tareas con `start_time` y envía la notificación. En el formulario de tareas puedes elegir que la alarma avise **5, 10 o 15 minutos antes** (por defecto 10). Tras un envío exitoso, la función marca `reminder_sent = true` en la tarea (migración `00008`) para no repetirla en el siguiente tick del cron. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm); `scripts/test-web-push.mjs` la verifica contra una implementación independiente (`http_ece`) para garantizar que los navegadores reales puedan descifrar el payload.
 
 **Zona horaria:** la app guarda la hora de inicio como hora local (HH:MM) y `due_date` como instante UTC (`timestamptz`). Al iniciar sesión, la app escribe la zona horaria real del navegador en `public.users`, y la Edge Function la usa para convertir cada tarea a su instante UTC exacto (con horario de verano incluido), comparando siempre en milisegundos UTC sin desfases manuales. Si la zona del perfil no está definida, la función avisa por logs en vez de fallar en silencio.
 
@@ -312,6 +322,8 @@ src/
     classroom/               # Cliente de Google Classroom
     data.ts                  # Cálculos y datos del dashboard
 supabase/migrations/         # Esquema SQL, RLS y reparación de perfiles
+supabase/functions/          # Edge Functions (send-reminders + _shared/)
+supabase/config.toml         # Configuración de la CLI (schedule del cron)
 ```
 
 ## Scripts
