@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Sparkles, Bell } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer } from "lucide-react";
 
 function LoadingState() {
   return (
@@ -96,7 +96,7 @@ export function SettingsClient() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Ajustes</h1>
           <p className="text-sm text-muted-foreground">
-            Configura la IA: proveedor, modelo y API key.
+            Configura la IA y los tiempos de la técnica Pomodoro.
           </p>
         </div>
         {configured ? (
@@ -300,6 +300,54 @@ export function SettingsClient() {
             </CardHeader>
             <CardContent>
               <PushManager />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <Timer className="h-4 w-4 text-primary" />
+                Pomodoro
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className={fieldClass}>
+                <label className={labelClass} htmlFor="pomodoro-work">
+                  Trabajo (minutos)
+                </label>
+                <input
+                  id="pomodoro-work"
+                  type="number"
+                  min={1}
+                  max={120}
+                  inputMode="numeric"
+                  value={settings.pomodoroWorkMinutes ?? 25}
+                  onChange={(e) =>
+                    update({ pomodoroWorkMinutes: Number(e.target.value) || 25 })
+                  }
+                  className={inputClass}
+                />
+              </div>
+              <div className={fieldClass}>
+                <label className={labelClass} htmlFor="pomodoro-break">
+                  Descanso (minutos)
+                </label>
+                <input
+                  id="pomodoro-break"
+                  type="number"
+                  min={1}
+                  max={60}
+                  inputMode="numeric"
+                  value={settings.pomodoroBreakMinutes ?? 5}
+                  onChange={(e) =>
+                    update({ pomodoroBreakMinutes: Number(e.target.value) || 5 })
+                  }
+                  className={inputClass}
+                />
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Por defecto: 25 minutos de trabajo y 5 de descanso.
+              </p>
             </CardContent>
           </Card>
 

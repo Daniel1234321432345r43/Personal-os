@@ -15,6 +15,10 @@ export interface AiSettings {
   model: string;
   baseURL: string;
   assistantName?: string;
+  /** Minutos de sesión de trabajo del temporizador Pomodoro. */
+  pomodoroWorkMinutes?: number;
+  /** Minutos de descanso del temporizador Pomodoro. */
+  pomodoroBreakMinutes?: number;
 }
 
 export const DEFAULT_SETTINGS: AiSettings = {
@@ -23,7 +27,15 @@ export const DEFAULT_SETTINGS: AiSettings = {
   model: "gpt-4o-mini",
   baseURL: "",
   assistantName: "Núcleo",
+  pomodoroWorkMinutes: 25,
+  pomodoroBreakMinutes: 5,
 };
+
+function clampInt(value: unknown, min: number, max: number, fallback: number): number {
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, Math.round(n)));
+}
 
 const STORAGE_KEY = "nucleo:ai-settings:v1";
 
@@ -37,6 +49,8 @@ export function loadSettings(): AiSettings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       assistantName: parsed.assistantName?.trim() || "Núcleo",
+      pomodoroWorkMinutes: clampInt(parsed.pomodoroWorkMinutes, 1, 120, 25),
+      pomodoroBreakMinutes: clampInt(parsed.pomodoroBreakMinutes, 1, 60, 5),
     };
   } catch {
     return DEFAULT_SETTINGS;

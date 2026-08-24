@@ -9,6 +9,7 @@ PWA (Progressive Web App) que funciona como un **Sistema Operativo Personal** co
 | **Dashboard / Secretario IA** | Panel central con chat, KPIs, tareas y rutinas del día. |
 | **Calendario** | Vista mensual y agenda con tareas, exámenes, entrenamientos e ingresos/gastos. |
 | **Estudios** | Asignaturas, tareas, sesiones de estudio y conexión opcional con Google Classroom. |
+| **Pomodoro** | Temporizador de la técnica Pomodoro con selector de tarea y notificaciones persistentes (tiempos configurables en Ajustes). |
 | **Deporte** | Registro de entrenamientos y seguimiento de hábitos diarios. |
 | **Finanzas** | Ingresos, gastos, categorías y presupuesto mensual. |
 | **Notas** | Apuntes con contenido de texto y archivos adjuntos opcionales. |
@@ -289,7 +290,7 @@ src/
   app/
     (auth)/login/            # Login con Google
     (app)/                   # Rutas de la aplicación
-      dashboard/ academic/ sport/ finance/
+      dashboard/ academic/ pomodoro/ sport/ finance/
     api/
       chat/                  # Chat del Secretario IA
       plan/                  # Plan estructurado del día
