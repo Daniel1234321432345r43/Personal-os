@@ -96,6 +96,17 @@ export function PomodoroClient() {
 
   const completedRef = useRef(false);
   const originalTitleRef = useRef<string | null>(null);
+  const runningRef = useRef(false);
+  const durationRef = useRef(0);
+
+  // Mantener refs al día para que los action handlers de Media Session
+  // (configurados una sola vez) lean valores frescos sin stale closures.
+  useEffect(() => {
+    runningRef.current = running;
+  });
+  useEffect(() => {
+    durationRef.current = durationSeconds;
+  });
 
   const durationSeconds = (mode === "work" ? workMinutes : breakMinutes) * 60;
 
@@ -150,6 +161,72 @@ export function PomodoroClient() {
       }, 0);
     }
   }, [running, secondsLeft, mode, taskId, breakMinutes, workMinutes, data.tasks]);
+
+  // ── Media Session: pantalla de bloqueo ─────────────────────────────────
+  // Configurar los action handlers UNA sola vez (usan refs para evitar
+  // stale closures). Los handlers usan setRunning / setSecondsLeft (setters
+  // estables de useState).
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession;
+
+    ms.setActionHandler("play", () => {
+      completedRef.current = false;
+      setRunning(true);
+    });
+    ms.setActionHandler("pause", () => {
+      setRunning(false);
+    });
+    ms.setActionHandler("seekbackward", () => {
+      setSecondsLeft((s) => Math.min(durationRef.current, s + 30));
+    });
+    ms.setActionHandler("seekforward", () => {
+      setSecondsLeft((s) => Math.max(0, s - 30));
+    });
+    ms.setActionHandler("stop", () => {
+      setRunning(false);
+      setSecondsLeft(durationRef.current);
+    });
+
+    return () => {
+      for (const a of ["play", "pause", "seekbackward", "seekforward", "stop"] as const) {
+        ms.setActionHandler(a, null);
+      }
+    };
+  }, []);
+
+  // Actualizar metadata y posición en la pantalla de bloqueo cada vez que
+  // el temporizador cambia (cada segundo cuando corre).
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !("mediaSession" in navigator)) return;
+    const ms = navigator.mediaSession;
+
+    if (!running && secondsLeft >= durationSeconds) {
+      ms.playbackState = "none";
+      ms.metadata = null;
+      return;
+    }
+
+    ms.playbackState = running ? "playing" : "paused";
+
+    const remaining = secondsLeft;
+    const rmm = String(Math.floor(remaining / 60)).padStart(2, "0");
+    const rss = String(remaining % 60).padStart(2, "0");
+    const icon = mode === "work" ? "🍅" : "☕";
+    const label = mode === "work" ? "Trabajo" : "Descanso";
+    const task = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
+
+    ms.metadata = new MediaMetadata({
+      title: `${icon} ${label}: ${rmm}:${rss}${task ? ` · ${task.title}` : ""}`,
+      artist: "Núcleo",
+      artwork: [{ src: "/icon.svg", sizes: "512x512", type: "image/svg+xml" }],
+    });
+    ms.setPositionState({
+      duration: durationSeconds,
+      playbackRate: 1,
+      position: durationSeconds - secondsLeft,
+    });
+  }, [running, secondsLeft, mode, durationSeconds, taskId, data.tasks]);
 
   // Reflejar el tiempo restante en el título de la pestaña.
   useEffect(() => {
