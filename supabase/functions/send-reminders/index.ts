@@ -21,14 +21,23 @@ const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@localhost";
 
-// Avisa entre 20 minutos antes y 3 minutos después de la hora de inicio.
-const REMIND_BEFORE_MS = 20 * 60 * 1000;
-const GRACE_AFTER_MS = 3 * 60 * 1000;
+// Entrenamientos: comportamiento original, avisar entre 20 minutos antes y
+// 3 minutos después de la hora de inicio.
+const WORKOUT_REMIND_BEFORE_MS = 20 * 60 * 1000;
+const WORKOUT_GRACE_AFTER_MS = 3 * 60 * 1000;
+
+// Tareas: el aviso es exacto (5/10/15 min antes, columna remind_before_minutes).
+// El cron corre cada 5 minutos, así que la ventana cubre ~un periodo completo
+// alrededor del momento objetivo para no perderse ningún tick.
+const TASK_WINDOW_BEFORE_MS = 2 * 60 * 1000;
+const TASK_WINDOW_AFTER_MS = 3 * 60 * 1000;
 
 interface ReminderItem {
   entityType: "task" | "workout";
   entityId: string;
   scheduled: Date;
+  /** Antelación configurada (min). Las tareas la leen de remind_before_minutes. */
+  remindBeforeMinutes: number;
   message: (minutes: number) => string;
 }
 
@@ -85,7 +94,7 @@ async function collectUpcoming(
 
   const { data: tasks } = await supabase
     .from("tasks")
-    .select("id, title, type, due_date, start_time, status")
+    .select("id, title, type, due_date, start_time, status, remind_before_minutes")
     .not("start_time", "is", null)
     .gte("due_date", yesterday)
     .lte("due_date", tomorrow);
@@ -98,6 +107,7 @@ async function collectUpcoming(
       entityType: "task",
       entityId: task.id,
       scheduled,
+      remindBeforeMinutes: task.remind_before_minutes ?? 10,
       message: (minutes) =>
         `En ${minutes} min ${label.verb} ${label.article}: ${task.title}`,
     });
@@ -118,6 +128,7 @@ async function collectUpcoming(
       entityType: "workout",
       entityId: workout.id,
       scheduled,
+      remindBeforeMinutes: 20,
       message: (minutes) => `En ${minutes} min empieza tu entrenamiento: ${name}`,
     });
   }
@@ -163,10 +174,27 @@ Deno.serve(async () => {
     const items = await collectUpcoming(supabase, userId, tz, now);
 
     for (const item of items) {
-      const diff = item.scheduled.getTime() - now.getTime();
-      if (diff < -GRACE_AFTER_MS || diff > REMIND_BEFORE_MS) continue;
+      const nowMs = now.getTime();
+      let remindAt: Date;
+      let inWindow: boolean;
 
-      const minutes = Math.max(1, Math.round(diff / 60000));
+      if (item.entityType === "workout") {
+        // Comportamiento original: avisar en cualquier momento dentro de la
+        // ventana de 20 min antes / 3 min después de la hora de inicio.
+        const diff = item.scheduled.getTime() - nowMs;
+        inWindow = diff >= -WORKOUT_GRACE_AFTER_MS && diff <= WORKOUT_REMIND_BEFORE_MS;
+        remindAt = item.scheduled;
+      } else {
+        // Tarea: avisar exactamente remind_before_minutes antes (5/10/15).
+        // La ventana alrededor del momento objetivo cubre el periodo del cron.
+        const target = item.scheduled.getTime() - item.remindBeforeMinutes * 60000;
+        const diff = nowMs - target;
+        inWindow = diff >= -TASK_WINDOW_BEFORE_MS && diff <= TASK_WINDOW_AFTER_MS;
+        remindAt = new Date(target);
+      }
+      if (!inWindow) continue;
+
+      const minutes = Math.max(1, Math.round((item.scheduled.getTime() - nowMs) / 60000));
       const payload = JSON.stringify({
         title: "Núcleo",
         body: item.message(minutes),
@@ -202,7 +230,7 @@ Deno.serve(async () => {
               user_id: userId,
               entity_type: item.entityType,
               entity_id: item.entityId,
-              remind_at: item.scheduled.toISOString(),
+              remind_at: remindAt.toISOString(),
             },
             { onConflict: "user_id,entity_type,entity_id,remind_at", ignoreDuplicates: true },
           );

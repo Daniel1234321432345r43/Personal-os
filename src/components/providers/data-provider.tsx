@@ -53,6 +53,7 @@ export type TaskInput = {
   priority?: TaskPriority;
   due_date?: string | null;
   start_time?: string | null;
+  remind_before_minutes?: number | null;
   estimated_minutes?: number | null;
   subject_id?: string | null;
   subject_name?: string | null;
@@ -275,7 +276,7 @@ async function syncStateToSupabase(state: DataState, userId: string): Promise<bo
   const operations: Array<[string, unknown]> = [
     ["subjects", state.subjects.map(({ id, name, color, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, classroom_course_id, classroom_name, created_at }))],
     ["habits", state.habits.map(({ id, name, emoji, frequency, created_at }) => ({ id, user_id: userId, name, emoji, frequency, created_at }))],
-    ["tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, start_time, estimated_minutes, subject_id, classroom_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, start_time: start_time ?? null, estimated_minutes, subject_id, classroom_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at }))],
+    ["tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, start_time, remind_before_minutes, estimated_minutes, subject_id, classroom_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, start_time: start_time ?? null, remind_before_minutes: remind_before_minutes ?? null, estimated_minutes, subject_id, classroom_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at }))],
     ["notes", state.notes.map(({ id, title, content, file_name, file_type, file_data, created_at, updated_at }) => ({ id, user_id: userId, title, content, file_name, file_type, file_data, created_at, updated_at }))],
     ["workouts", state.workouts.map(({ id, activity_type, title, date, start_time, duration_minutes, notes, created_at }) => ({ id, user_id: userId, activity_type, title, date, start_time: start_time ?? null, duration_minutes, notes, created_at }))],
     ["transactions", state.transactions.map(({ id, type, amount, category, description, date, created_at }) => ({ id, user_id: userId, type, amount, category, description, date, created_at }))],
@@ -609,6 +610,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 category: input.category ?? (resolvedSubjectId ? "academic" : "personal"),
                 due_date: dateStr || null,
                 start_time: input.start_time ?? null,
+                remind_before_minutes: input.remind_before_minutes ?? null,
                 estimated_minutes: input.estimated_minutes ?? null,
                 subject_id: resolvedSubjectId, classroom_id: null,
                 session_index: idx + 1, total_sessions: total, parent_task_id: parentId,
@@ -625,6 +627,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               category: input.category ?? (resolvedSubjectId ? "academic" : "personal"),
               due_date: input.due_date ?? (input.session_dates?.[0] || null),
               start_time: input.start_time ?? null,
+              remind_before_minutes: input.remind_before_minutes ?? null,
               estimated_minutes: input.estimated_minutes ?? null,
               subject_id: resolvedSubjectId, classroom_id: null,
               session_index: input.session_index ?? null,
@@ -655,6 +658,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             category: t.category,
             due_date: t.due_date,
             start_time: t.start_time,
+            remind_before_minutes: t.remind_before_minutes ?? null,
             estimated_minutes: t.estimated_minutes,
             subject_id: t.subject_id,
             classroom_id: t.classroom_id,
@@ -739,6 +743,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                   category: input.category ?? (resolvedSubjectId ? "academic" : "personal"),
                   due_date: dateStr || null,
                   start_time: input.start_time ?? null,
+                  remind_before_minutes: input.remind_before_minutes ?? null,
                   estimated_minutes: input.estimated_minutes ?? null,
                   subject_id: resolvedSubjectId, classroom_id: null,
                   session_index: idx + 1, total_sessions: total, parent_task_id: parentId,
@@ -755,6 +760,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 category: input.category ?? (resolvedSubjectId ? "academic" : "personal"),
                 due_date: input.due_date ?? (input.session_dates?.[0] || null),
                 start_time: input.start_time ?? null,
+                remind_before_minutes: input.remind_before_minutes ?? null,
                 estimated_minutes: input.estimated_minutes ?? null,
                 subject_id: resolvedSubjectId, classroom_id: null,
                 session_index: input.session_index ?? null,
@@ -787,6 +793,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             category: t.category,
             due_date: t.due_date,
             start_time: t.start_time,
+            remind_before_minutes: t.remind_before_minutes ?? null,
             estimated_minutes: t.estimated_minutes,
             subject_id: t.subject_id,
             classroom_id: t.classroom_id,

@@ -44,6 +44,11 @@ export interface Task {
   due_date: string | null;
   /** Hora de inicio en formato HH:MM (opcional). Usada para recordatorios push. */
   start_time: string | null;
+  /**
+   * Minutos de antelación con los que avisar por notificación antes de la hora
+   * de inicio (5, 10 o 15; por defecto 10). Solo tiene efecto si hay start_time.
+   */
+  remind_before_minutes: number | null;
   estimated_minutes: number | null;
   subject_id: string | null;
   classroom_id: string | null;

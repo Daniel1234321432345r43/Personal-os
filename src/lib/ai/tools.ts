@@ -75,6 +75,12 @@ export const secretaryTools = {
               .describe(
                 "Hora de inicio en formato HH:MM (ej. 17:30). Úsala cuando el usuario diga a qué hora empieza o cuándo tiene algo, para poder avisarle antes.",
               ),
+            remind_before_minutes: z
+              .union([z.literal(5), z.literal(10), z.literal(15)])
+              .optional()
+              .describe(
+                "Minutos de antelación de la notificación antes de la hora de inicio (5, 10 o 15). Usa 10 si el usuario no dice cuánto antes quiere que le avisen.",
+              ),
             session_dates: z
               .array(z.string())
               .optional()

@@ -64,6 +64,7 @@ Ejecuta las migraciones desde **Supabase Dashboard → SQL Editor**, en este ord
 4. `supabase/migrations/00004_task_sessions.sql`
 5. `supabase/migrations/00005_backfill_user_profiles.sql`
 6. `supabase/migrations/00006_reminders.sql`
+7. `supabase/migrations/00007_remind_before_minutes.sql`
 
 El esquema incluye:
 
@@ -230,7 +231,7 @@ supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=ma
 supabase functions deploy send-reminders --no-verify-jwt --schedule "*/5 * * * *"
 ```
 
-La función consulta las tareas y entrenamientos con `start_time` de los próximos 20 minutos y envía la notificación. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm).
+La función consulta las tareas y entrenamientos con `start_time` y envía la notificación. En el formulario de tareas puedes elegir que la alarma avise **5, 10 o 15 minutos antes** (por defecto 10); los entrenamientos se avisan dentro de la ventana de 20 minutos antes de la hora de inicio. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm).
 
 4. **En la app**: inicia sesión, ve a **Ajustes → Notificaciones** y pulsa **Activar notificaciones**. Usa **Enviar notificación de prueba** para comprobar que todo funciona.
 

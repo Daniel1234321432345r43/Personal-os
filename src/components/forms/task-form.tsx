@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { fieldClass, inputClass, labelClass, selectClass } from "./ui";
 import { todayKey } from "@/lib/format";
 import type { TaskPriority, TaskType } from "@/lib/types";
-import { CalendarRange, Plus, Trash2 } from "lucide-react";
+import { BellRing, CalendarRange, Plus, Trash2 } from "lucide-react";
 
 const TYPES: { value: TaskType; label: string }[] = [
   { value: "study_session", label: "Sesión de estudio" },
@@ -48,6 +48,8 @@ export function TaskForm({
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [dueDate, setDueDate] = useState(initialDueDate || todayKey());
   const [startTime, setStartTime] = useState("");
+  // Antelación de la alarma: avisar 5, 10 o 15 min antes (por defecto 10).
+  const [remindBefore, setRemindBefore] = useState("10");
   const [minutes, setMinutes] = useState("");
   const [description, setDescription] = useState("");
 
@@ -97,6 +99,7 @@ export function TaskForm({
         subject_id: subjectId || null,
         session_dates: sessionDates,
         start_time: startTime || null,
+        remind_before_minutes: startTime ? Number(remindBefore) : null,
         estimated_minutes: minutes ? Number(minutes) : null,
         description: description.trim() || null,
       });
@@ -109,6 +112,7 @@ export function TaskForm({
         subject_id: subjectId || null,
         due_date: dueDate || null,
         start_time: startTime || null,
+        remind_before_minutes: startTime ? Number(remindBefore) : null,
         estimated_minutes: minutes ? Number(minutes) : null,
         description: description.trim() || null,
       });
@@ -120,6 +124,7 @@ export function TaskForm({
     setPriority("medium");
     setDueDate(initialDueDate || todayKey());
     setStartTime("");
+    setRemindBefore("10");
     setMinutes("");
     setDescription("");
     setIsMultiDay(false);
@@ -311,36 +316,63 @@ export function TaskForm({
             </Button>
           </div>
         ) : (
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className={fieldClass}>
-              <label className={labelClass} htmlFor="task-due">
-                Fecha
-              </label>
-              <input
-                id="task-due"
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className={inputClass}
-              />
-            </div>
-            <div className={fieldClass}>
-              <label className={labelClass} htmlFor="task-start-time">
-                Hora de inicio (opcional)
-              </label>
-              <input
-                id="task-start-time"
-                type="time"
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className={inputClass}
-              />
-              <p className="text-[11px] text-muted-foreground">
-                Se usa para recordarte por notificación antes de empezar.
-              </p>
-            </div>
+          <div className={fieldClass}>
+            <label className={labelClass} htmlFor="task-due">
+              Fecha
+            </label>
+            <input
+              id="task-due"
+              type="date"
+              value={dueDate}
+              onChange={(e) => setDueDate(e.target.value)}
+              className={inputClass}
+            />
           </div>
         )}
+      </div>
+
+      {/* Alarma / Recordatorio: hora de inicio y antelación de la notificación */}
+      <div className="rounded-xl border bg-muted/20 p-3 space-y-3">
+        <div className="flex items-center gap-1.5">
+          <BellRing className="h-4 w-4 text-primary" />
+          <span className="text-xs font-semibold">
+            Alarma / Recordatorio (opcional)
+          </span>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className={fieldClass}>
+            <label className={labelClass} htmlFor="task-start-time">
+              Hora de inicio
+            </label>
+            <input
+              id="task-start-time"
+              type="time"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              className={inputClass}
+            />
+          </div>
+          <div className={fieldClass}>
+            <label className={labelClass} htmlFor="task-remind-before">
+              Avisar antes
+            </label>
+            <select
+              id="task-remind-before"
+              value={remindBefore}
+              onChange={(e) => setRemindBefore(e.target.value)}
+              className={selectClass}
+            >
+              <option value="5">5 minutos antes</option>
+              <option value="10">10 minutos antes</option>
+              <option value="15">15 minutos antes</option>
+            </select>
+          </div>
+        </div>
+        <p className="text-[11px] text-muted-foreground">
+          {startTime
+            ? `Recibirás una notificación ${remindBefore} min antes de las ${startTime}.`
+            : "Pon una hora de inicio para que te avisemos por notificación antes de empezar."}
+        </p>
       </div>
 
       <div className={fieldClass}>
