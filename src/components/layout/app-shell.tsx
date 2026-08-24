@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/lib/use-is-mobile";
+import { useSwipeNav } from "@/lib/use-swipe-nav";
+import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { Loader2, RotateCw } from "lucide-react";
 import {
   Sparkles,
   LayoutDashboard,
@@ -51,8 +55,6 @@ const bottomNavItems = [
   { href: "/dashboard", label: "Hoy", icon: LayoutDashboard },
   { href: "/calendar", label: "Calendario", icon: Calendar },
   { href: "/academic", label: "Estudios", icon: GraduationCap },
-  { href: "/pomodoro", label: "Pomodoro", icon: Timer },
-  { href: "/notes", label: "Notas", icon: StickyNote },
   { href: "/sport", label: "Deporte", icon: Dumbbell },
   { href: "/finance", label: "Finanzas", icon: Wallet },
   { href: "/settings", label: "Ajustes", icon: Settings },
@@ -70,6 +72,18 @@ export function AppShell({ children }: { children: ReactNode }) {
       .auth.getUser()
       .then(({ data }) => setEmail(data.user?.email ?? null));
   }, [configured]);
+
+  const isMobile = useIsMobile();
+
+  // Pull-to-refresh: recarga los datos del servidor
+  const handleRefresh = useCallback(async () => {
+    router.refresh();
+    // Pequeña pausa para que se vea la animación
+    await new Promise((r) => setTimeout(r, 600));
+  }, [router]);
+
+  const pullRefresh = usePullRefresh(handleRefresh, isMobile);
+  const swipeNav = useSwipeNav((href) => router.push(href), pathname, isMobile);
 
   async function handleSignOut() {
     await createClient().auth.signOut();
@@ -194,8 +208,33 @@ export function AppShell({ children }: { children: ReactNode }) {
           <Brand />
         </header>
 
+        {/* Pull-to-refresh indicator */}
+        {(pullRefresh.pulling || pullRefresh.refreshing) && (
+          <div
+            className="flex items-center justify-center gap-2 overflow-hidden transition-all duration-200 lg:hidden"
+            style={{ height: pullRefresh.refreshing ? 48 : pullRefresh.pullDistance }}
+          >
+            {pullRefresh.refreshing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                <span className="text-xs font-medium text-muted-foreground">Sincronizando…</span>
+              </>
+            ) : pullRefresh.pullDistance > 40 ? (
+              <>
+                <RotateCw className="h-4 w-4 text-primary" />
+                <span className="text-xs font-medium text-muted-foreground">Soltar para actualizar</span>
+              </>
+            ) : null}
+          </div>
+        )}
+
         {/* Padding inferior en móvil para que el contenido no quede tapado por la bottom bar */}
-        <main className="flex-1 pb-16 lg:pb-0">{children}</main>
+        <main
+          className="flex-1 pb-16 lg:pb-0"
+          {...(isMobile ? { ...pullRefresh, ...swipeNav } : {})}
+        >
+          {children}
+        </main>
       </div>
 
       {bottomBar}

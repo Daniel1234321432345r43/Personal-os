@@ -428,7 +428,7 @@ export function SecretaryChat() {
   }
 
   return (
-    <div className="flex h-[560px] flex-col">
+    <div className="flex h-[420px] flex-col">
       <ScrollArea className="flex-1 pr-3">
         {!configured && (
           <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
@@ -458,7 +458,7 @@ export function SecretaryChat() {
           </div>
         )}
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {messages.map((message) => {
             const isUser = message.role === "user";
             const text = messageText(message);
