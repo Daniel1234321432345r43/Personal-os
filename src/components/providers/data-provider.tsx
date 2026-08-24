@@ -327,6 +327,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
       syncingUserRef.current = true;
 
       try {
+        // Registrar la zona horaria real del navegador en el perfil. La Edge
+        // Function send-reminders la usa para convertir la hora local (HH:MM)
+        // de cada tarea en su instante UTC exacto; sin ella caería a UTC y
+        // los avisos llegarían desplazados (p. ej. +2 h en Madrid en verano).
+        try {
+          const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          if (tz) {
+            const { error: tzError } = await _supabase
+              .from("users")
+              .update({ timezone: tz })
+              .eq("id", userId);
+            if (tzError) {
+              console.warn("[Supabase] no se pudo actualizar la zona horaria del perfil:", tzError.message);
+            }
+          }
+        } catch (err) {
+          console.warn("[Supabase] error actualizando la zona horaria del perfil:", err);
+        }
+
         const guestState = localOnly(loadState());
         const userKey = userStorageKey(userId);
         const savedUserState = loadState(userKey);

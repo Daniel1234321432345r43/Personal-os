@@ -59,9 +59,15 @@ async function collectUpcoming(
   const tomorrow = dateKeyInTz(new Date(now.getTime() + 86400000), tz);
   const items: ReminderItem[] = [];
 
+  // Nota de zona horaria: due_date se guarda como timestamptz (instante UTC
+  // anclado a medianoche) y start_time como hora local HH:MM del usuario. La
+  // combinación se convierte abajo a un instante UTC real con zonedDateTime,
+  // y TODAS las comparaciones de ventana se hacen en milisegundos UTC
+  // (getTime()), sin desfases manuales. Así el aviso cae siempre en la hora
+  // local que el usuario eligió, sea cual sea su zona y con horario de verano.
   const { data: tasks, error: tasksError } = await supabase
     .from("tasks")
-    .select("id, title, type, due_date, start_time, status, remind_before_minutes")
+    .select("id, title, type, due_date, start_time, status, remind_before_minutes, reminder_sent")
     .not("start_time", "is", null)
     .gte("due_date", yesterday)
     .lte("due_date", tomorrow);
@@ -75,7 +81,9 @@ async function collectUpcoming(
 
   for (const task of tasks ?? []) {
     try {
-      if (!task.due_date || !task.start_time || task.status === "done") continue;
+      // reminder_sent evita duplicados: si el aviso ya se envió, no se repite
+      // (defensa extra además de reminder_log).
+      if (!task.due_date || !task.start_time || task.status === "done" || task.reminder_sent === true) continue;
       const dateStr = normalizeDate(task.due_date);
       const timeStr = normalizeTime(task.start_time);
       if (!dateStr || !timeStr) {
@@ -251,6 +259,17 @@ Deno.serve(async () => {
       }
 
       if (sent) {
+        // Marcar reminder_sent en la tarea para no volver a enviarla en el
+        // siguiente tick del cron (independiente de reminder_log).
+        if (item.entityType === "task") {
+          const { error: markError } = await supabase
+            .from("tasks")
+            .update({ reminder_sent: true })
+            .eq("id", item.entityId);
+          if (markError) {
+            console.error("[send-reminders] error marcando reminder_sent:", markError.message);
+          }
+        }
         const { error: logError } = await supabase
           .from("reminder_log")
           .upsert(

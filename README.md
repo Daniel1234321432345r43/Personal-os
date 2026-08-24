@@ -66,6 +66,7 @@ Ejecuta las migraciones desde **Supabase Dashboard → SQL Editor**, en este ord
 5. `supabase/migrations/00005_backfill_user_profiles.sql`
 6. `supabase/migrations/00006_reminders.sql`
 7. `supabase/migrations/00007_remind_before_minutes.sql`
+8. `supabase/migrations/00008_reminder_sent.sql`
 
 El esquema incluye:
 
@@ -76,7 +77,7 @@ El esquema incluye:
 - Columnas de sesiones multi-día para tareas.
 - Columna `start_time` (hora de inicio) en tareas y entrenamientos.
 - Tabla `push_subscriptions` para las suscripciones de notificaciones push.
-- Tabla `reminder_log` para no repetir recordatorios.
+- Tabla `reminder_log` y columna `reminder_sent` en tareas para no repetir recordatorios.
 - Reparación de perfiles de usuarios creados antes de instalar el trigger.
 
 La migración `00005_backfill_user_profiles.sql` es importante si el usuario aparece en **Authentication → Users**, pero no existe en `public.users`. Las tablas de la aplicación tienen una clave extranjera hacia `public.users`.
@@ -232,7 +233,9 @@ supabase secrets set VAPID_PUBLIC_KEY=... VAPID_PRIVATE_KEY=... VAPID_SUBJECT=ma
 supabase functions deploy send-reminders --no-verify-jwt --schedule "*/5 * * * *"
 ```
 
-La función consulta las tareas y entrenamientos con `start_time` y envía la notificación. En el formulario de tareas puedes elegir que la alarma avise **5, 10 o 15 minutos antes** (por defecto 10); los entrenamientos se avisan dentro de la ventana de 20 minutos antes de la hora de inicio. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm).
+La función consulta las tareas y entrenamientos con `start_time` y envía la notificación. En el formulario de tareas puedes elegir que la alarma avise **5, 10 o 15 minutos antes** (por defecto 10); los entrenamientos se avisan dentro de la ventana de 20 minutos antes de la hora de inicio. Tras un envío exitoso, la función marca `reminder_sent = true` en la tarea (migración `00008`) para no repetirla en el siguiente tick del cron, además del registro en `reminder_log`. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm).
+
+**Zona horaria:** la app guarda la hora de inicio como hora local (HH:MM) y `due_date` como instante UTC (`timestamptz`). Al iniciar sesión, la app escribe la zona horaria real del navegador en `public.users`, y la Edge Function la usa para convertir cada tarea a su instante UTC exacto (con horario de verano incluido), comparando siempre en milisegundos UTC sin desfases manuales. Si la zona del perfil no está definida, la función avisa por logs en vez de fallar en silencio.
 
 4. **En la app**: inicia sesión, ve a **Ajustes → Notificaciones** y pulsa **Activar notificaciones**. Usa **Enviar notificación de prueba** para comprobar que todo funciona.
 
