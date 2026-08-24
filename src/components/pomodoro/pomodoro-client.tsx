@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
 import { registerServiceWorker } from "@/lib/push";
+
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fieldClass, labelClass, selectClass } from "@/components/forms/ui";
@@ -50,18 +51,7 @@ async function showCompletionNotification(title: string, body: string) {
   }
 }
 
-/**
- * Enviar mensaje al service worker para actualizar la notificación persistente
- * de pantalla de bloqueo (tag = "pomodoro-timer").
- * body = null → cerrar la notificación.
- */
-function postTimerNotification(body: string | null) {
-  if (!navigator.serviceWorker?.controller) return;
-  navigator.serviceWorker.controller.postMessage({
-    type: "pomodoro-update",
-    body,
-  });
-}
+
 
 /** Timbre corto con Web Audio API (sin archivos de audio). */
 function playChime() {
@@ -129,10 +119,7 @@ export function PomodoroClient() {
     setSecondsLeft(durationSeconds);
   }
 
-  // Registrar service worker al montar (necesario para la notificación persistente).
-  useEffect(() => {
-    void registerServiceWorker();
-  }, []);
+
 
   // Cuenta atrás cada segundo mientras corre.
   useEffect(() => {
@@ -143,21 +130,7 @@ export function PomodoroClient() {
     return () => window.clearInterval(id);
   }, [running]);
 
-  // ── Notificación persistente en pantalla de bloqueo (Symetry-style) ──────
-  // Se actualiza cada segundo con el tiempo restante vía postMessage al SW.
-  // El SW reemplaza la notificación con tag "pomodoro-timer" y renotify: true,
-  // lo que la mantiene visible en la pantalla de bloqueo sin volver a alertar.
-  useEffect(() => {
-    if (running) {
-      const label = mode === "work" ? "🍅 Trabajo" : "☕ Descanso";
-      const task = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
-      const taskName = task?.title ? ` — ${task.title}` : "";
-      postTimerNotification(`${label}: ${fmt(secondsLeft)}${taskName}`);
-    } else {
-      // Pausado o reseteado → cerrar la notificación
-      postTimerNotification(null);
-    }
-  }, [running, secondsLeft, mode, taskId, data.tasks]);
+
 
   // Al llegar a 0: timbre + notificación de fin de sesión + cambio de modo.
   useEffect(() => {
@@ -165,8 +138,7 @@ export function PomodoroClient() {
     if (completedRef.current) return;
     completedRef.current = true;
 
-    // Cerrar la notificación de timer antes de mostrar la de fin de sesión
-    postTimerNotification(null);
+
 
     const wasWork = mode === "work";
     const task = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
@@ -461,9 +433,8 @@ export function PomodoroClient() {
             <CardContent className="space-y-3 text-sm text-muted-foreground">
               {notifGranted ? (
                 <p className="font-medium text-emerald-600 dark:text-emerald-400">
-                  Permiso concedido: al iniciar el temporizador verás una notificación
-                  persistente en la pantalla de bloqueo con la cuenta atrás. Al terminar
-                  cada sesión recibirás un aviso sonoro.
+                  Permiso concedido: al terminar cada sesión recibirás una notificación
+                  y un aviso sonoro.
                 </p>
               ) : notifDenied ? (
                 <p className="text-destructive">
@@ -472,8 +443,8 @@ export function PomodoroClient() {
                 </p>
               ) : (
                 <p>
-                  Al pulsar "Iniciar" te pediremos permiso. Con permiso, el temporizador
-                  se mostrará en la pantalla de bloqueo.
+                  Al pulsar "Iniciar" te pediremos permiso. Al terminar cada sesión
+                  recibirás una notificación.
                 </p>
               )}
               <Button type="button" variant="outline" size="sm" onClick={handleTestNotification}>
