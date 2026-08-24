@@ -81,6 +81,32 @@ assert(
 const d2 = zonedDateTime("2026-08-24", "14:30", "NoExiste/Zona");
 assert(d2 !== null, "zonedDateTime con tz inválida no lanza y devuelve respaldo");
 
+// Requisito del usuario: tarea a las 13:30 en Madrid (CEST, UTC+2 en verano)
+// con remind_before_minutes = 10 → el aviso debe caer a las 13:20 CEST.
+const d3 = zonedDateTime("2026-08-24", "13:30", "Europe/Madrid");
+assert(
+  d3 !== null && d3.getTime() === Date.parse("2026-08-24T11:30:00Z"),
+  "Madrid 13:30 en verano → 11:30Z (no se trata como UTC estricto)",
+);
+if (d3) {
+  const remindAt = new Date(d3.getTime() - 10 * 60000);
+  const parts3 = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Madrid",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(remindAt);
+  const get3 = (t) => parts3.find((p) => p.type === t)?.value ?? "";
+  assert(
+    `${get3("year")}-${get3("month")}-${get3("day")}T${get3("hour")}:${get3("minute")}` ===
+      "2026-08-24T13:20",
+    "aviso 10 min antes → 13:20 en Madrid",
+  );
+}
+
 // --- dateKeyInTz -------------------------------------------------------------
 assert(
   dateKeyInTz(new Date("2026-08-24T12:00:00Z"), "Europe/Madrid") === "2026-08-24",

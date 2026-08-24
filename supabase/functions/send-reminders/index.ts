@@ -170,10 +170,18 @@ Deno.serve(async () => {
   }
 
   const userIds = [...new Set(subscriptions.map((s) => s.user_id))];
-  const { data: profiles } = await supabase
-    .from("profiles")
+  // La tabla del perfil es public.users (con columna timezone, por defecto
+  // Europe/Madrid). Antes se consultaba "profiles", que no existe en este
+  // esquema: la consulta fallaba en silencio y la zona caía a UTC, desplazando
+  // los recordatorios horas (p. ej. +2 h en verano para Madrid).
+  const { data: profiles, error: profilesError } = await supabase
+    .from("users")
     .select("id, timezone")
     .in("id", userIds);
+
+  if (profilesError) {
+    console.error("[send-reminders] error leyendo perfiles (users):", profilesError.message);
+  }
   const tzById = new Map((profiles ?? []).map((p) => [p.id, p.timezone || "UTC"]));
 
   let sentCount = 0;
