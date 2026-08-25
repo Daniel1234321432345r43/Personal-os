@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { markOnboardingComplete } from "@/lib/onboarding";
+import { FullScreenLoader } from "@/components/ui/full-screen-loader";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -34,6 +35,9 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const configured = isSupabaseConfigured();
+  // Mientras se verifica si ya hay sesión, mostramos un loader para evitar
+  // el "flashazo" (mostrar el formulario un instante y saltar a /dashboard).
+  const [checkingSession, setCheckingSession] = useState(configured);
 
   // Si ya hay una sesión iniciada, no volver a mostrar el login.
   useEffect(() => {
@@ -42,9 +46,13 @@ export default function LoginPage() {
     createClient()
       .auth.getSession()
       .then(({ data }) => {
-        if (!cancelled && data.session) {
-          markOnboardingComplete();
-          router.replace("/dashboard");
+        if (!cancelled) {
+          if (data.session) {
+            markOnboardingComplete();
+            router.replace("/dashboard");
+          } else {
+            setCheckingSession(false);
+          }
         }
       });
     return () => {
@@ -71,6 +79,8 @@ export default function LoginPage() {
     markOnboardingComplete();
     router.push("/dashboard");
   }
+
+  if (checkingSession) return <FullScreenLoader />;
 
   return (
     <main className="relative flex min-h-screen items-center justify-center overflow-hidden p-6">

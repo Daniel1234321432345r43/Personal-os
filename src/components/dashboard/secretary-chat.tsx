@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, type UIMessage } from "ai";
 import { useSettings } from "@/components/providers/settings-provider";
@@ -508,11 +508,18 @@ export function SecretaryChat() {
         </button>
       </CardHeader>
 
+      <AnimatePresence initial={false}>
       {!collapsed && (
         <motion.div
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
+          initial={{ height: 0, opacity: 0, y: -4 }}
+          animate={{ height: "auto", opacity: 1, y: 0 }}
+          exit={{ height: 0, opacity: 0, y: -4 }}
+          transition={{
+            height: { duration: 0.45, ease: [0.25, 0.1, 0.25, 1] },
+            opacity: { duration: 0.3 },
+            y: { duration: 0.3 },
+          }}
+          className="overflow-hidden"
         >
           <CardContent className="pt-0">
             <div className="flex h-[min(420px,55dvh)] flex-col">
@@ -540,7 +547,6 @@ export function SecretaryChat() {
               <Sparkles className="h-4 w-4" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-medium">Secretario {assistantName}</p>
               <p className="text-sm text-muted-foreground">
                 ¡Hola! Soy {assistantName}, tu Secretario IA.
               </p>
@@ -640,8 +646,9 @@ export function SecretaryChat() {
                 </form>
               </div>
             </CardContent>
-          </motion.div>
+        </motion.div>
       )}
+      </AnimatePresence>
     </Card>
   );
 }

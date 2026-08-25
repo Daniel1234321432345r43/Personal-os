@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -193,11 +194,21 @@ export function FinanceClient() {
             </p>
           ) : (
             <ul className="divide-y">
+              <AnimatePresence initial={false}>
               {sorted.map((t) => {
                 const isIncome = t.type === "income";
                 return (
-                  <li
+                  <motion.li
                     key={t.id}
+                    layout
+                    initial={{ opacity: 0, y: -14, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{
+                      opacity: 0,
+                      x: 32,
+                      transition: { duration: 0.4, ease: "easeInOut" },
+                    }}
+                    transition={{ duration: 0.45, ease: "easeOut" }}
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div
@@ -240,9 +251,10 @@ export function FinanceClient() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                  </li>
+                  </motion.li>
                 );
               })}
+              </AnimatePresence>
             </ul>
           )}
         </CardContent>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1059,7 +1059,15 @@ export function CalendarClient() {
                 />
               </ResponsiveFormSheet>
 
-              {/* Lista de eventos del día */}
+              {/* Lista de eventos del día (con animación al cambiar de día) */}
+              <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={selectedDate}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -8 }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+              >
               {!selectedDayHasEvents ? (
                 <div className="py-8 text-center text-sm text-muted-foreground">
                   <CalendarIcon className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
@@ -1075,6 +1083,7 @@ export function CalendarClient() {
                     <div className="space-y-2 pt-2 first:pt-0">
                       <p className="text-xs font-semibold text-muted-foreground">Estudios y tareas</p>
                       <ul className="space-y-2">
+                        <AnimatePresence initial={false}>
                         {[
                           ...selectedDayEvents.exams,
                           ...selectedDayEvents.assignments,
@@ -1084,8 +1093,13 @@ export function CalendarClient() {
                           const sub = t.subject_id ? subjectById.get(t.subject_id) : null;
                           const isDone = t.status === "done";
                           return (
-                            <li
+                            <motion.li
                               key={t.id}
+                              layout
+                              initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, x: 24, transition: { duration: 0.35, ease: "easeInOut" } }}
+                              transition={{ duration: 0.4, ease: "easeOut" }}
                               className="flex items-start justify-between gap-2 rounded-lg border bg-card p-2.5 text-xs"
                             >
                               <div className="flex items-start gap-2 min-w-0 flex-1">
@@ -1155,9 +1169,10 @@ export function CalendarClient() {
                               >
                                 <Trash2 className="h-3 w-3" />
                               </Button>
-                            </li>
-                          );
+                            </motion.li>
+                        );
                         })}
+                        </AnimatePresence>
                       </ul>
                     </div>
                   )}
@@ -1173,9 +1188,15 @@ export function CalendarClient() {
                         </span>
                       </div>
                       <ul className="space-y-1.5">
+                        <AnimatePresence initial={false}>
                         {[...selectedDayEvents.incomes, ...selectedDayEvents.expenses].map((tx) => (
-                          <li
+                          <motion.li
                             key={tx.id}
+                            layout
+                            initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, x: 24, transition: { duration: 0.35, ease: "easeInOut" } }}
+                            transition={{ duration: 0.4, ease: "easeOut" }}
                             className="flex items-center justify-between rounded-lg border bg-card p-2 text-xs"
                           >
                             <div>
@@ -1204,8 +1225,9 @@ export function CalendarClient() {
                                 <Trash2 className="h-3 w-3" />
                               </Button>
                             </div>
-                          </li>
+                          </motion.li>
                         ))}
+                        </AnimatePresence>
                       </ul>
                     </div>
                   )}
@@ -1215,9 +1237,15 @@ export function CalendarClient() {
                     <div className="space-y-2 pt-3">
                       <p className="text-xs font-semibold text-muted-foreground">Deporte y entrenamiento</p>
                       <ul className="space-y-1.5">
+                        <AnimatePresence initial={false}>
                         {selectedDayEvents.workouts.map((w) => (
-                          <li
+                          <motion.li
                             key={w.id}
+                            layout
+                            initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, x: 24, transition: { duration: 0.35, ease: "easeInOut" } }}
+                            transition={{ duration: 0.4, ease: "easeOut" }}
                             className="flex items-center justify-between rounded-lg border border-purple-500/20 bg-purple-500/5 p-2 text-xs text-purple-900 dark:text-purple-200"
                           >
                             <div>
@@ -1239,13 +1267,16 @@ export function CalendarClient() {
                                 <Trash2 className="h-3 w-3" />
                               </Button>
                             </div>
-                          </li>
+                          </motion.li>
                         ))}
+                        </AnimatePresence>
                       </ul>
                     </div>
                   )}
                 </div>
               )}
+              </motion.div>
+              </AnimatePresence>
             </CardContent>
           </Card>
         </div>

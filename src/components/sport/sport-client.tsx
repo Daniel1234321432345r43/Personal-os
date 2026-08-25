@@ -237,12 +237,25 @@ export function SportClient() {
                   {completedToday} de {data.habits.length} completados hoy.
                 </p>
                 <ul className="space-y-1">
+                  <AnimatePresence initial={false}>
                   {data.habits.map((h) => {
                     const done = data.habitCompletions.some(
                       (c) => c.habit_id === h.id && c.completed_on === today,
                     );
                     return (
-                      <li key={h.id} className="flex items-center gap-2">
+                      <motion.li
+                        key={h.id}
+                        layout
+                        initial={{ opacity: 0, y: -14, scale: 0.97 }}
+                        animate={{ opacity: 1, y: 0, scale: 1 }}
+                        exit={{
+                          opacity: 0,
+                          x: 32,
+                          transition: { duration: 0.4, ease: "easeInOut" },
+                        }}
+                        transition={{ duration: 0.45, ease: "easeOut" }}
+                        className="flex items-center gap-2"
+                      >
                         <button
                           type="button"
                           onClick={() => actions.toggleHabit(h.id)}
@@ -255,7 +268,19 @@ export function SportClient() {
                           aria-pressed={done}
                           aria-label={`Marcar ${h.name}`}
                         >
-                          {done && <Check className="h-3.5 w-3.5" />}
+                          <AnimatePresence>
+                            {done && (
+                              <motion.span
+                                initial={{ scale: 0, opacity: 0 }}
+                                animate={{ scale: 1, opacity: 1 }}
+                                exit={{ scale: 0, opacity: 0 }}
+                                transition={{ type: "spring", stiffness: 500, damping: 26 }}
+                                className="flex"
+                              >
+                                <Check className="h-3.5 w-3.5" />
+                              </motion.span>
+                            )}
+                          </AnimatePresence>
                         </button>
                         <span className="text-sm">{h.emoji}</span>
                         <span
@@ -275,9 +300,10 @@ export function SportClient() {
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </Button>
-                      </li>
+                      </motion.li>
                     );
                   })}
+                  </AnimatePresence>
                 </ul>
               </div>
             )}
