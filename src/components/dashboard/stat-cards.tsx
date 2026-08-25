@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { motion } from "framer-motion";
 import {
   ListTodo,
   CalendarClock,
@@ -10,6 +13,8 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { formatCurrency, formatDuration, todayKey } from "@/lib/format";
 import type { DashboardData } from "@/lib/data";
+
+const MotionLink = motion.create(Link);
 
 function daysUntil(iso: string | null): number | null {
   if (!iso) return null;
@@ -82,17 +87,22 @@ export function StatCards({ data }: { data: DashboardData }) {
     },
   ];
 
-  const cardTransition =
-    "transition-[box-shadow,transform] duration-200 ease-out active:scale-[0.98] motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md";
+  // Press / hover con física suave; la entrada a la pestaña la anima AppShell.
+  const cardSpring = { type: "spring", stiffness: 500, damping: 32 } as const;
+  const cardClass =
+    "flex flex-col rounded-xl border bg-card p-3.5 transition-shadow duration-200 ease-out motion-safe:hover:shadow-md";
 
   return (
     <>
       {/* ── Móvil: Bento grid asimétrico (solo < lg) ─────────────────── */}
       <div className="grid auto-rows-fr grid-cols-2 gap-3 lg:hidden">
         {/* Deporte (columna izquierda, superior) → /sport */}
-        <Link
+        <MotionLink
           href="/sport"
-          className={`col-start-1 row-start-1 flex flex-col gap-1.5 rounded-xl border bg-card p-3.5 ${cardTransition}`}
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.96 }}
+          transition={cardSpring}
+          className={`col-start-1 row-start-1 gap-1.5 ${cardClass}`}
         >
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -123,12 +133,15 @@ export function StatCards({ data }: { data: DashboardData }) {
               {completedToday} de {data.habits.length} hábitos hoy
             </p>
           )}
-        </Link>
+        </MotionLink>
 
         {/* Finanzas (columna izquierda, inferior) → /finance */}
-        <Link
+        <MotionLink
           href="/finance"
-          className={`col-start-1 row-start-2 flex flex-col gap-1 rounded-xl border bg-card p-3.5 ${cardTransition}`}
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.96 }}
+          transition={cardSpring}
+          className={`col-start-1 row-start-2 gap-1 ${cardClass}`}
         >
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
@@ -141,12 +154,15 @@ export function StatCards({ data }: { data: DashboardData }) {
           <p className="truncate text-lg font-semibold tracking-tight">
             {formatCurrency(data.finance.balance)}
           </p>
-        </Link>
+        </MotionLink>
 
         {/* Estudios (columna derecha, ocupa el alto completo) → /academic */}
-        <Link
+        <MotionLink
           href="/academic"
-          className={`col-start-2 row-span-2 row-start-1 flex h-full flex-col gap-2 rounded-xl border bg-card p-3.5 ${cardTransition}`}
+          whileHover={{ y: -2 }}
+          whileTap={{ scale: 0.96 }}
+          transition={cardSpring}
+          className={`col-start-2 row-span-2 row-start-1 h-full gap-2 ${cardClass}`}
         >
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
@@ -179,7 +195,7 @@ export function StatCards({ data }: { data: DashboardData }) {
                   : `Próxima entrega en ${nextDays} d`}
             </p>
           </div>
-        </Link>
+        </MotionLink>
       </div>
 
       {/* ── Escritorio: grid de métricas (intacto, solo ≥ lg) ────────── */}

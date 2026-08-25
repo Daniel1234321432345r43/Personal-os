@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
+import { markOnboardingComplete } from "@/lib/onboarding";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -17,7 +18,7 @@ import {
   GraduationCap,
   Dumbbell,
   Wallet,
-  ArrowRight,
+  Clock,
   AlertTriangle,
 } from "lucide-react";
 
@@ -34,9 +35,27 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const configured = isSupabaseConfigured();
 
+  // Si ya hay una sesión iniciada, no volver a mostrar el login.
+  useEffect(() => {
+    if (!configured) return;
+    let cancelled = false;
+    createClient()
+      .auth.getSession()
+      .then(({ data }) => {
+        if (!cancelled && data.session) {
+          markOnboardingComplete();
+          router.replace("/dashboard");
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [configured, router]);
+
   async function handleGoogle() {
     setLoading(true);
     setError(null);
+    markOnboardingComplete();
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
@@ -46,6 +65,11 @@ export default function LoginPage() {
       setError(error.message);
       setLoading(false);
     }
+  }
+
+  function handleSkip() {
+    markOnboardingComplete();
+    router.push("/dashboard");
   }
 
   return (
@@ -153,17 +177,26 @@ export default function LoginPage() {
               )}
             </Button>
 
-            {!configured && (
-              <Button
-                variant="outline"
-                className="w-full"
-                size="lg"
-                onClick={() => router.push("/dashboard")}
-              >
-                Entrar sin conexión
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            )}
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <span className="w-full border-t" />
+              </div>
+              <div className="relative flex justify-center text-xs uppercase">
+                <span className="bg-background px-2 text-muted-foreground">
+                  o
+                </span>
+              </div>
+            </div>
+
+            <Button
+              variant="outline"
+              className="w-full"
+              size="lg"
+              onClick={handleSkip}
+            >
+              <Clock className="mr-2 h-4 w-4" />
+              Hacer más tarde
+            </Button>
           </CardContent>
         </Card>
       </div>

@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, type UIMessage } from "ai";
 import { useSettings } from "@/components/providers/settings-provider";
@@ -9,6 +10,7 @@ import { useData } from "@/components/providers/data-provider";
 import { buildSecretaryContext } from "@/lib/ai/context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Sparkles,
@@ -390,6 +392,77 @@ export function SecretaryChat() {
 
   const loading = status === "submitted" || status === "streaming";
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const [userScrolledUp, setUserScrolledUp] = useState(false);
+
+  function getViewport(): HTMLElement | null {
+    return (
+      scrollAreaRef.current?.querySelector(
+        '[data-slot="scroll-area-viewport"]',
+      ) ?? null
+    );
+  }
+
+  /** Desplaza SOLO el contenedor interno del chat hasta el último mensaje. */
+  const scrollChatToBottom = useCallback((smooth = true) => {
+    const vp = getViewport();
+    if (!vp) return;
+    vp.scrollTo?.({
+      top: vp.scrollHeight,
+      behavior: smooth ? "smooth" : "auto",
+    });
+  }, []);
+
+  /** Devuelve la página a la posición del chat (al cerrar el teclado o enviar). */
+  const restoreChatCardInView = useCallback(() => {
+    const card = scrollAreaRef.current?.closest('[data-slot="card"]');
+    if (!card) return;
+    const top = card.getBoundingClientRect().top + window.scrollY;
+    window.scrollTo({ top: Math.max(0, top - 72), behavior: "smooth" });
+  }, []);
+
+  // Si el usuario sube para releer el historial, no volver a anclar abajo
+  // (antes el scroll se quedaba “pegado” al fondo durante el streaming).
+  useEffect(() => {
+    const vp = getViewport();
+    if (!vp) return;
+    const onScroll = () => {
+      const nearBottom = vp.scrollHeight - vp.scrollTop - vp.clientHeight < 80;
+      setUserScrolledUp(!nearBottom);
+    };
+    onScroll();
+    vp.addEventListener("scroll", onScroll, { passive: true });
+    return () => vp.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Seguir el final del chat solo si el usuario no está leyendo historial.
+  useEffect(() => {
+    if (!userScrolledUp) scrollChatToBottom(true);
+  }, [messages.length, status, userScrolledUp, scrollChatToBottom]);
+
+  // Teclado móvil: al cerrarse, el visual viewport vuelve a crecer; limpiamos
+  // la posición del scroll para no quedarnos “colgados” en mitad de la página.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let lastHeight = vv.height;
+    const onChange = () => {
+      const keyboardClosed = vv.height > lastHeight + 60;
+      lastHeight = vv.height;
+      if (keyboardClosed) {
+        requestAnimationFrame(() => {
+          scrollChatToBottom(true);
+          restoreChatCardInView();
+        });
+      }
+    };
+    vv.addEventListener("resize", onChange);
+    vv.addEventListener("scroll", onChange);
+    return () => {
+      vv.removeEventListener("resize", onChange);
+      vv.removeEventListener("scroll", onChange);
+    };
+  }, [scrollChatToBottom, restoreChatCardInView]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -397,39 +470,60 @@ export function SecretaryChat() {
     if (!text || !configured || loading) return;
     sendMessage({ text });
     setInput("");
+    // Cerrar el teclado y re-anclar el chat al final (evita quedar colgado abajo).
+    (e.currentTarget.querySelector("input") as HTMLInputElement | null)?.blur();
+    requestAnimationFrame(() => scrollChatToBottom(true));
   }
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages.length, status]);
 
   const assistantName = settings.assistantName?.trim() || "Núcleo";
 
-  /* ── Modo colapsado (móvil) ─────────────────────────────────────────── */
-  if (collapsed) {
-    return (
-      <button
-        type="button"
-        onClick={() => setCollapsed(false)}
-        className="flex w-full items-center gap-3 rounded-xl border bg-card p-3 text-left transition-colors hover:bg-accent/50 active:bg-accent"
-      >
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-          <Sparkles className="h-4 w-4" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium">Secretario {assistantName}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            Toca para hablar con tu asistente…
-          </p>
-        </div>
-        <span className="text-xs text-muted-foreground">▸</span>
-      </button>
-    );
-  }
-
   return (
-    <div className="flex h-[340px] flex-col">
-      <ScrollArea className="flex-1 pr-3">
+    <Card className="lg:col-span-2">
+      {collapsed ? (
+        /* ── Modo colapsado: toda la tarjeta es interactiva ────────────── */
+        <motion.button
+          type="button"
+          onClick={() => setCollapsed(false)}
+          whileTap={{ scale: 0.98 }}
+          transition={{ type: "spring", stiffness: 500, damping: 32 }}
+          className="flex w-full items-center gap-3 px-4 py-1 text-left transition-colors hover:bg-accent/40 active:bg-accent"
+        >
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Sparkles className="h-4 w-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium">Secretario {assistantName}</p>
+            <p className="truncate text-xs text-muted-foreground">
+              Toca para hablar con tu asistente…
+            </p>
+          </div>
+          <span className="shrink-0 text-muted-foreground">▸</span>
+        </motion.button>
+      ) : (
+        /* ── Modo expandido: cabecera + chat ───────────────────────────── */
+        <motion.div
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+        >
+            <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+              <CardTitle className="text-base">
+                Secretario {assistantName}
+              </CardTitle>
+              {isMobile && (
+                <button
+                  type="button"
+                  onClick={() => setCollapsed(true)}
+                  className="text-xs text-muted-foreground hover:text-foreground"
+                >
+                  ▾ Colapsar
+                </button>
+              )}
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="flex h-[340px] flex-col">
+                <div ref={scrollAreaRef} className="relative flex-1 pr-3">
+                  <ScrollArea className="h-full">
         {!configured && (
           <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
             <Settings className="mt-0.5 h-4 w-4 shrink-0" />
@@ -525,27 +619,15 @@ export function SecretaryChat() {
           </div>
         )}
 
-        <div ref={bottomRef} />
-      </ScrollArea>
+                    <div ref={bottomRef} />
+                  </ScrollArea>
+                </div>
 
-
-
-      {/* Botón colapsar (móvil) */}
-      {isMobile && (
-        <button
-          type="button"
-          onClick={() => setCollapsed(true)}
-          className="self-center text-xs text-muted-foreground hover:text-foreground py-1"
-        >
-          ▾ Colapsar
-        </button>
-      )}
-
-      {/* Entrada */}
-      <form
-        onSubmit={handleSubmit}
-        className="flex items-center gap-2 border-t pt-3"
-      >
+                {/* Entrada */}
+                <form
+                  onSubmit={handleSubmit}
+                  className="flex items-center gap-2 border-t pt-3"
+                >
         <Input
           value={input}
           onChange={(e) => setInput(e.target.value)}
@@ -553,15 +635,19 @@ export function SecretaryChat() {
           disabled={!configured || loading}
           className="flex-1"
         />
-        <Button
-          type="submit"
-          size="icon"
-          disabled={!configured || loading || !input.trim()}
-        >
-          <Send className="h-4 w-4" />
-          <span className="sr-only">Enviar</span>
-        </Button>
-      </form>
-    </div>
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!configured || loading || !input.trim()}
+                  >
+                    <Send className="h-4 w-4" />
+                    <span className="sr-only">Enviar</span>
+                  </Button>
+                </form>
+              </div>
+            </CardContent>
+          </motion.div>
+      )}
+    </Card>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateLong } from "@/lib/format";
 import { useData } from "@/components/providers/data-provider";
@@ -41,7 +41,6 @@ export function DashboardClient() {
 
   if (!hydrated) return <LoadingState />;
 
-  const assistantName = settings.assistantName?.trim() || "Núcleo";
   const userName = settings.userName?.trim();
 
   return (
@@ -59,17 +58,8 @@ export function DashboardClient() {
       <StatCards data={data} />
 
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Secretario IA (chat) */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">
-              Secretario {assistantName}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SecretaryChat />
-          </CardContent>
-        </Card>
+        {/* Secretario IA (chat) — una sola tarjeta limpia, sin cajas anidadas */}
+        <SecretaryChat />
 
         {/* Columna derecha */}
         <div className="space-y-6">

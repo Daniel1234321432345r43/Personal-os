@@ -76,14 +76,14 @@ export function AcademicClient() {
 
       {/* Asignaturas (en móvil va debajo de Tareas y colapsada) */}
       <Card className="order-2 lg:order-1">
-        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+        <CardHeader className="pb-3">
           <button
             type="button"
             onClick={() => isMobile && setSubjectsOpen((v) => !v)}
             aria-expanded={subjectsOpen}
-            className="flex min-w-0 items-center gap-2 text-left"
+            className="flex w-full min-w-0 items-center gap-2 text-left"
           >
-            <div className="min-w-0">
+            <div className="min-w-0 flex-1">
               <CardTitle className="text-base">Asignaturas</CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
                 Haz clic en cualquier asignatura para ver sus notas, exámenes y ponderaciones
@@ -97,11 +97,6 @@ export function AcademicClient() {
               <ChevronDown className="h-4 w-4" />
             </motion.span>
           </button>
-
-          <Button size="sm" onClick={() => setShowSubject((v) => !v)}>
-            <Plus className="h-4 w-4" />
-            Nueva
-          </Button>
         </CardHeader>
 
         <CardContent>
@@ -117,6 +112,13 @@ export function AcademicClient() {
                 }}
                 className="overflow-hidden"
               >
+          {/* Gestión de asignaturas: el botón solo aparece al expandir (o en escritorio, siempre visible porque la sección no se colapsa) */}
+          <div className="mb-4 flex justify-end">
+            <Button size="sm" onClick={() => setShowSubject((v) => !v)}>
+              <Plus className="h-4 w-4" />
+              Nueva asignatura
+            </Button>
+          </div>
           {/* Escritorio: formulario inline (como antes) */}
           <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
             {showSubject && <SubjectForm onDone={() => setShowSubject(false)} />}

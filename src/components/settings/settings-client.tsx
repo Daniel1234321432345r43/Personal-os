@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useSettings } from "@/components/providers/settings-provider";
 import { useData } from "@/components/providers/data-provider";
 import { PROVIDERS, getProvider } from "@/lib/ai/models";
@@ -11,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown } from "lucide-react";
 
 function LoadingState() {
   return (
@@ -43,6 +44,8 @@ export function SettingsClient() {
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
+  // La configuración de IA arranca colapsada (acordeón) para no abrumar.
+  const [aiOpen, setAiOpen] = useState(false);
 
   if (!hydrated) {
     return <LoadingState />;
@@ -156,8 +159,34 @@ export function SettingsClient() {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">Personalización e IA</CardTitle>
+            <button
+              type="button"
+              onClick={() => setAiOpen((v) => !v)}
+              aria-expanded={aiOpen}
+              className="flex w-full items-center justify-between gap-3 text-left"
+            >
+              <CardTitle className="text-base">Personalización e IA</CardTitle>
+              <motion.span
+                animate={{ rotate: aiOpen ? 180 : 0 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="shrink-0 text-muted-foreground"
+              >
+                <ChevronDown className="h-4 w-4" />
+              </motion.span>
+            </button>
           </CardHeader>
+          <AnimatePresence initial={false}>
+            {aiOpen && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{
+                  height: { duration: 0.28, ease: [0.25, 0.1, 0.25, 1] },
+                  opacity: { duration: 0.2 },
+                }}
+                className="overflow-hidden"
+              >
           <CardContent className="space-y-5">
             {/* Nombre del Secretario IA */}
             <div className={fieldClass}>
@@ -316,6 +345,9 @@ export function SettingsClient() {
               </p>
             )}
           </CardContent>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </Card>
 
         <div className="space-y-6">

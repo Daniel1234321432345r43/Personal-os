@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -148,9 +149,15 @@ export function SportClient() {
               </p>
             ) : (
               <ul className="divide-y">
+                <AnimatePresence initial={false}>
                 {sorted.map((w) => (
-                  <li
+                  <motion.li
                     key={w.id}
+                    layout
+                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: 24, transition: { duration: 0.18 } }}
+                    transition={{ duration: 0.25, ease: "easeOut" }}
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -184,8 +191,9 @@ export function SportClient() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                  </li>
+                  </motion.li>
                 ))}
+                </AnimatePresence>
               </ul>
             )}
           </CardContent>
