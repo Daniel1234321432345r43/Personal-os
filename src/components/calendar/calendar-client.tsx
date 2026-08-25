@@ -955,7 +955,7 @@ export function CalendarClient() {
             <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
               <div>
                 <CardTitle className="text-base">Detalle del día</CardTitle>
-                <p className="text-xs text-muted-foreground capitalize">
+                <p className="text-xs text-muted-foreground">
                   {formatDateLong(selectedDate)}
                 </p>
               </div>

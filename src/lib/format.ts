@@ -17,11 +17,13 @@ export function formatDate(iso: string): string {
 }
 
 export function formatDateLong(iso: string): string {
-  return new Intl.DateTimeFormat("es-ES", {
+  const formatted = new Intl.DateTimeFormat("es-ES", {
     weekday: "long",
     day: "numeric",
     month: "long",
   }).format(new Date(iso));
+  // El día de la semana va en mayúscula inicial: "Lunes, 25 de agosto".
+  return formatted.charAt(0).toUpperCase() + formatted.slice(1);
 }
 
 export function formatDuration(minutes: number): string {
