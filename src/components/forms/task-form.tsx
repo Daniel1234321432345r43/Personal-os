@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Button } from "@/components/ui/button";
 import { fieldClass, inputClass, labelClass, selectClass } from "./ui";
@@ -245,16 +244,8 @@ export function TaskForm({
           )}
         </div>
 
-        <AnimatePresence mode="wait" initial={false}>
         {isMultiDay ? (
-          <motion.div
-            key="multi"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className="space-y-2.5 pt-1"
-          >
+          <div className="space-y-2.5 pt-1">
             <p className="text-[11px] text-muted-foreground">
               Se crearán automáticamente {sessionDates.length} tareas consecutivas vinculadas:
               <br />
@@ -285,17 +276,8 @@ export function TaskForm({
             </div>
 
             <div className="space-y-2">
-              <AnimatePresence initial={false}>
               {sessionDates.map((d, index) => (
-                <motion.div
-                  key={index}
-                  layout
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: 16, transition: { duration: 0.25 } }}
-                  transition={{ duration: 0.35, ease: "easeOut" }}
-                  className="flex items-center gap-2"
-                >
+                <div key={index} className="flex items-center gap-2">
                   <span className="min-w-[80px] text-xs font-medium text-muted-foreground">
                     Sesión {index + 1}/{sessionDates.length}:
                   </span>
@@ -318,9 +300,8 @@ export function TaskForm({
                       <Trash2 className="h-3.5 w-3.5" />
                     </Button>
                   )}
-                </motion.div>
+                </div>
               ))}
-              </AnimatePresence>
             </div>
 
             <Button
@@ -333,16 +314,9 @@ export function TaskForm({
               <Plus className="mr-1 h-3 w-3" />
               Añadir otra sesión / día
             </Button>
-          </motion.div>
+          </div>
         ) : (
-          <motion.div
-            key="single"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            className={fieldClass}
-          >
+          <div className={fieldClass}>
             <label className={labelClass} htmlFor="task-due">
               Fecha
             </label>
@@ -353,9 +327,8 @@ export function TaskForm({
               onChange={(e) => setDueDate(e.target.value)}
               className={inputClass}
             />
-          </motion.div>
+          </div>
         )}
-        </AnimatePresence>
       </div>
 
       {/* Alarma / Recordatorio: hora de inicio y antelación de la notificación */}

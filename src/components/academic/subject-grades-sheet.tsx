@@ -1,8 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import { FormReveal, CardItem } from "@/components/ui/animate";
 import { useData } from "@/components/providers/data-provider";
 import { useIsMobile } from "@/lib/use-is-mobile";
 import { computeSubjectGradeStats } from "@/lib/data";
@@ -214,7 +212,7 @@ export function SubjectGradesSheet({
           </div>
 
           {/* Formulario Añadir / Editar Nota */}
-          <FormReveal open={showAddGrade}>
+          {showAddGrade && (
             <div className="rounded-xl border border-primary/30 bg-primary/5 p-4 space-y-3">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-semibold text-primary flex items-center gap-1.5">
@@ -246,7 +244,7 @@ export function SubjectGradesSheet({
                 onDone={handleFormDone}
               />
             </div>
-          </FormReveal>
+          )}
 
           {/* Lista de Calificaciones */}
           <div className="space-y-3">
@@ -295,13 +293,7 @@ export function SubjectGradesSheet({
                 )}
               </div>
             ) : (
-              <motion.div
-                className="space-y-2.5"
-                initial="hidden"
-                animate="visible"
-                variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
-              >
-                <AnimatePresence initial={false}>
+              <div className="space-y-2.5">
                 {subjectGrades.map((grade) => {
                   const max = grade.max_score > 0 ? grade.max_score : 10;
                   const normalized = (grade.score / max) * 10;
@@ -321,9 +313,8 @@ export function SubjectGradesSheet({
                       : null;
 
                   return (
-                    <CardItem
+                    <div
                       key={grade.id}
-                      layout
                       className="rounded-xl border bg-card p-3.5 shadow-xs transition-colors hover:border-primary/30"
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -406,11 +397,10 @@ export function SubjectGradesSheet({
                           </div>
                         </div>
                       </div>
-                    </CardItem>
+                    </div>
                   );
                 })}
-                </AnimatePresence>
-              </motion.div>
+              </div>
             )}
           </div>
 
@@ -426,13 +416,7 @@ export function SubjectGradesSheet({
                 No hay tareas ni exámenes programados para esta asignatura.
               </p>
             ) : (
-              <motion.div
-                className="space-y-2"
-                initial="hidden"
-                animate="visible"
-                variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
-              >
-                <AnimatePresence initial={false}>
+              <div className="space-y-2">
                 {subjectTasks.map((task) => {
                   const done = task.status === "done";
                   const hasMatchingGrade = subjectGrades.some(
@@ -442,23 +426,8 @@ export function SubjectGradesSheet({
                   );
 
                   return (
-                    <motion.div
+                    <div
                       key={task.id}
-                      layout
-                      variants={{
-                        hidden: { opacity: 0, y: 10, scale: 0.98 },
-                        visible: {
-                          opacity: 1,
-                          y: 0,
-                          scale: 1,
-                          transition: { duration: 0.35, ease: "easeOut" },
-                        },
-                        exit: {
-                          opacity: 0,
-                          x: 24,
-                          transition: { duration: 0.3, ease: "easeInOut" },
-                        },
-                      }}
                       className={cn(
                         "flex items-center justify-between gap-2.5 rounded-lg border p-2.5 text-xs transition-colors",
                         done ? "bg-muted/40 opacity-75" : "bg-card",
@@ -475,19 +444,7 @@ export function SubjectGradesSheet({
                               : "border-input hover:border-primary",
                           )}
                         >
-                          <AnimatePresence>
-                            {done && (
-                              <motion.span
-                                initial={{ scale: 0, opacity: 0 }}
-                                animate={{ scale: 1, opacity: 1 }}
-                                exit={{ scale: 0, opacity: 0 }}
-                                transition={{ type: "spring", stiffness: 500, damping: 26 }}
-                                className="flex"
-                              >
-                                <Check className="h-3 w-3" />
-                              </motion.span>
-                            )}
-                          </AnimatePresence>
+                          {done && <Check className="h-3 w-3" />}
                         </button>
                         <div className="min-w-0 flex-1 truncate">
                           <p
@@ -530,11 +487,10 @@ export function SubjectGradesSheet({
                           </Button>
                         )}
                       </div>
-                    </motion.div>
+                    </div>
                   );
                 })}
-                </AnimatePresence>
-              </motion.div>
+              </div>
             )}
           </div>
         </div>

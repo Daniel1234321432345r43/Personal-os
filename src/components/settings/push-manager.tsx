@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Reveal } from "@/components/ui/animate";
 import { isSupabaseConfigured } from "@/lib/env";
 import {
   getPushSubscription,
@@ -147,17 +146,15 @@ export function PushManager() {
       </div>
 
       {status && (
-        <Reveal>
-          <p
-            className={`rounded-lg border p-3 text-sm ${
-              status.ok
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                : "border-destructive/30 bg-destructive/10 text-destructive"
-            }`}
-          >
-            {status.message}
-          </p>
-        </Reveal>
+        <p
+          className={`rounded-lg border p-3 text-sm ${
+            status.ok
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-destructive/30 bg-destructive/10 text-destructive"
+          }`}
+        >
+          {status.message}
+        </p>
       )}
     </div>
   );

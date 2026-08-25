@@ -1,6 +1,3 @@
-"use client";
-
-import { motion } from "framer-motion";
 import { CalendarClock } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDate } from "@/lib/format";
@@ -44,28 +41,14 @@ export function UpcomingTasks({ data }: { data: DashboardData }) {
           No tienes tareas ni plazos pendientes. 🎉
         </p>
       ) : (
-        <motion.ul
-          className="space-y-2"
-          initial="hidden"
-          animate="visible"
-          variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-        >
+        <ul className="space-y-2">
           {upcoming.map((task) => {
             const subject = task.subject_id
               ? subjectById.get(task.subject_id)
               : null;
             return (
-              <motion.li
+              <li
                 key={task.id}
-                variants={{
-                  hidden: { opacity: 0, y: 14, scale: 0.98 },
-                  visible: {
-                    opacity: 1,
-                    y: 0,
-                    scale: 1,
-                    transition: { duration: 0.4, ease: "easeOut" },
-                  },
-                }}
                 className="flex items-center gap-3 rounded-lg border bg-card p-2.5 transition-colors motion-safe:hover:bg-muted/50"
               >
                 <span
@@ -92,10 +75,10 @@ export function UpcomingTasks({ data }: { data: DashboardData }) {
                     </span>
                   )}
                 </div>
-              </motion.li>
+              </li>
             );
           })}
-        </motion.ul>
+        </ul>
       )}
     </div>
   );

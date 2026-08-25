@@ -1,13 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { AnimatePresence } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatDate } from "@/lib/format";
-import { FormReveal, CardItem, AnimateCards } from "@/components/ui/animate";
 import { NoteForm } from "./note-form";
 import { Paperclip, Pencil, Plus, Trash2 } from "lucide-react";
 import type { Note } from "@/lib/types";
@@ -58,7 +56,7 @@ export function NotesClient() {
           </Button>
         </CardHeader>
         <CardContent>
-          <FormReveal open={showForm || !!editing}>
+          {(showForm || editing) && (
             <div className="mb-4 rounded-lg border bg-muted/30 p-4">
               <NoteForm
                 note={editing}
@@ -68,7 +66,7 @@ export function NotesClient() {
                 }}
               />
             </div>
-          </FormReveal>
+          )}
 
           {sorted.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -76,12 +74,10 @@ export function NotesClient() {
               en cuenta.
             </p>
           ) : (
-            <AnimateCards className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <AnimatePresence initial={false}>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {sorted.map((note) => (
-                <CardItem
+                <div
                   key={note.id}
-                  layout
                   className="flex flex-col gap-2 rounded-lg border bg-card p-3"
                 >
                   <div className="flex items-start gap-2">
@@ -137,10 +133,9 @@ export function NotesClient() {
                       )}
                     </div>
                   )}
-                </CardItem>
+                </div>
               ))}
-              </AnimatePresence>
-            </AnimateCards>
+            </div>
           )}
         </CardContent>
       </Card>

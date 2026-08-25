@@ -11,7 +11,6 @@ import { MobileCollapsible } from "@/components/ui/mobile-collapsible";
 import { formatDate, formatDuration, todayKey } from "@/lib/format";
 import { WorkoutForm } from "@/components/forms/workout-form";
 import { HabitForm } from "@/components/forms/habit-form";
-import { FormReveal } from "@/components/ui/animate";
 import { Check, Dumbbell, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -133,9 +132,7 @@ export function SportClient() {
           <CardContent>
             {/* Escritorio: formulario inline (como antes) */}
             <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
-              <FormReveal open={showWorkout}>
-                <WorkoutForm onDone={() => setShowWorkout(false)} />
-              </FormReveal>
+              {showWorkout && <WorkoutForm onDone={() => setShowWorkout(false)} />}
             </div>
             {/* Móvil: bottom sheet */}
             <ResponsiveFormSheet
@@ -219,9 +216,7 @@ export function SportClient() {
           <CardContent className="space-y-3">
             {/* Escritorio: formulario inline (como antes) */}
             <div className="hidden rounded-lg border bg-muted/30 p-4 md:block">
-              <FormReveal open={showHabit}>
-                <HabitForm onDone={() => setShowHabit(false)} />
-              </FormReveal>
+              {showHabit && <HabitForm onDone={() => setShowHabit(false)} />}
             </div>
             {/* Móvil: bottom sheet */}
             <ResponsiveFormSheet

@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Check, Dumbbell } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { todayKey, formatDuration } from "@/lib/format";
@@ -17,24 +16,10 @@ export function TodayRoutines() {
       <h3 className="text-sm font-semibold">Rutinas de hoy</h3>
 
       {workoutsToday.length > 0 && (
-        <motion.div
-          className="space-y-1.5"
-          initial="hidden"
-          animate="visible"
-          variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-        >
+        <div className="space-y-1.5">
           {workoutsToday.map((w) => (
-            <motion.div
+            <div
               key={w.id}
-              layout
-              variants={{
-                hidden: { opacity: 0, y: 12 },
-                visible: {
-                  opacity: 1,
-                  y: 0,
-                  transition: { duration: 0.4, ease: "easeOut" },
-                },
-              }}
               className="flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2 text-sm"
             >
               <Dumbbell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
@@ -42,9 +27,9 @@ export function TodayRoutines() {
               <span className="text-xs text-muted-foreground">
                 {formatDuration(w.duration_minutes)}
               </span>
-            </motion.div>
+            </div>
           ))}
-        </motion.div>
+        </div>
       )}
 
       {data.habits.length === 0 ? (
@@ -72,16 +57,7 @@ export function TodayRoutines() {
                   aria-pressed={done}
                   aria-label={`Marcar ${habit.name}`}
                 >
-                  {done && (
-                    <motion.span
-                      initial={{ scale: 0, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      transition={{ type: "spring", stiffness: 500, damping: 26 }}
-                      className="flex"
-                    >
-                      <Check className="h-3.5 w-3.5" />
-                    </motion.span>
-                  )}
+                  {done && <Check className="h-3.5 w-3.5" />}
                 </button>
                 <span className="text-sm">{habit.emoji}</span>
                 <span

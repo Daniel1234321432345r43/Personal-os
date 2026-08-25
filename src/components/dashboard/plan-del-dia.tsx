@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { motion } from "framer-motion";
 import Link from "next/link";
 import { Sparkles, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -78,15 +77,9 @@ export function PlanDelDia({ context }: { context: SecretaryContext }) {
       )}
 
       {error && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35, ease: "easeOut" }}
-        >
-          <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
-            {error}
-          </p>
-        </motion.div>
+        <p className="rounded-lg bg-destructive/10 p-3 text-xs text-destructive">
+          {error}
+        </p>
       )}
 
       {!plan && !loading && !error && (
@@ -102,34 +95,12 @@ export function PlanDelDia({ context }: { context: SecretaryContext }) {
       )}
 
       {plan && !loading && (
-        <motion.div
-          className="space-y-2"
-          initial="hidden"
-          animate="visible"
-          variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-        >
-          <motion.p
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.4 }}
-            className="text-sm text-muted-foreground"
-          >
-            {plan.summary}
-          </motion.p>
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">{plan.summary}</p>
           <ul className="space-y-2">
             {plan.blocks.map((block, i) => (
-              <motion.li
+              <li
                 key={`${block.time}-${i}`}
-                layout
-                variants={{
-                  hidden: { opacity: 0, y: 14, scale: 0.98 },
-                  visible: {
-                    opacity: 1,
-                    y: 0,
-                    scale: 1,
-                    transition: { duration: 0.4, ease: "easeOut" },
-                  },
-                }}
                 className={cn(
                   "rounded-lg border border-l-4 bg-card p-2.5",
                   categoryStyles[block.category] ?? "border-l-muted",
@@ -146,10 +117,10 @@ export function PlanDelDia({ context }: { context: SecretaryContext }) {
                     {block.detail}
                   </p>
                 )}
-              </motion.li>
+              </li>
             ))}
           </ul>
-        </motion.div>
+        </div>
       )}
     </div>
   );
