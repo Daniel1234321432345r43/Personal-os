@@ -91,7 +91,7 @@ export function AcademicClient() {
             </div>
             <motion.span
               animate={{ rotate: subjectsOpen ? 180 : 0 }}
-              transition={{ duration: 0.2, ease: "easeInOut" }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
               className="shrink-0 text-muted-foreground lg:hidden"
             >
               <ChevronDown className="h-4 w-4" />
@@ -107,8 +107,8 @@ export function AcademicClient() {
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{
-                  height: { duration: 0.28, ease: [0.25, 0.1, 0.25, 1] },
-                  opacity: { duration: 0.2 },
+                  height: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] },
+                  opacity: { duration: 0.3 },
                 }}
                 className="overflow-hidden"
               >
@@ -141,7 +141,7 @@ export function AcademicClient() {
               className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
               initial="hidden"
               animate="visible"
-              variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
+              variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
             >
               {data.subjects.map((subject) => {
                 const pending = academicTasks.filter(
@@ -157,11 +157,11 @@ export function AcademicClient() {
                     key={subject.id}
                     onClick={() => setSelectedSubject(subject)}
                     variants={{
-                      hidden: { opacity: 0, y: 16 },
+                      hidden: { opacity: 0, y: 18 },
                       visible: {
                         opacity: 1,
                         y: 0,
-                        transition: { duration: 0.28, ease: "easeOut" },
+                        transition: { duration: 0.45, ease: "easeOut" },
                       },
                     }}
                     className="group relative flex flex-col justify-between rounded-xl border bg-card p-3.5 shadow-xs transition-all hover:border-primary/50 hover:shadow-sm cursor-pointer active:scale-[0.98]"
@@ -275,16 +275,12 @@ export function AcademicClient() {
             <TaskForm onDone={() => setShowTask(false)} />
           </ResponsiveFormSheet>
 
-          {academicTasks.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No hay tareas académicas todavía.
-            </p>
-          ) : (
+          <>
             <motion.ul
               className="divide-y"
               initial="hidden"
               animate="visible"
-              variants={{ visible: { transition: { staggerChildren: 0.045 } } }}
+              variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
             >
               <AnimatePresence initial={false}>
               {academicTasks.map((task) => {
@@ -297,14 +293,18 @@ export function AcademicClient() {
                     key={task.id}
                     layout
                     variants={{
-                      hidden: { opacity: 0, x: -14 },
+                      hidden: { opacity: 0, x: -18 },
                       visible: {
                         opacity: 1,
                         x: 0,
-                        transition: { duration: 0.25 },
+                        transition: { duration: 0.45, ease: "easeOut" },
                       },
                     }}
-                    exit={{ opacity: 0, x: 24, transition: { duration: 0.18 } }}
+                    exit={{
+                      opacity: 0,
+                      x: 32,
+                      transition: { duration: 0.4, ease: "easeInOut" },
+                    }}
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <button
@@ -369,7 +369,12 @@ export function AcademicClient() {
               })}
               </AnimatePresence>
             </motion.ul>
-          )}
+            {academicTasks.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No hay tareas académicas todavía.
+              </p>
+            )}
+          </>
         </CardContent>
       </Card>
 

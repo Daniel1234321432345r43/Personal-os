@@ -168,7 +168,7 @@ export function SettingsClient() {
               <CardTitle className="text-base">Personalización e IA</CardTitle>
               <motion.span
                 animate={{ rotate: aiOpen ? 180 : 0 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
                 className="shrink-0 text-muted-foreground"
               >
                 <ChevronDown className="h-4 w-4" />
@@ -182,8 +182,8 @@ export function SettingsClient() {
                 animate={{ height: "auto", opacity: 1 }}
                 exit={{ height: 0, opacity: 0 }}
                 transition={{
-                  height: { duration: 0.28, ease: [0.25, 0.1, 0.25, 1] },
-                  opacity: { duration: 0.2 },
+                  height: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] },
+                  opacity: { duration: 0.3 },
                 }}
                 className="overflow-hidden"
               >

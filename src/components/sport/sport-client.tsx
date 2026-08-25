@@ -143,21 +143,21 @@ export function SportClient() {
               <WorkoutForm onDone={() => setShowWorkout(false)} />
             </ResponsiveFormSheet>
 
-            {sorted.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Aún no has registrado entrenamientos.
-              </p>
-            ) : (
+            <>
               <ul className="divide-y">
                 <AnimatePresence initial={false}>
                 {sorted.map((w) => (
                   <motion.li
                     key={w.id}
                     layout
-                    initial={{ opacity: 0, y: -10, scale: 0.98 }}
+                    initial={{ opacity: 0, y: -14, scale: 0.97 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, x: 24, transition: { duration: 0.18 } }}
-                    transition={{ duration: 0.25, ease: "easeOut" }}
+                    exit={{
+                      opacity: 0,
+                      x: 32,
+                      transition: { duration: 0.4, ease: "easeInOut" },
+                    }}
+                    transition={{ duration: 0.45, ease: "easeOut" }}
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -195,7 +195,12 @@ export function SportClient() {
                 ))}
                 </AnimatePresence>
               </ul>
-            )}
+              {sorted.length === 0 && (
+                <p className="text-sm text-muted-foreground">
+                  Aún no has registrado entrenamientos.
+                </p>
+              )}
+            </>
           </CardContent>
         </Card>
 
