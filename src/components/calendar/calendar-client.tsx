@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { FormReveal } from "@/components/ui/animate";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -534,6 +535,15 @@ export function CalendarClient() {
       <div className="order-3 grid gap-6 lg:grid-cols-3">
         {/* Columna izquierda: Vista del Calendario o Lista */}
         <div className="lg:col-span-2 space-y-4">
+          <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={viewMode}
+            className="space-y-4"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
+          >
           {viewMode === "month" ? (
             <Card className="overflow-hidden">
               <CardContent className="p-2 sm:p-4">
@@ -717,13 +727,27 @@ export function CalendarClient() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
+                <motion.div
+                  initial="hidden"
+                  animate="visible"
+                  variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
+                  className="space-y-3"
+                >
                 {weekDays.map((day) => {
                   const ev = eventsByDate.get(day.key);
                   const isToday = day.key === today;
                   const isSelected = day.key === selectedDate;
                   return (
-                    <div
+                    <motion.div
                       key={day.key}
+                      variants={{
+                        hidden: { opacity: 0, y: 12 },
+                        visible: {
+                          opacity: 1,
+                          y: 0,
+                          transition: { duration: 0.35, ease: "easeOut" },
+                        },
+                      }}
                       className={cn(
                         "rounded-lg border p-3 transition-colors",
                         isSelected && "border-primary bg-primary/5",
@@ -812,9 +836,10 @@ export function CalendarClient() {
                           Sin eventos
                         </p>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
+                </motion.div>
               </CardContent>
             </Card>
           ) : (
@@ -831,9 +856,23 @@ export function CalendarClient() {
                     No hay eventos registrados en este mes con el filtro seleccionado.
                   </p>
                 ) : (
-                  agendaDays.map(({ cell, events }) => (
-                    <div
+                  <motion.div
+                    initial="hidden"
+                    animate="visible"
+                    variants={{ visible: { transition: { staggerChildren: 0.06 } } }}
+                    className="space-y-4"
+                  >
+                  {agendaDays.map(({ cell, events }) => (
+                    <motion.div
                       key={cell.key}
+                      variants={{
+                        hidden: { opacity: 0, y: 12 },
+                        visible: {
+                          opacity: 1,
+                          y: 0,
+                          transition: { duration: 0.35, ease: "easeOut" },
+                        },
+                      }}
                       className={cn(
                         "rounded-lg border p-3 transition-colors",
                         cell.key === selectedDate && "border-primary bg-primary/5",
@@ -941,12 +980,15 @@ export function CalendarClient() {
                           </div>
                         ))}
                       </div>
-                    </div>
-                  ))
+                    </motion.div>
+                  ))}
+                  </motion.div>
                 )}
               </CardContent>
             </Card>
           )}
+          </motion.div>
+          </AnimatePresence>
         </div>
 
         {/* Columna derecha: Detalle del día seleccionado */}
@@ -999,7 +1041,7 @@ export function CalendarClient() {
               </div>
 
               {/* Formularios desplegables (escritorio: inline; móvil: bottom sheet) */}
-              {activeModal === "task" && (
+              <FormReveal open={activeModal === "task"}>
                 <div className="hidden rounded-lg border bg-muted/40 p-3 md:block">
                   <p className="mb-2 text-xs font-semibold">Nueva tarea / examen para {selectedDate}:</p>
                   <TaskForm
@@ -1007,7 +1049,7 @@ export function CalendarClient() {
                     onDone={() => setActiveModal(null)}
                   />
                 </div>
-              )}
+              </FormReveal>
               <ResponsiveFormSheet
                 open={activeModal === "task"}
                 onOpenChange={(open) => !open && setActiveModal(null)}
@@ -1019,7 +1061,7 @@ export function CalendarClient() {
                 />
               </ResponsiveFormSheet>
 
-              {activeModal === "transaction" && (
+              <FormReveal open={activeModal === "transaction"}>
                 <div className="hidden rounded-lg border bg-muted/40 p-3 md:block">
                   <p className="mb-2 text-xs font-semibold">Nueva transacción para {selectedDate}:</p>
                   <TransactionForm
@@ -1027,7 +1069,7 @@ export function CalendarClient() {
                     onDone={() => setActiveModal(null)}
                   />
                 </div>
-              )}
+              </FormReveal>
               <ResponsiveFormSheet
                 open={activeModal === "transaction"}
                 onOpenChange={(open) => !open && setActiveModal(null)}
@@ -1039,7 +1081,7 @@ export function CalendarClient() {
                 />
               </ResponsiveFormSheet>
 
-              {activeModal === "workout" && (
+              <FormReveal open={activeModal === "workout"}>
                 <div className="hidden rounded-lg border bg-muted/40 p-3 md:block">
                   <p className="mb-2 text-xs font-semibold">Nuevo entrenamiento para {selectedDate}:</p>
                   <WorkoutForm
@@ -1047,7 +1089,7 @@ export function CalendarClient() {
                     onDone={() => setActiveModal(null)}
                   />
                 </div>
-              )}
+              </FormReveal>
               <ResponsiveFormSheet
                 open={activeModal === "workout"}
                 onOpenChange={(open) => !open && setActiveModal(null)}

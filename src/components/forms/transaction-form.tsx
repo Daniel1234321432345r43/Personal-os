@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Button } from "@/components/ui/button";
 import { fieldClass, inputClass, labelClass } from "./ui";
@@ -58,14 +59,21 @@ export function TransactionForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-2">
+      <div className="relative grid grid-cols-2 gap-2">
         <Button
           type="button"
           variant={type === "expense" ? "default" : "outline"}
           onClick={() => setType("expense")}
           className={cn(type === "expense" && "bg-red-600 hover:bg-red-700")}
         >
-          Gasto
+          <motion.span
+            initial={false}
+            animate={{ scale: type === "expense" ? 1.03 : 1 }}
+            transition={{ type: "spring", stiffness: 500, damping: 28 }}
+            className="inline-block"
+          >
+            Gasto
+          </motion.span>
         </Button>
         <Button
           type="button"
@@ -73,7 +81,14 @@ export function TransactionForm({
           onClick={() => setType("income")}
           className={cn(type === "income" && "bg-emerald-600 hover:bg-emerald-700")}
         >
-          Ingreso
+          <motion.span
+            initial={false}
+            animate={{ scale: type === "income" ? 1.03 : 1 }}
+            transition={{ type: "spring", stiffness: 500, damping: 28 }}
+            className="inline-block"
+          >
+            Ingreso
+          </motion.span>
         </Button>
       </div>
 

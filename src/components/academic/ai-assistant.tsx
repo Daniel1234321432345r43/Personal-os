@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import Link from "next/link";
 import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
@@ -8,6 +9,7 @@ import { buildSecretaryContext } from "@/lib/ai/context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Reveal } from "@/components/ui/animate";
 import { formatDate, todayKey } from "@/lib/format";
 import type { AcademicAdvice } from "@/lib/ai/types";
 import type { TaskPriority } from "@/lib/types";
@@ -120,13 +122,31 @@ export function AiAssistant() {
           No tienes entregas ni exámenes pendientes. 🎉
         </p>
       ) : (
-        <ul className="space-y-2">
+        <motion.ul
+          className="space-y-2"
+          initial="hidden"
+          animate="visible"
+          variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
+        >
           {deadlines.map((d) => {
             const days = daysUntil(d.due_date);
             const daysLabel =
               days < 0 ? "atrasado" : days === 0 ? "¡hoy!" : `${days} d`;
             return (
-              <li key={d.id} className="rounded-lg border bg-card p-3">
+              <motion.li
+                key={d.id}
+                layout
+                variants={{
+                  hidden: { opacity: 0, y: 14, scale: 0.98 },
+                  visible: {
+                    opacity: 1,
+                    y: 0,
+                    scale: 1,
+                    transition: { duration: 0.4, ease: "easeOut" },
+                  },
+                }}
+                className="rounded-lg border bg-card p-3"
+              >
                 <div className="flex items-center gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{d.title}</p>
@@ -157,10 +177,10 @@ export function AiAssistant() {
                     {adviceById.get(d.id)}
                   </p>
                 )}
-              </li>
+              </motion.li>
             );
           })}
-        </ul>
+        </motion.ul>
       )}
 
       {loading && (
@@ -178,10 +198,10 @@ export function AiAssistant() {
       )}
 
       {advice?.summary && (
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3">
+        <Reveal className="rounded-lg border border-primary/30 bg-primary/5 p-3">
           <p className="text-xs font-semibold">Resumen</p>
           <p className="mt-1 text-sm text-muted-foreground">{advice.summary}</p>
-        </div>
+        </Reveal>
       )}
     </div>
   );

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { MobileCollapsible } from "@/components/ui/mobile-collapsible";
+import { FormReveal } from "@/components/ui/animate";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { BudgetForm } from "@/components/forms/budget-form";
@@ -149,11 +150,11 @@ export function FinanceClient() {
             ))}
 
           {/* Escritorio: formulario inline (como antes) */}
-          {showBudget && (
-            <div className="hidden md:block">
+          <div className="hidden md:block">
+            <FormReveal open={showBudget}>
               <BudgetForm onDone={() => setShowBudget(false)} />
-            </div>
-          )}
+            </FormReveal>
+          </div>
           {/* Móvil: bottom sheet */}
           <ResponsiveFormSheet
             open={showBudget}
@@ -177,7 +178,9 @@ export function FinanceClient() {
         <CardContent>
           {/* Escritorio: formulario inline (como antes) */}
           <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
-            {showTx && <TransactionForm onDone={() => setShowTx(false)} />}
+            <FormReveal open={showTx}>
+              <TransactionForm onDone={() => setShowTx(false)} />
+            </FormReveal>
           </div>
           {/* Móvil: bottom sheet */}
           <ResponsiveFormSheet

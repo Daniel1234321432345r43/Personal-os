@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Reveal } from "@/components/ui/animate";
 import { GraduationCap, RefreshCw, Loader2 } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/env";
 
@@ -74,7 +75,11 @@ export function ClassroomConnect() {
           </a>
         </Button>
       )}
-      {result && <p className="w-full text-sm text-muted-foreground">{result}</p>}
+      {result && (
+        <Reveal className="w-full">
+          <p className="text-sm text-muted-foreground">{result}</p>
+        </Reveal>
+      )}
     </div>
   );
 }

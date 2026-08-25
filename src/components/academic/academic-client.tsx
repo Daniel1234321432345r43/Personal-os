@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
+import { FormReveal } from "@/components/ui/animate";
 import { formatDate } from "@/lib/format";
 import { useIsMobile } from "@/lib/use-is-mobile";
 import { SubjectForm } from "@/components/forms/subject-form";
@@ -121,7 +122,9 @@ export function AcademicClient() {
           </div>
           {/* Escritorio: formulario inline (como antes) */}
           <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
-            {showSubject && <SubjectForm onDone={() => setShowSubject(false)} />}
+            <FormReveal open={showSubject}>
+              <SubjectForm onDone={() => setShowSubject(false)} />
+            </FormReveal>
           </div>
           {/* Móvil: bottom sheet */}
           <ResponsiveFormSheet
@@ -264,7 +267,9 @@ export function AcademicClient() {
         <CardContent>
           {/* Escritorio: formulario inline (como antes) */}
           <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
-            {showTask && <TaskForm onDone={() => setShowTask(false)} />}
+            <FormReveal open={showTask}>
+              <TaskForm onDone={() => setShowTask(false)} />
+            </FormReveal>
           </div>
           {/* Móvil: bottom sheet */}
           <ResponsiveFormSheet

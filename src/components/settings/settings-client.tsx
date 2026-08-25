@@ -7,6 +7,7 @@ import { useData } from "@/components/providers/data-provider";
 import { PROVIDERS, getProvider } from "@/lib/ai/models";
 import type { AiProviderId } from "@/lib/ai/settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Reveal } from "@/components/ui/animate";
 import { PushManager } from "@/components/settings/push-manager";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -334,15 +335,17 @@ export function SettingsClient() {
             </div>
 
             {testResult && (
-              <p
-                className={`rounded-lg border p-3 text-sm ${
-                  testResult.ok
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                    : "border-destructive/30 bg-destructive/10 text-destructive"
-                }`}
-              >
-                {testResult.message}
-              </p>
+              <Reveal>
+                <p
+                  className={`rounded-lg border p-3 text-sm ${
+                    testResult.ok
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "border-destructive/30 bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  {testResult.message}
+                </p>
+              </Reveal>
             )}
           </CardContent>
               </motion.div>
@@ -475,15 +478,17 @@ export function SettingsClient() {
                 : "Restablecer de fábrica"}
           </Button>
           {resetResult && (
-            <p
-              className={`rounded-lg border p-3 text-sm ${
-                resetResult.ok
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : "border-destructive/30 bg-destructive/10 text-destructive"
-              }`}
-            >
-              {resetResult.message}
-            </p>
+            <Reveal>
+              <p
+                className={`rounded-lg border p-3 text-sm ${
+                  resetResult.ok
+                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                    : "border-destructive/30 bg-destructive/10 text-destructive"
+                }`}
+              >
+                {resetResult.message}
+              </p>
+            </Reveal>
           )}
         </CardContent>
       </Card>

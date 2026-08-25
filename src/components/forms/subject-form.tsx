@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Button } from "@/components/ui/button";
 import { fieldClass, inputClass, labelClass } from "./ui";
@@ -50,13 +51,20 @@ export function SubjectForm({ onDone }: { onDone?: () => void }) {
         <label className={labelClass}>Color</label>
         <div className="flex flex-wrap gap-2">
           {COLORS.map((c) => (
-            <button
+            <motion.button
               key={c}
               type="button"
               onClick={() => setColor(c)}
-              className={`h-8 w-8 rounded-full transition-transform ${
-                color === c ? "ring-2 ring-ring ring-offset-2" : ""
-              }`}
+              whileTap={{ scale: 0.85 }}
+              animate={{
+                scale: color === c ? 1.15 : 1,
+                boxShadow:
+                  color === c
+                    ? `0 0 0 2px hsl(var(--background)), 0 0 0 4px ${c}`
+                    : undefined,
+              }}
+              transition={{ type: "spring", stiffness: 500, damping: 26 }}
+              className={`h-8 w-8 rounded-full transition-transform`}
               style={{ backgroundColor: c }}
               aria-label={`Color ${c}`}
               aria-pressed={color === c}

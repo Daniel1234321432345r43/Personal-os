@@ -199,29 +199,44 @@ export function StatCards({ data }: { data: DashboardData }) {
       </div>
 
       {/* ── Escritorio: grid de métricas (intacto, solo ≥ lg) ────────── */}
-      <div className="hidden gap-3 lg:grid lg:grid-cols-4">
+      <motion.div
+        className="hidden gap-3 lg:grid lg:grid-cols-4"
+        initial="hidden"
+        animate="visible"
+        variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
+      >
         {cards.map(({ label, value, sub, icon: Icon, tint }) => (
-          <Card
+          <motion.div
             key={label}
+            variants={{
+              hidden: { opacity: 0, y: 16 },
+              visible: {
+                opacity: 1,
+                y: 0,
+                transition: { duration: 0.45, ease: "easeOut" },
+              },
+            }}
             className="transition-[box-shadow,transform] duration-200 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md"
           >
-            <CardContent className="flex items-start gap-3 p-4">
-              <div
-                className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tint}`}
-              >
-                <Icon className="h-4 w-4" />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-xs text-muted-foreground">{label}</p>
-                <p className="truncate text-lg font-semibold tracking-tight">
-                  {value}
-                </p>
-                <p className="truncate text-xs text-muted-foreground">{sub}</p>
-              </div>
-            </CardContent>
-          </Card>
+            <Card className="h-full">
+              <CardContent className="flex items-start gap-3 p-4">
+                <div
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tint}`}
+                >
+                  <Icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xs text-muted-foreground">{label}</p>
+                  <p className="truncate text-lg font-semibold tracking-tight">
+                    {value}
+                  </p>
+                  <p className="truncate text-xs text-muted-foreground">{sub}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </>
   );
 }
