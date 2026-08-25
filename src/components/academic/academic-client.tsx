@@ -10,12 +10,13 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { formatDate } from "@/lib/format";
+import { useIsMobile } from "@/lib/use-is-mobile";
 import { SubjectForm } from "@/components/forms/subject-form";
 import { TaskForm } from "@/components/forms/task-form";
 import { ClassroomConnect } from "./classroom-connect";
 import { AiAssistant } from "./ai-assistant";
 import { SubjectGradesSheet } from "./subject-grades-sheet";
-import { Check, Plus, Trash2, Award, ChevronRight } from "lucide-react";
+import { Check, Plus, Trash2, Award, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TaskPriority, TaskType, Subject } from "@/lib/types";
 
@@ -51,6 +52,8 @@ export function AcademicClient() {
   const [showSubject, setShowSubject] = useState(false);
   const [showTask, setShowTask] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
+  const [subjectsOpen, setSubjectsOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   if (!hydrated) return <LoadingState />;
 
@@ -63,7 +66,7 @@ export function AcademicClient() {
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
 
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Estudios</h1>
         <p className="text-sm text-muted-foreground">
@@ -71,21 +74,49 @@ export function AcademicClient() {
         </p>
       </header>
 
-      {/* Asignaturas */}
-      <Card>
+      {/* Asignaturas (en móvil va debajo de Tareas y colapsada) */}
+      <Card className="order-2 lg:order-1">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-          <div>
-            <CardTitle className="text-base">Asignaturas</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Haz clic en cualquier asignatura para ver sus notas, exámenes y ponderaciones
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => isMobile && setSubjectsOpen((v) => !v)}
+            aria-expanded={subjectsOpen}
+            className="flex min-w-0 items-center gap-2 text-left"
+          >
+            <div className="min-w-0">
+              <CardTitle className="text-base">Asignaturas</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Haz clic en cualquier asignatura para ver sus notas, exámenes y ponderaciones
+              </p>
+            </div>
+            <motion.span
+              animate={{ rotate: subjectsOpen ? 180 : 0 }}
+              transition={{ duration: 0.2, ease: "easeInOut" }}
+              className="shrink-0 text-muted-foreground lg:hidden"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </motion.span>
+          </button>
+
           <Button size="sm" onClick={() => setShowSubject((v) => !v)}>
             <Plus className="h-4 w-4" />
             Nueva
           </Button>
         </CardHeader>
+
         <CardContent>
+          <AnimatePresence initial={false}>
+            {(!isMobile || subjectsOpen) && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{
+                  height: { duration: 0.28, ease: [0.25, 0.1, 0.25, 1] },
+                  opacity: { duration: 0.2 },
+                }}
+                className="overflow-hidden"
+              >
           {/* Escritorio: formulario inline (como antes) */}
           <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
             {showSubject && <SubjectForm onDone={() => setShowSubject(false)} />}
@@ -205,6 +236,9 @@ export function AcademicClient() {
               })}
             </motion.div>
           )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </CardContent>
       </Card>
 
@@ -216,8 +250,8 @@ export function AcademicClient() {
       />
 
 
-      {/* Tareas y entregas */}
-      <Card>
+      {/* Tareas y entregas (en móvil va primero) */}
+      <Card className="order-1 lg:order-2">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">Tareas y entregas</CardTitle>
           <Button size="sm" onClick={() => setShowTask((v) => !v)}>
@@ -309,8 +343,8 @@ export function AcademicClient() {
                       >
                         {task.title}
                       </p>
-                      <p className="text-xs text-muted-foreground">
-                        {subject?.name ?? "General"} · {typeLabel[task.type]}
+                      <p className="truncate text-xs text-muted-foreground">
+                        {subject?.name ?? "General"}
                         {task.due_date ? ` · ${formatDate(task.due_date)}` : ""}
                       </p>
                     </div>
@@ -338,7 +372,7 @@ export function AcademicClient() {
       </Card>
 
       {/* Asistente académico con IA */}
-      <Card>
+      <Card className="order-3">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Recomendaciones IA</CardTitle>
         </CardHeader>
@@ -348,7 +382,7 @@ export function AcademicClient() {
       </Card>
 
       {/* Sincronización con Classroom */}
-      <Card>
+      <Card className="order-4">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Google Classroom</CardTitle>
         </CardHeader>
