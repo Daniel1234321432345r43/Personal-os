@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-is-mobile";
+import { BOTTOM_NAV_ROUTES } from "@/lib/navigation";
 import { useSwipeNav } from "@/lib/use-swipe-nav";
 import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { Button } from "@/components/ui/button";
@@ -41,14 +42,13 @@ const navItems = [
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];
 
-const bottomNavItems = [
-  { href: "/dashboard", label: "Hoy", icon: LayoutDashboard },
-  { href: "/calendar", label: "Calendario", icon: Calendar },
-  { href: "/academic", label: "Estudios", icon: GraduationCap },
-  { href: "/sport", label: "Deporte", icon: Dumbbell },
-  { href: "/finance", label: "Finanzas", icon: Wallet },
-  { href: "/settings", label: "Ajustes", icon: Settings },
-];
+/**
+ * Bottom bar derivada de BOTTOM_NAV_ROUTES (la misma fuente que el swipe):
+ * mantiene el orden estricto y garantiza que swipe y barra nunca se desincronicen.
+ */
+const bottomNavItems = BOTTOM_NAV_ROUTES.map(
+  (href) => navItems.find((item) => item.href === href),
+).filter((item): item is (typeof navItems)[number] => Boolean(item));
 
 /** Física de la pill del elemento activo */
 const pillSpring = { type: "spring", stiffness: 500, damping: 35, mass: 0.9 } as const;
@@ -88,7 +88,16 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [router]);
 
   const pullRefresh = usePullRefresh(handleRefresh, isMobile);
-  const swipeNav = useSwipeNav((href) => router.push(href), pathname, isMobile);
+
+  // El swipe solo navega entre las pestañas de la Bottom Bar: en rutas fuera
+  // de la lista (Pomodoro, Notas) no se adjunta el gesto horizontal.
+  const isSwipeRoute = BOTTOM_NAV_ROUTES.some((r) => pathname.startsWith(r));
+  const swipeEnabled = isMobile && isSwipeRoute;
+  const swipeNav = useSwipeNav(
+    (href) => router.push(href),
+    pathname,
+    swipeEnabled,
+  );
   const { onTouchStart, onTouchMove, onTouchEnd, style, dragging, lastDirection } =
     swipeNav;
 
@@ -183,7 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             key={href}
             href={href}
             className={cn(
-              "relative flex min-w-0 flex-col items-center gap-0.5 rounded-xl px-2 py-1 text-[10px] font-medium transition-all active:scale-95",
+              "relative flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1 text-[10px] font-medium transition-all active:scale-95",
               active
                 ? "text-primary"
                 : "text-muted-foreground active:text-foreground",
@@ -279,15 +288,15 @@ export function AppShell({ children }: { children: ReactNode }) {
               }
             : {})}
         >
-          {/* Superficie de swipe: sigue al dedo (solo móvil) */}
+          {/* Superficie de swipe: sigue al dedo (solo móvil y solo en rutas de la Bottom Bar) */}
           <motion.div
-            style={isMobile ? style : undefined}
+            style={swipeEnabled ? style : undefined}
             className={cn(
               "min-h-full",
               isMobile && "touch-pan-y overscroll-x-none",
               dragging && "cursor-grabbing select-none",
             )}
-            {...(isMobile ? { onTouchStart, onTouchMove, onTouchEnd } : {})}
+            {...(swipeEnabled ? { onTouchStart, onTouchMove, onTouchEnd } : {})}
           >
             {/* Cada página se remonta con su animación de entrada */}
             <motion.div

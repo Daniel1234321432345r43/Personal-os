@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { formatDate } from "@/lib/format";
 import { SubjectForm } from "@/components/forms/subject-form";
 import { TaskForm } from "@/components/forms/task-form";
@@ -85,11 +86,18 @@ export function AcademicClient() {
           </Button>
         </CardHeader>
         <CardContent>
-          {showSubject && (
-            <div className="mb-4 rounded-lg border bg-muted/30 p-4">
-              <SubjectForm onDone={() => setShowSubject(false)} />
-            </div>
-          )}
+          {/* Escritorio: formulario inline (como antes) */}
+          <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
+            {showSubject && <SubjectForm onDone={() => setShowSubject(false)} />}
+          </div>
+          {/* Móvil: bottom sheet */}
+          <ResponsiveFormSheet
+            open={showSubject}
+            onOpenChange={setShowSubject}
+            title="Nueva asignatura"
+          >
+            <SubjectForm onDone={() => setShowSubject(false)} />
+          </ResponsiveFormSheet>
 
           {data.subjects.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -123,7 +131,7 @@ export function AcademicClient() {
                         transition: { duration: 0.28, ease: "easeOut" },
                       },
                     }}
-                    className="group relative flex flex-col justify-between rounded-xl border bg-card p-3.5 shadow-xs transition-all hover:border-primary/50 hover:shadow-sm cursor-pointer"
+                    className="group relative flex flex-col justify-between rounded-xl border bg-card p-3.5 shadow-xs transition-all hover:border-primary/50 hover:shadow-sm cursor-pointer active:scale-[0.98]"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -150,7 +158,7 @@ export function AcademicClient() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive opacity-80 group-hover:opacity-100"
+                        className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive opacity-80 group-hover:opacity-100 md:h-7 md:w-7"
                         onClick={(e) => {
                           e.stopPropagation();
                           actions.deleteSubject(subject.id);
@@ -218,11 +226,18 @@ export function AcademicClient() {
           </Button>
         </CardHeader>
         <CardContent>
-          {showTask && (
-            <div className="mb-4 rounded-lg border bg-muted/30 p-4">
-              <TaskForm onDone={() => setShowTask(false)} />
-            </div>
-          )}
+          {/* Escritorio: formulario inline (como antes) */}
+          <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
+            {showTask && <TaskForm onDone={() => setShowTask(false)} />}
+          </div>
+          {/* Móvil: bottom sheet */}
+          <ResponsiveFormSheet
+            open={showTask}
+            onOpenChange={setShowTask}
+            title="Nueva tarea o entrega"
+          >
+            <TaskForm onDone={() => setShowTask(false)} />
+          </ResponsiveFormSheet>
 
           {academicTasks.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -260,7 +275,7 @@ export function AcademicClient() {
                       type="button"
                       onClick={() => actions.toggleTaskDone(task.id)}
                       className={cn(
-                        "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors md:h-5 md:w-5",
                         done
                           ? "border-primary bg-primary text-primary-foreground"
                           : "border-input hover:border-primary",
@@ -307,7 +322,7 @@ export function AcademicClient() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-8 md:w-8"
                       onClick={() => actions.deleteTask(task.id)}
                       title="Eliminar"
                     >

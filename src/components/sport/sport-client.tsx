@@ -5,6 +5,8 @@ import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
+import { MobileCollapsible } from "@/components/ui/mobile-collapsible";
 import { formatDate, formatDuration, todayKey } from "@/lib/format";
 import { WorkoutForm } from "@/components/forms/workout-form";
 import { HabitForm } from "@/components/forms/habit-form";
@@ -79,7 +81,8 @@ export function SportClient() {
         </p>
       </header>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      {/* Métricas: escritorio en cuadrícula (como antes) */}
+      <div className="hidden grid-cols-4 gap-3 lg:grid">
         {stats.map((s) => (
           <Card key={s.label}>
             <CardContent className="p-4">
@@ -90,6 +93,29 @@ export function SportClient() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* Métricas en móvil: tarjeta colapsable con animación de despliegue */}
+      <div className="lg:hidden">
+        <MobileCollapsible
+          title="Resumen"
+          subtitle="Últimos 7 días"
+          icon={<Dumbbell className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+        >
+          <dl className="divide-y">
+            {stats.map((s) => (
+              <div
+                key={s.label}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm"
+              >
+                <dt className="text-muted-foreground">{s.label}</dt>
+                <dd className="shrink-0 font-semibold tracking-tight">
+                  {s.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </MobileCollapsible>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -103,11 +129,18 @@ export function SportClient() {
             </Button>
           </CardHeader>
           <CardContent>
-            {showWorkout && (
-              <div className="mb-4 rounded-lg border bg-muted/30 p-4">
-                <WorkoutForm onDone={() => setShowWorkout(false)} />
-              </div>
-            )}
+            {/* Escritorio: formulario inline (como antes) */}
+            <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
+              {showWorkout && <WorkoutForm onDone={() => setShowWorkout(false)} />}
+            </div>
+            {/* Móvil: bottom sheet */}
+            <ResponsiveFormSheet
+              open={showWorkout}
+              onOpenChange={setShowWorkout}
+              title="Nuevo entrenamiento"
+            >
+              <WorkoutForm onDone={() => setShowWorkout(false)} />
+            </ResponsiveFormSheet>
 
             {sorted.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -145,7 +178,7 @@ export function SportClient() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-8 md:w-8"
                       onClick={() => actions.deleteWorkout(w.id)}
                       title="Eliminar"
                     >
@@ -168,11 +201,18 @@ export function SportClient() {
             </Button>
           </CardHeader>
           <CardContent className="space-y-3">
-            {showHabit && (
-              <div className="rounded-lg border bg-muted/30 p-4">
-                <HabitForm onDone={() => setShowHabit(false)} />
-              </div>
-            )}
+            {/* Escritorio: formulario inline (como antes) */}
+            <div className="hidden rounded-lg border bg-muted/30 p-4 md:block">
+              {showHabit && <HabitForm onDone={() => setShowHabit(false)} />}
+            </div>
+            {/* Móvil: bottom sheet */}
+            <ResponsiveFormSheet
+              open={showHabit}
+              onOpenChange={setShowHabit}
+              title="Nuevo hábito"
+            >
+              <HabitForm onDone={() => setShowHabit(false)} />
+            </ResponsiveFormSheet>
 
             {data.habits.length === 0 ? (
               <p className="text-sm text-muted-foreground">
@@ -194,7 +234,7 @@ export function SportClient() {
                           type="button"
                           onClick={() => actions.toggleHabit(h.id)}
                           className={cn(
-                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                            "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors md:h-5 md:w-5",
                             done
                               ? "border-primary bg-primary text-primary-foreground"
                               : "border-input hover:border-primary",
@@ -216,7 +256,7 @@ export function SportClient() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-7 w-7 shrink-0 text-muted-foreground hover:text-destructive"
+                          className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-7 md:w-7"
                           onClick={() => actions.deleteHabit(h.id)}
                           title="Eliminar hábito"
                         >

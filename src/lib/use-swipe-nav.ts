@@ -7,21 +7,15 @@ import {
   useReducedMotion,
   type MotionStyle,
 } from "framer-motion";
+import { BOTTOM_NAV_ROUTES } from "@/lib/navigation";
 
 /**
  * Rutas en orden para swipe horizontal (solo móvil).
  * Swipe izq → siguiente ruta, swipe der → ruta anterior.
+ * Usa BOTTOM_NAV_ROUTES: la misma fuente que la Bottom Bar, para que el
+ * gesto nunca navegue a rutas que no tienen icono (p. ej. Pomodoro, Notas).
  */
-const SWIPE_ROUTES = [
-  "/dashboard",
-  "/calendar",
-  "/academic",
-  "/pomodoro",
-  "/notes",
-  "/sport",
-  "/finance",
-  "/settings",
-];
+const SWIPE_ROUTES: readonly string[] = BOTTOM_NAV_ROUTES;
 
 export interface SwipeNavResult {
   onTouchStart: (e: React.TouchEvent) => void;
@@ -152,7 +146,11 @@ export function useSwipeNav(
       const currentIndex = SWIPE_ROUTES.findIndex((r) =>
         currentPath.startsWith(r),
       );
-      if (currentIndex === -1) return;
+      if (currentIndex === -1) {
+        // Ruta sin swipe (p. ej. /pomodoro o /notes): vuelve a su sitio sin navegar
+        springBack();
+        return;
+      }
 
       let direction: 1 | -1 | 0 = 0;
       if (dx <= -SWIPE_THRESHOLD || velocity <= -VELOCITY_THRESHOLD) {

@@ -6,10 +6,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
+import { MobileCollapsible } from "@/components/ui/mobile-collapsible";
 import { formatCurrency, formatDate } from "@/lib/format";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { BudgetForm } from "@/components/forms/budget-form";
-import { ArrowDownLeft, ArrowUpRight, Plus, Trash2 } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Plus, Trash2, Wallet } from "lucide-react";
 
 function LoadingState() {
   return (
@@ -57,8 +59,8 @@ export function FinanceClient() {
         </p>
       </header>
 
-      {/* Resumen */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Resumen: escritorio en cuadrícula (como antes) */}
+      <div className="hidden grid-cols-3 gap-3 sm:grid">
         {summary.map((s) => (
           <Card key={s.label}>
             <CardContent className="p-4">
@@ -77,6 +79,35 @@ export function FinanceClient() {
         ))}
       </div>
 
+      {/* Resumen en móvil: tarjeta colapsable con animación de despliegue */}
+      <div className="sm:hidden">
+        <MobileCollapsible
+          title="Resumen del mes"
+          subtitle="Ingresos, gastos y balance"
+          icon={<Wallet className="h-4 w-4 text-primary" />}
+        >
+          <dl className="divide-y">
+            {summary.map((s) => (
+              <div
+                key={s.label}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm"
+              >
+                <dt className="text-muted-foreground">{s.label}</dt>
+                <dd
+                  className={`shrink-0 font-semibold tracking-tight ${
+                    s.positive
+                      ? "text-emerald-600 dark:text-emerald-400"
+                      : "text-red-600 dark:text-red-400"
+                  }`}
+                >
+                  {formatCurrency(s.value)}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </MobileCollapsible>
+      </div>
+
       {/* Presupuesto */}
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
@@ -90,31 +121,46 @@ export function FinanceClient() {
           </Button>
         </CardHeader>
         <CardContent>
-          {showBudget ? (
-            <BudgetForm onDone={() => setShowBudget(false)} />
-          ) : budget == null ? (
-            <p className="text-sm text-muted-foreground">
-              No has definido un presupuesto mensual. Defínelo para controlar
-              tus gastos.
-            </p>
-          ) : (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">
-                  Gastado {formatCurrency(expenses)} de {formatCurrency(budget)}
-                </span>
-                <span className="font-medium">{budgetUsed}%</span>
-              </div>
-              <Progress value={budgetUsed ?? 0} />
-              <p className="text-xs text-muted-foreground">
-                Te quedan{" "}
-                <span className="font-medium text-foreground">
-                  {formatCurrency(Math.max(0, budget - expenses))}
-                </span>{" "}
-                disponibles este mes.
+          {/* Resumen del presupuesto (en escritorio se oculta mientras se edita) */}
+          {!showBudget &&
+            (budget == null ? (
+              <p className="text-sm text-muted-foreground">
+                No has definido un presupuesto mensual. Defínelo para controlar
+                tus gastos.
               </p>
+            ) : (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">
+                    Gastado {formatCurrency(expenses)} de {formatCurrency(budget)}
+                  </span>
+                  <span className="font-medium">{budgetUsed}%</span>
+                </div>
+                <Progress value={budgetUsed ?? 0} />
+                <p className="text-xs text-muted-foreground">
+                  Te quedan{" "}
+                  <span className="font-medium text-foreground">
+                    {formatCurrency(Math.max(0, budget - expenses))}
+                  </span>{" "}
+                  disponibles este mes.
+                </p>
+              </div>
+            ))}
+
+          {/* Escritorio: formulario inline (como antes) */}
+          {showBudget && (
+            <div className="hidden md:block">
+              <BudgetForm onDone={() => setShowBudget(false)} />
             </div>
           )}
+          {/* Móvil: bottom sheet */}
+          <ResponsiveFormSheet
+            open={showBudget}
+            onOpenChange={setShowBudget}
+            title="Presupuesto mensual"
+          >
+            <BudgetForm onDone={() => setShowBudget(false)} />
+          </ResponsiveFormSheet>
         </CardContent>
       </Card>
 
@@ -128,11 +174,18 @@ export function FinanceClient() {
           </Button>
         </CardHeader>
         <CardContent>
-          {showTx && (
-            <div className="mb-4 rounded-lg border bg-muted/30 p-4">
-              <TransactionForm onDone={() => setShowTx(false)} />
-            </div>
-          )}
+          {/* Escritorio: formulario inline (como antes) */}
+          <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
+            {showTx && <TransactionForm onDone={() => setShowTx(false)} />}
+          </div>
+          {/* Móvil: bottom sheet */}
+          <ResponsiveFormSheet
+            open={showTx}
+            onOpenChange={setShowTx}
+            title="Nuevo movimiento"
+          >
+            <TransactionForm onDone={() => setShowTx(false)} />
+          </ResponsiveFormSheet>
 
           {sorted.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -181,7 +234,7 @@ export function FinanceClient() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                      className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-8 md:w-8"
                       onClick={() => actions.deleteTransaction(t.id)}
                       title="Eliminar"
                     >

@@ -49,7 +49,7 @@ export function TodayRoutines() {
                   type="button"
                   onClick={() => actions.toggleHabit(habit.id)}
                   className={cn(
-                    "flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors",
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors md:h-5 md:w-5",
                     done
                       ? "border-primary bg-primary text-primary-foreground"
                       : "border-input hover:border-primary",

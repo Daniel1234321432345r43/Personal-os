@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
-import { useIsMobile } from "@/lib/use-is-mobile";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { formatCurrency, formatDateLong, todayKey } from "@/lib/format";
 import { TaskForm } from "@/components/forms/task-form";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { WorkoutForm } from "@/components/forms/workout-form";
 import { cn } from "@/lib/utils";
-import type { Task, Transaction, Workout, TaskType, TaskPriority, Grade } from "@/lib/types";
+import type { Task, Transaction, Workout } from "@/lib/types";
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -33,7 +33,6 @@ import {
   BookOpen,
   FileText,
   CheckSquare,
-  Award,
 } from "lucide-react";
 
 type FilterType = "all" | "academic" | "tasks" | "finance" | "sport";
@@ -127,15 +126,12 @@ export function CalendarClient() {
 
   const [selectedDate, setSelectedDate] = useState<string>(today);
   const [filter, setFilter] = useState<FilterType>("all");
-  const isMobile = useIsMobile();
-  const [viewMode, setViewMode] = useState<"month" | "week" | "list">("month");
-
-  // En móvil, cambiar a vista semanal la primera vez que se hidrata
-  useEffect(() => {
-    if (hydrated && isMobile && viewMode === "month") {
-      setViewMode("week");
-    }
-  }, [hydrated, isMobile]); // eslint-disable-line react-hooks/exhaustive-deps
+  // En móvil, la vista por defecto es semanal (más legible en pantalla
+  // pequeña); se puede alternar a mensual con el toggle de arriba.
+  const [viewMode, setViewMode] = useState<"month" | "week" | "list">(() => {
+    if (typeof window === "undefined") return "month";
+    return window.matchMedia("(max-width: 767px)").matches ? "week" : "month";
+  });
   const [activeModal, setActiveModal] = useState<"task" | "transaction" | "workout" | null>(null);
 
   const subjectById = useMemo(
@@ -356,7 +352,7 @@ export function CalendarClient() {
               type="button"
               onClick={() => setViewMode("month")}
               className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                "rounded-md px-4 py-2.5 text-xs font-medium transition-colors md:px-3 md:py-1.5",
                 viewMode === "month"
                   ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
@@ -368,7 +364,7 @@ export function CalendarClient() {
               type="button"
               onClick={() => setViewMode("week")}
               className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                "rounded-md px-4 py-2.5 text-xs font-medium transition-colors md:px-3 md:py-1.5",
                 viewMode === "week"
                   ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
@@ -380,7 +376,7 @@ export function CalendarClient() {
               type="button"
               onClick={() => setViewMode("list")}
               className={cn(
-                "rounded-md px-3 py-1.5 text-xs font-medium transition-colors",
+                "rounded-md px-4 py-2.5 text-xs font-medium transition-colors md:px-3 md:py-1.5",
                 viewMode === "list"
                   ? "bg-background text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground",
@@ -390,19 +386,34 @@ export function CalendarClient() {
             </button>
           </div>
 
-          <Button variant="outline" size="sm" onClick={handleGoToday}>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-10 md:h-7"
+            onClick={handleGoToday}
+          >
             Hoy
           </Button>
 
           <div className="flex items-center gap-1">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handlePrevMonth}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 md:h-8 md:w-8"
+              onClick={handlePrevMonth}
+            >
               <ChevronLeft className="h-4 w-4" />
               <span className="sr-only">Mes anterior</span>
             </Button>
             <span className="min-w-[130px] text-center text-sm font-semibold">
               {MONTH_NAMES[currentDate.month]} {currentDate.year}
             </span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleNextMonth}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 md:h-8 md:w-8"
+              onClick={handleNextMonth}
+            >
               <ChevronRight className="h-4 w-4" />
               <span className="sr-only">Mes siguiente</span>
             </Button>
@@ -475,7 +486,7 @@ export function CalendarClient() {
         <Button
           variant={filter === "all" ? "default" : "outline"}
           size="sm"
-          className="h-7 rounded-full text-xs"
+          className="h-10 rounded-full text-xs md:h-7"
           onClick={() => setFilter("all")}
         >
           <Layers className="mr-1 h-3 w-3" />
@@ -484,7 +495,7 @@ export function CalendarClient() {
         <Button
           variant={filter === "academic" ? "default" : "outline"}
           size="sm"
-          className="h-7 rounded-full text-xs"
+          className="h-10 rounded-full text-xs md:h-7"
           onClick={() => setFilter("academic")}
         >
           <GraduationCap className="mr-1 h-3 w-3" />
@@ -493,7 +504,7 @@ export function CalendarClient() {
         <Button
           variant={filter === "tasks" ? "default" : "outline"}
           size="sm"
-          className="h-7 rounded-full text-xs"
+          className="h-10 rounded-full text-xs md:h-7"
           onClick={() => setFilter("tasks")}
         >
           <CheckCircle2 className="mr-1 h-3 w-3" />
@@ -502,7 +513,7 @@ export function CalendarClient() {
         <Button
           variant={filter === "finance" ? "default" : "outline"}
           size="sm"
-          className="h-7 rounded-full text-xs"
+          className="h-10 rounded-full text-xs md:h-7"
           onClick={() => setFilter("finance")}
         >
           <Wallet className="mr-1 h-3 w-3" />
@@ -511,7 +522,7 @@ export function CalendarClient() {
         <Button
           variant={filter === "sport" ? "default" : "outline"}
           size="sm"
-          className="h-7 rounded-full text-xs"
+          className="h-10 rounded-full text-xs md:h-7"
           onClick={() => setFilter("sport")}
         >
           <Dumbbell className="mr-1 h-3 w-3" />
@@ -573,7 +584,7 @@ export function CalendarClient() {
                         type="button"
                         onClick={() => setSelectedDate(cell.key)}
                         className={cn(
-                          "group relative flex min-h-[90px] flex-col rounded-lg border p-1 text-left transition-all sm:min-h-[105px] sm:p-1.5",
+                          "group relative flex min-h-[56px] flex-col rounded-lg border p-1 text-left transition-all md:min-h-[90px] md:p-1.5 lg:min-h-[105px]",
                           cell.isCurrentMonth
                             ? "bg-card hover:bg-muted/40"
                             : "bg-muted/20 text-muted-foreground/60 opacity-60",
@@ -961,7 +972,7 @@ export function CalendarClient() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs"
+                  className="h-11 text-xs md:h-7"
                   onClick={() => setActiveModal((m) => (m === "task" ? null : "task"))}
                 >
                   <Plus className="mr-1 h-3 w-3" />
@@ -970,7 +981,7 @@ export function CalendarClient() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs"
+                  className="h-11 text-xs md:h-7"
                   onClick={() => setActiveModal((m) => (m === "transaction" ? null : "transaction"))}
                 >
                   <Plus className="mr-1 h-3 w-3" />
@@ -979,7 +990,7 @@ export function CalendarClient() {
                 <Button
                   size="sm"
                   variant="outline"
-                  className="h-7 text-xs"
+                  className="h-11 text-xs md:h-7"
                   onClick={() => setActiveModal((m) => (m === "workout" ? null : "workout"))}
                 >
                   <Plus className="mr-1 h-3 w-3" />
@@ -987,9 +998,9 @@ export function CalendarClient() {
                 </Button>
               </div>
 
-              {/* Formularios desplegables */}
+              {/* Formularios desplegables (escritorio: inline; móvil: bottom sheet) */}
               {activeModal === "task" && (
-                <div className="rounded-lg border bg-muted/40 p-3">
+                <div className="hidden rounded-lg border bg-muted/40 p-3 md:block">
                   <p className="mb-2 text-xs font-semibold">Nueva tarea / examen para {selectedDate}:</p>
                   <TaskForm
                     initialDueDate={selectedDate}
@@ -997,9 +1008,19 @@ export function CalendarClient() {
                   />
                 </div>
               )}
+              <ResponsiveFormSheet
+                open={activeModal === "task"}
+                onOpenChange={(open) => !open && setActiveModal(null)}
+                title={`Nueva tarea para ${formatDateLong(selectedDate)}`}
+              >
+                <TaskForm
+                  initialDueDate={selectedDate}
+                  onDone={() => setActiveModal(null)}
+                />
+              </ResponsiveFormSheet>
 
               {activeModal === "transaction" && (
-                <div className="rounded-lg border bg-muted/40 p-3">
+                <div className="hidden rounded-lg border bg-muted/40 p-3 md:block">
                   <p className="mb-2 text-xs font-semibold">Nueva transacción para {selectedDate}:</p>
                   <TransactionForm
                     initialDate={selectedDate}
@@ -1007,9 +1028,19 @@ export function CalendarClient() {
                   />
                 </div>
               )}
+              <ResponsiveFormSheet
+                open={activeModal === "transaction"}
+                onOpenChange={(open) => !open && setActiveModal(null)}
+                title={`Nueva transacción para ${formatDateLong(selectedDate)}`}
+              >
+                <TransactionForm
+                  initialDate={selectedDate}
+                  onDone={() => setActiveModal(null)}
+                />
+              </ResponsiveFormSheet>
 
               {activeModal === "workout" && (
-                <div className="rounded-lg border bg-muted/40 p-3">
+                <div className="hidden rounded-lg border bg-muted/40 p-3 md:block">
                   <p className="mb-2 text-xs font-semibold">Nuevo entrenamiento para {selectedDate}:</p>
                   <WorkoutForm
                     initialDate={selectedDate}
@@ -1017,6 +1048,16 @@ export function CalendarClient() {
                   />
                 </div>
               )}
+              <ResponsiveFormSheet
+                open={activeModal === "workout"}
+                onOpenChange={(open) => !open && setActiveModal(null)}
+                title={`Nuevo entrenamiento para ${formatDateLong(selectedDate)}`}
+              >
+                <WorkoutForm
+                  initialDate={selectedDate}
+                  onDone={() => setActiveModal(null)}
+                />
+              </ResponsiveFormSheet>
 
               {/* Lista de eventos del día */}
               {!selectedDayHasEvents ? (
