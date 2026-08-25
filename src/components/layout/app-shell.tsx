@@ -182,8 +182,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   /* ── Barra inferior móvil (bottom navigation) ──────────────────────── */
   const bottomBar = (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t bg-background/95 px-1 py-1 backdrop-blur-lg lg:hidden"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t bg-background/95 px-3 py-2 backdrop-blur-lg lg:hidden"
+      style={{ paddingBottom: "max(env(safe-area-inset-bottom), 0.5rem)" }}
     >
       {bottomNavItems.map(({ href, label, icon: Icon }) => {
         const active = pathname.startsWith(href);
@@ -192,7 +192,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             key={href}
             href={href}
             className={cn(
-              "relative flex min-h-11 min-w-0 flex-col items-center justify-center gap-0.5 rounded-xl px-2 py-1 text-[10px] font-medium transition-all active:scale-95",
+              "relative flex min-h-12 min-w-0 flex-col items-center justify-center gap-1 rounded-xl px-2 py-1 text-[10px] font-medium transition-all active:scale-95",
               active
                 ? "text-primary"
                 : "text-muted-foreground active:text-foreground",
@@ -205,7 +205,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 transition={pillSpring}
               />
             )}
-            <Icon className="relative z-10 h-5 w-5" />
+            <Icon className="relative z-10 h-6 w-6" />
             <span className="relative z-10 truncate">{label}</span>
           </Link>
         );
@@ -279,7 +279,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Padding inferior en móvil para que el contenido no quede tapado por la bottom bar */}
         <main
-          className="flex-1 pb-16 lg:pb-0"
+          className="flex-1 pb-20 lg:pb-0"
           {...(isMobile
             ? {
                 onTouchStart: pullRefresh.onTouchStart,

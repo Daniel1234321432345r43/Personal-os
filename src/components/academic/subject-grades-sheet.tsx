@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useData } from "@/components/providers/data-provider";
+import { useIsMobile } from "@/lib/use-is-mobile";
 import { computeSubjectGradeStats } from "@/lib/data";
 import {
   Sheet,
@@ -26,7 +27,7 @@ import {
   Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { Subject, Grade, Task } from "@/lib/types";
+import type { Subject, Grade } from "@/lib/types";
 
 interface SubjectGradesSheetProps {
   subject: Subject | null;
@@ -40,6 +41,7 @@ export function SubjectGradesSheet({
   onOpenChange,
 }: SubjectGradesSheetProps) {
   const { data, actions } = useData();
+  const isMobile = useIsMobile();
   const [showAddGrade, setShowAddGrade] = useState(false);
   const [gradeToEdit, setGradeToEdit] = useState<Grade | undefined>(undefined);
   const [prefilledTitle, setPrefilledTitle] = useState("");
@@ -70,8 +72,15 @@ export function SubjectGradesSheet({
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
-        side="right"
-        className="w-full sm:max-w-md md:max-w-lg overflow-y-auto p-4 sm:p-6"
+        /* En móvil abre como bottom sheet a pantalla completa (la base del
+           Sheet fuerza w-3/4 en side=right y aplasta el contenido); en
+           escritorio sigue siendo un panel lateral. */
+        side={isMobile ? "bottom" : "right"}
+        className={
+          isMobile
+            ? "max-h-[92dvh] rounded-t-2xl border-t p-4 sm:p-6"
+            : "w-full sm:max-w-md md:max-w-lg overflow-y-auto p-4 sm:p-6"
+        }
       >
         <SheetHeader className="pb-2 border-b">
           <div className="flex items-center gap-3">

@@ -42,6 +42,7 @@ export function DashboardClient() {
   if (!hydrated) return <LoadingState />;
 
   const assistantName = settings.assistantName?.trim() || "Núcleo";
+  const userName = settings.userName?.trim();
 
   return (
     <div className="space-y-6 p-4 md:p-6 lg:p-8">
@@ -49,7 +50,10 @@ export function DashboardClient() {
         <p className="text-sm text-muted-foreground">
           {formatDateLong(new Date().toISOString())}
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">{greeting()}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          {greeting()}
+          {userName && <span className="text-primary">, {userName}</span>}
+        </h1>
       </header>
 
       <StatCards data={data} />

@@ -15,6 +15,8 @@ export interface AiSettings {
   model: string;
   baseURL: string;
   assistantName?: string;
+  /** Nombre del usuario: saludo personalizado en el dashboard. */
+  userName?: string;
   /** Minutos de sesión de trabajo del temporizador Pomodoro. */
   pomodoroWorkMinutes?: number;
   /** Minutos de descanso del temporizador Pomodoro. */
@@ -27,6 +29,7 @@ export const DEFAULT_SETTINGS: AiSettings = {
   model: "gpt-4o-mini",
   baseURL: "",
   assistantName: "Núcleo",
+  userName: "",
   pomodoroWorkMinutes: 25,
   pomodoroBreakMinutes: 5,
 };
@@ -49,6 +52,8 @@ export function loadSettings(): AiSettings {
       ...DEFAULT_SETTINGS,
       ...parsed,
       assistantName: parsed.assistantName?.trim() || "Núcleo",
+      userName:
+        typeof parsed.userName === "string" ? parsed.userName.trim() : "",
       pomodoroWorkMinutes: clampInt(parsed.pomodoroWorkMinutes, 1, 120, 25),
       pomodoroBreakMinutes: clampInt(parsed.pomodoroBreakMinutes, 1, 60, 5),
     };
