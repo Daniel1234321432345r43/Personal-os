@@ -335,7 +335,7 @@ export function CalendarClient() {
     .filter(Boolean) as { cell: DayCell; events: typeof selectedDayEvents }[];
 
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
       {/* Cabecera */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -421,8 +421,8 @@ export function CalendarClient() {
         </div>
       </header>
 
-      {/* Métricas del mes */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Métricas del mes (en móvil van debajo del calendario) */}
+      <div className="order-3 lg:order-1 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="p-3">
           <div className="flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
@@ -478,8 +478,8 @@ export function CalendarClient() {
         </Card>
       </div>
 
-      {/* Barra de Filtros */}
-      <div className="flex flex-wrap items-center gap-2">
+      {/* Barra de Filtros (en móvil va justo antes del calendario) */}
+      <div className="order-1 lg:order-2 flex flex-wrap items-center gap-2">
         <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
           <ListFilter className="h-3.5 w-3.5" /> Filtrar:
         </span>
@@ -530,8 +530,8 @@ export function CalendarClient() {
         </Button>
       </div>
 
-      {/* Contenido principal: Calendario / Agenda + Panel Lateral */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      {/* Contenido principal: Calendario / Agenda + Panel Lateral (en móvil va primero) */}
+      <div className="order-2 lg:order-3 grid gap-6 lg:grid-cols-3">
         {/* Columna izquierda: Vista del Calendario o Lista */}
         <div className="lg:col-span-2 space-y-4">
           {viewMode === "month" ? (
