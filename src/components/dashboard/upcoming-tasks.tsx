@@ -49,7 +49,7 @@ export function UpcomingTasks({ data }: { data: DashboardData }) {
             return (
               <li
                 key={task.id}
-                className="flex items-center gap-3 rounded-lg border bg-card p-2.5"
+                className="flex items-center gap-3 rounded-lg border bg-card p-2.5 transition-colors motion-safe:hover:bg-muted/50"
               >
                 <span
                   className="h-8 w-1.5 shrink-0 rounded-full"

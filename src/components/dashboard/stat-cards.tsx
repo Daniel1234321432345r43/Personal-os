@@ -71,7 +71,10 @@ export function StatCards({ data }: { data: DashboardData }) {
   return (
     <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
       {cards.map(({ label, value, sub, icon: Icon, tint }) => (
-        <Card key={label}>
+        <Card
+          key={label}
+          className="transition-[box-shadow,transform] duration-200 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md"
+        >
           <CardContent className="flex items-start gap-3 p-4">
             <div
               className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${tint}`}

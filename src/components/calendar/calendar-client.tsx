@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { useIsMobile } from "@/lib/use-is-mobile";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -863,7 +864,16 @@ export function CalendarClient() {
                                       isDone ? "bg-primary text-primary-foreground border-primary" : "border-input",
                                     )}
                                   >
-                                    {isDone && <Check className="h-3 w-3" />}
+                                    {isDone && (
+                                      <motion.span
+                                        initial={{ scale: 0, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ type: "spring", stiffness: 500, damping: 26 }}
+                                        className="flex"
+                                      >
+                                        <Check className="h-3 w-3" />
+                                      </motion.span>
+                                    )}
                                   </button>
                                   <span className={cn(isDone && "line-through text-muted-foreground font-normal", "font-medium")}>
                                     {t.title}
@@ -1049,7 +1059,16 @@ export function CalendarClient() {
                                   )}
                                   title="Marcar como hecha"
                                 >
-                                  {isDone && <Check className="h-3 w-3" />}
+                                  {isDone && (
+                                      <motion.span
+                                        initial={{ scale: 0, opacity: 0 }}
+                                        animate={{ scale: 1, opacity: 1 }}
+                                        transition={{ type: "spring", stiffness: 500, damping: 26 }}
+                                        className="flex"
+                                      >
+                                        <Check className="h-3 w-3" />
+                                      </motion.span>
+                                    )}
                                 </button>
                                 <div className="min-w-0 flex-1">
                                   <p className={cn("font-medium truncate", isDone && "line-through text-muted-foreground")}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { computeSubjectGradeStats } from "@/lib/data";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -95,7 +96,12 @@ export function AcademicClient() {
               No tienes asignaturas. Añade la primera.
             </p>
           ) : (
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <motion.div
+              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              initial="hidden"
+              animate="visible"
+              variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
+            >
               {data.subjects.map((subject) => {
                 const pending = academicTasks.filter(
                   (t) => t.subject_id === subject.id && t.status !== "done",
@@ -106,9 +112,17 @@ export function AcademicClient() {
                 const stats = computeSubjectGradeStats(subjectGrades);
 
                 return (
-                  <div
+                  <motion.div
                     key={subject.id}
                     onClick={() => setSelectedSubject(subject)}
+                    variants={{
+                      hidden: { opacity: 0, y: 16 },
+                      visible: {
+                        opacity: 1,
+                        y: 0,
+                        transition: { duration: 0.28, ease: "easeOut" },
+                      },
+                    }}
                     className="group relative flex flex-col justify-between rounded-xl border bg-card p-3.5 shadow-xs transition-all hover:border-primary/50 hover:shadow-sm cursor-pointer"
                   >
                     <div className="flex items-start justify-between gap-2">
@@ -178,10 +192,10 @@ export function AcademicClient() {
                         </span>
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
+            </motion.div>
           )}
         </CardContent>
       </Card>
@@ -215,15 +229,31 @@ export function AcademicClient() {
               No hay tareas académicas todavía.
             </p>
           ) : (
-            <ul className="divide-y">
+            <motion.ul
+              className="divide-y"
+              initial="hidden"
+              animate="visible"
+              variants={{ visible: { transition: { staggerChildren: 0.045 } } }}
+            >
+              <AnimatePresence initial={false}>
               {academicTasks.map((task) => {
                 const subject = task.subject_id
                   ? subjectById.get(task.subject_id)
                   : null;
                 const done = task.status === "done";
                 return (
-                  <li
+                  <motion.li
                     key={task.id}
+                    layout
+                    variants={{
+                      hidden: { opacity: 0, x: -14 },
+                      visible: {
+                        opacity: 1,
+                        x: 0,
+                        transition: { duration: 0.25 },
+                      },
+                    }}
+                    exit={{ opacity: 0, x: 24, transition: { duration: 0.18 } }}
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <button
@@ -238,7 +268,16 @@ export function AcademicClient() {
                       aria-pressed={done}
                       aria-label={`Completar ${task.title}`}
                     >
-                      {done && <Check className="h-3.5 w-3.5" />}
+                      {done && (
+                        <motion.span
+                          initial={{ scale: 0, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ type: "spring", stiffness: 500, damping: 26 }}
+                          className="flex"
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                        </motion.span>
+                      )}
                     </button>
 
                     <span
@@ -274,10 +313,11 @@ export function AcademicClient() {
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>
-                  </li>
+                  </motion.li>
                 );
               })}
-            </ul>
+              </AnimatePresence>
+            </motion.ul>
           )}
         </CardContent>
       </Card>

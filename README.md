@@ -20,6 +20,7 @@ PWA (Progressive Web App) que funciona como un **Sistema Operativo Personal** co
 - **Tailwind CSS v4** y **shadcn/ui v5**
 - **Supabase** para PostgreSQL, autenticación y sincronización de datos
 - **Vercel AI SDK v7** con proveedores configurables
+- **Framer Motion** para animaciones e interacciones
 - **Google OAuth 2.0** para login y, opcionalmente, Google Classroom
 - PWA instalable mediante Web App Manifest
 
@@ -337,6 +338,17 @@ npm run vapid:keys   # Generar claves VAPID para notificaciones push
 node scripts/test-web-push.mjs  # Prueba end-to-end del protocolo Web Push
 node scripts/test-reminder-time.mjs  # Pruebas de las utilidades de fecha/hora de recordatorios
 ```
+
+## Animaciones e interacción
+
+Todas las animaciones se apoyan en **Framer Motion** y respetan `prefers-reduced-motion`.
+
+- **Swipe gestual en móvil**: el contenido de la página sigue al dedo 1:1 al deslizar entre secciones (Hoy → Calendario → Estudios → …). Al soltar por debajo del umbral vuelve con un rebote elástico; si supera el umbral (o hay velocidad de lanzamiento), la página sale deslizada y la siguiente entra desde el lado contrario. Los umbrales y la resistencia se ajustan en `src/lib/use-swipe-nav.ts`.
+- **Transiciones de página**: cada navegación anima la entrada de la nueva página (fade + subida suave, o deslizamiento direccional si vienes de un swipe).
+- **Navegación**: la sidebar de escritorio y la barra inferior móvil tienen una píldora animada (layout animation) que se desliza hasta el elemento activo.
+- **Micro-interacciones**: los botones se comprimen al pulsar, las tarjetas del dashboard se elevan al pasar el ratón y los checks de tareas aparecen con un efecto de resorte.
+- **Transiciones de tareas**: las listas de tareas entran escalonadas y animan su salida al eliminarse (con reflujo suave del resto).
+- **Pomodoro**: anillo de progreso animado, halo que respira mientras corre, pulso al completar cada sesión, cambio animado entre modo trabajo/descanso y contador de pomodoros con rebote.
 
 ## PWA
 

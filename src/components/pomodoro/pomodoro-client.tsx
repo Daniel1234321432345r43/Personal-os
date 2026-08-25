@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
 import { registerServiceWorker } from "@/lib/push";
@@ -100,6 +101,8 @@ export function PomodoroClient() {
   const [running, setRunning] = useState(false);
   const [taskId, setTaskId] = useState("");
   const [completedSessions, setCompletedSessions] = useState(0);
+  const [completedFlash, setCompletedFlash] = useState(false);
+  const reduceMotion = useReducedMotion();
 
   const completedRef = useRef(false);
   const originalTitleRef = useRef<string | null>(null);
@@ -138,6 +141,8 @@ export function PomodoroClient() {
     if (completedRef.current) return;
     completedRef.current = true;
 
+    setCompletedFlash(true);
+    window.setTimeout(() => setCompletedFlash(false), 900);
 
 
     const wasWork = mode === "work";
@@ -320,6 +325,29 @@ export function PomodoroClient() {
           <CardContent className="flex flex-col items-center gap-6 py-8">
             {/* Anillo de progreso + tiempo */}
             <div className="relative h-56 w-56">
+              {/* Halo que respira mientras corre */}
+              <motion.div
+                aria-hidden
+                className="pointer-events-none absolute -inset-5 rounded-full"
+                style={{
+                  background:
+                    mode === "work"
+                      ? "radial-gradient(circle, color-mix(in oklch, var(--primary) 14%, transparent), transparent 70%)"
+                      : "radial-gradient(circle, rgba(16, 185, 129, 0.14), transparent 70%)",
+                }}
+                initial={{ opacity: 0.35, scale: 1 }}
+                animate={
+                  running && !reduceMotion
+                    ? { opacity: [0.45, 0.9, 0.45], scale: [1, 1.03, 1] }
+                    : { opacity: 0.35, scale: 1 }
+                }
+                transition={
+                  running && !reduceMotion
+                    ? { duration: 3.2, repeat: Infinity, ease: "easeInOut" }
+                    : { duration: 0.4 }
+                }
+              />
+
               <svg viewBox="0 0 200 200" className="h-full w-full -rotate-90">
                 <circle
                   cx="100"
@@ -329,7 +357,7 @@ export function PomodoroClient() {
                   strokeWidth="10"
                   className="stroke-muted"
                 />
-                <circle
+                <motion.circle
                   cx="100"
                   cy="100"
                   r="90"
@@ -337,14 +365,23 @@ export function PomodoroClient() {
                   strokeWidth="10"
                   strokeLinecap="round"
                   strokeDasharray={circumference}
-                  strokeDashoffset={dashOffset}
+                  initial={false}
+                  animate={{ strokeDashoffset: dashOffset }}
+                  transition={{ duration: 1, ease: "linear" }}
                   className={cn(
-                    "transition-[stroke-dashoffset] duration-1000 ease-linear",
+                    "transition-colors",
                     mode === "work" ? "stroke-primary" : "stroke-emerald-500",
                   )}
                 />
               </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1">
+
+              <motion.div
+                className="absolute inset-0 flex flex-col items-center justify-center gap-1"
+                animate={completedFlash ? { scale: [1, 1.07, 1] } : { scale: 1 }}
+                transition={
+                  completedFlash ? { duration: 0.6, ease: "easeOut" } : { duration: 0.3 }
+                }
+              >
                 <span
                   className={cn(
                     "text-5xl font-bold tabular-nums tracking-tight",
@@ -355,28 +392,45 @@ export function PomodoroClient() {
                 >
                   {fmt(secondsLeft)}
                 </span>
-                <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                  {mode === "work" ? (
-                    <>
-                      <TimerIcon className="h-4 w-4 text-primary" />
-                      Trabajo
-                    </>
-                  ) : (
-                    <>
-                      <Coffee className="h-4 w-4 text-emerald-500" />
-                      Descanso
-                    </>
-                  )}
-                </span>
-              </div>
+                <AnimatePresence mode="wait" initial={false}>
+                  <motion.span
+                    key={mode}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -6 }}
+                    transition={{ duration: 0.16 }}
+                    className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground"
+                  >
+                    {mode === "work" ? (
+                      <>
+                        <TimerIcon className="h-4 w-4 text-primary" />
+                        Trabajo
+                      </>
+                    ) : (
+                      <>
+                        <Coffee className="h-4 w-4 text-emerald-500" />
+                        Descanso
+                      </>
+                    )}
+                  </motion.span>
+                </AnimatePresence>
+              </motion.div>
             </div>
 
-            {selectedTask && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                <BellRing className="h-3.5 w-3.5" />
-                Trabajando en: {selectedTask.title}
-              </span>
-            )}
+            <AnimatePresence initial={false}>
+              {selectedTask && (
+                <motion.span
+                  initial={{ opacity: 0, y: 8, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                  transition={{ duration: 0.2 }}
+                  className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
+                >
+                  <BellRing className="h-3.5 w-3.5" />
+                  Trabajando en: {selectedTask.title}
+                </motion.span>
+              )}
+            </AnimatePresence>
 
             {/* Selector de tarea */}
             <div className={cn(fieldClass, "w-full max-w-md")}>
@@ -417,7 +471,15 @@ export function PomodoroClient() {
 
             <p className="text-sm text-muted-foreground">
               🍅 Pomodoros completados en esta sesión:{" "}
-              <span className="font-semibold text-foreground">{completedSessions}</span>
+              <motion.span
+                key={completedSessions}
+                initial={{ scale: 1.35 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 500, damping: 20 }}
+                className="inline-block font-semibold text-foreground"
+              >
+                {completedSessions}
+              </motion.span>
             </p>
           </CardContent>
         </Card>

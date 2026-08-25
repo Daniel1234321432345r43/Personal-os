@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,18 @@ const navItems = [
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];
 
+const bottomNavItems = [
+  { href: "/dashboard", label: "Hoy", icon: LayoutDashboard },
+  { href: "/calendar", label: "Calendario", icon: Calendar },
+  { href: "/academic", label: "Estudios", icon: GraduationCap },
+  { href: "/sport", label: "Deporte", icon: Dumbbell },
+  { href: "/finance", label: "Finanzas", icon: Wallet },
+  { href: "/settings", label: "Ajustes", icon: Settings },
+];
+
+/** Física de la pill del elemento activo */
+const pillSpring = { type: "spring", stiffness: 500, damping: 35, mass: 0.9 } as const;
+
 function Brand() {
   return (
     <Link href="/dashboard" className="flex items-center gap-2.5">
@@ -51,18 +64,10 @@ function Brand() {
   );
 }
 
-const bottomNavItems = [
-  { href: "/dashboard", label: "Hoy", icon: LayoutDashboard },
-  { href: "/calendar", label: "Calendario", icon: Calendar },
-  { href: "/academic", label: "Estudios", icon: GraduationCap },
-  { href: "/sport", label: "Deporte", icon: Dumbbell },
-  { href: "/finance", label: "Finanzas", icon: Wallet },
-  { href: "/settings", label: "Ajustes", icon: Settings },
-];
-
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
   const configured = isSupabaseConfigured();
   const [email, setEmail] = useState<string | null>(null);
 
@@ -84,6 +89,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   const pullRefresh = usePullRefresh(handleRefresh, isMobile);
   const swipeNav = useSwipeNav((href) => router.push(href), pathname, isMobile);
+  const { onTouchStart, onTouchMove, onTouchEnd, style, dragging, lastDirection } =
+    swipeNav;
 
   async function handleSignOut() {
     await createClient().auth.signOut();
@@ -91,7 +98,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     router.refresh();
   }
 
-  const nav = (
+  const nav = (pillId: string) => (
     <nav className="flex flex-col gap-1">
       {navItems.map(({ href, label, icon: Icon }) => {
         const active = pathname.startsWith(href);
@@ -100,14 +107,21 @@ export function AppShell({ children }: { children: ReactNode }) {
             key={href}
             href={href}
             className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+              "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               active
-                ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                ? "text-sidebar-accent-foreground"
                 : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
             )}
           >
-            <Icon className="h-4 w-4" />
-            {label}
+            {active && (
+              <motion.span
+                layoutId={pillId}
+                className="absolute inset-0 rounded-lg bg-sidebar-accent"
+                transition={pillSpring}
+              />
+            )}
+            <Icon className="relative z-10 h-4 w-4" />
+            <span className="relative z-10">{label}</span>
           </Link>
         );
       })}
@@ -158,7 +172,10 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   /* ── Barra inferior móvil (bottom navigation) ──────────────────────── */
   const bottomBar = (
-    <nav className="fixed bottom-0 inset-x-0 z-30 flex items-center justify-around border-t bg-background/95 px-1 py-1 backdrop-blur-lg lg:hidden" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
+    <nav
+      className="fixed inset-x-0 bottom-0 z-30 flex items-center justify-around border-t bg-background/95 px-1 py-1 backdrop-blur-lg lg:hidden"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
       {bottomNavItems.map(({ href, label, icon: Icon }) => {
         const active = pathname.startsWith(href);
         return (
@@ -166,26 +183,49 @@ export function AppShell({ children }: { children: ReactNode }) {
             key={href}
             href={href}
             className={cn(
-              "flex flex-col items-center gap-0.5 rounded-lg px-2 py-1 text-[10px] font-medium transition-colors min-w-0",
+              "relative flex min-w-0 flex-col items-center gap-0.5 rounded-xl px-2 py-1 text-[10px] font-medium transition-all active:scale-95",
               active
                 ? "text-primary"
                 : "text-muted-foreground active:text-foreground",
             )}
           >
-            <Icon className="h-5 w-5" />
-            <span className="truncate">{label}</span>
+            {active && (
+              <motion.span
+                layoutId="bottom-nav-pill"
+                className="absolute inset-0 rounded-xl bg-primary/10"
+                transition={pillSpring}
+              />
+            )}
+            <Icon className="relative z-10 h-5 w-5" />
+            <span className="relative z-10 truncate">{label}</span>
           </Link>
         );
       })}
     </nav>
   );
 
+  /* ── Transición de entrada de cada página ──────────────────────────── */
+  const entranceInitial = reduceMotion
+    ? false
+    : lastDirection === 1
+      ? { opacity: 0, x: "-10%" } // volvió → entra desde la izquierda
+      : lastDirection === -1
+        ? { opacity: 0, x: "10%" } // avanzó → entra desde la derecha
+        : { opacity: 0, y: 14 }; // navegación normal → sube suavemente
+
+  const entranceTransition = reduceMotion
+    ? { duration: 0 }
+    : {
+        duration: 0.38,
+        ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number],
+      };
+
   return (
     <div className="flex min-h-screen bg-background">
       {/* Sidebar de escritorio */}
       <aside className="hidden w-64 shrink-0 flex-col gap-6 border-r bg-sidebar p-4 lg:flex">
         <Brand />
-        {nav}
+        {nav("sidebar-pill")}
         <div className="mt-auto">{footer}</div>
       </aside>
 
@@ -201,7 +241,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </SheetTrigger>
             <SheetContent side="left" className="flex w-64 flex-col gap-6 p-4">
               <Brand />
-              {nav}
+              {nav("sheet-pill")}
               <div className="mt-auto">{footer}</div>
             </SheetContent>
           </Sheet>
@@ -231,9 +271,35 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Padding inferior en móvil para que el contenido no quede tapado por la bottom bar */}
         <main
           className="flex-1 pb-16 lg:pb-0"
-          {...(isMobile ? { ...pullRefresh, ...swipeNav } : {})}
+          {...(isMobile
+            ? {
+                onTouchStart: pullRefresh.onTouchStart,
+                onTouchMove: pullRefresh.onTouchMove,
+                onTouchEnd: pullRefresh.onTouchEnd,
+              }
+            : {})}
         >
-          {children}
+          {/* Superficie de swipe: sigue al dedo (solo móvil) */}
+          <motion.div
+            style={isMobile ? style : undefined}
+            className={cn(
+              "min-h-full",
+              isMobile && "touch-pan-y overscroll-x-none",
+              dragging && "cursor-grabbing select-none",
+            )}
+            {...(isMobile ? { onTouchStart, onTouchMove, onTouchEnd } : {})}
+          >
+            {/* Cada página se remonta con su animación de entrada */}
+            <motion.div
+              key={pathname}
+              initial={entranceInitial}
+              animate={{ opacity: 1, x: 0, y: 0 }}
+              transition={entranceTransition}
+              className="min-h-full"
+            >
+              {children}
+            </motion.div>
+          </motion.div>
         </main>
       </div>
 
