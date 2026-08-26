@@ -4,13 +4,15 @@ import { isSupabaseConfigured } from "@/lib/env";
 
 /**
  * Proxy (antes "middleware") de Next.js 16.
- * Refresca la sesión de Supabase y protege las rutas de la app.
+ * Refresca la sesión de Supabase (rotación de cookies).
  *
- * Nota: esto NO es autorización completa; solo un chequeo optimista. La
+ * Nota: NO protege rutas a propósito. La app funciona en modo local sin
+ * sesión (botón "Hacer más tarde" del onboarding), y la redirección del
+ * primer acceso a /login la gestiona OnboardingGate en el cliente. La
  * autorización real la impone Supabase mediante Row Level Security.
  */
 export async function proxy(request: NextRequest) {
-  // Sin Supabase configurado → modo demo, sin protección.
+  // Sin Supabase configurado → modo demo.
   if (!isSupabaseConfigured()) {
     return NextResponse.next();
   }
@@ -38,23 +40,8 @@ export async function proxy(request: NextRequest) {
     },
   );
 
-  // Refresca la sesión si expiró.
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  const isProtected =
-    request.nextUrl.pathname.startsWith("/dashboard") ||
-    request.nextUrl.pathname.startsWith("/academic") ||
-    request.nextUrl.pathname.startsWith("/sport") ||
-    request.nextUrl.pathname.startsWith("/finance");
-
-  if (!user && isProtected) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", request.nextUrl.pathname);
-    return NextResponse.redirect(url);
-  }
+  // Refresca la sesión si expiró (renueva las cookies de sesión).
+  await supabase.auth.getUser();
 
   return supabaseResponse;
 }
