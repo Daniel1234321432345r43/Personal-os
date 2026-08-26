@@ -54,6 +54,11 @@ export default function LoginPage() {
             setCheckingSession(false);
           }
         }
+      })
+      .catch(() => {
+        // Si la verificación de sesión falla (red, Supabase caído...),
+        // mostrar el login en lugar de quedarnos en la pantalla de carga.
+        if (!cancelled) setCheckingSession(false);
       });
     return () => {
       cancelled = true;
