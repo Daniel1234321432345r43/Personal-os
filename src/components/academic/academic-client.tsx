@@ -282,7 +282,7 @@ export function AcademicClient() {
               animate="visible"
               variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
             >
-              <AnimatePresence initial={false}>
+              <AnimatePresence initial={academicTasks.length === 0}>
               {academicTasks.map((task) => {
                 const subject = task.subject_id
                   ? subjectById.get(task.subject_id)
@@ -293,17 +293,17 @@ export function AcademicClient() {
                     key={task.id}
                     layout
                     variants={{
-                      hidden: { opacity: 0, x: -18 },
+                      hidden: { opacity: 0, x: -22 },
                       visible: {
                         opacity: 1,
                         x: 0,
-                        transition: { duration: 0.45, ease: "easeOut" },
+                        transition: { duration: 0.55, ease: "easeOut" },
                       },
                     }}
                     exit={{
                       opacity: 0,
-                      x: 32,
-                      transition: { duration: 0.4, ease: "easeInOut" },
+                      x: 40,
+                      transition: { duration: 0.55, ease: "easeInOut" },
                     }}
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                   >

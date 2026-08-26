@@ -474,7 +474,7 @@ export function SecretaryChat() {
   const assistantName = settings.assistantName?.trim() || "Núcleo";
 
   return (
-    <Card className="lg:col-span-2">
+    <Card className="bg-muted/40 lg:col-span-2">
       {/* Cabecera SIEMPRE visible: el botón de colapsar nunca cambia de sitio */}
       <CardHeader className="pb-3">
         <button
@@ -501,7 +501,7 @@ export function SecretaryChat() {
           <motion.span
             animate={{ rotate: collapsed ? 0 : 180 }}
             transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground active:scale-95"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground active:scale-95"
           >
             <ChevronDown className="h-4 w-4" />
           </motion.span>
@@ -567,14 +567,14 @@ export function SecretaryChat() {
                 )}
               >
                 {isUser && (
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-foreground">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted/70 text-foreground">
                     <span className="text-xs font-semibold">Tú</span>
                   </div>
                 )}
                 <div
                   className={cn(
                     "max-w-[85%] rounded-2xl px-3 py-2 text-sm",
-                    isUser ? "bg-primary text-primary-foreground" : "bg-muted",
+                    isUser ? "bg-primary text-primary-foreground" : "bg-muted/70",
                   )}
                 >
                   {toolParts.map((part, idx) => (

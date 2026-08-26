@@ -188,27 +188,22 @@ export function FinanceClient() {
             <TransactionForm onDone={() => setShowTx(false)} />
           </ResponsiveFormSheet>
 
-          {sorted.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              No hay movimientos. Añade tu primer ingreso o gasto.
-            </p>
-          ) : (
-            <ul className="divide-y">
-              <AnimatePresence initial={false}>
-              {sorted.map((t) => {
-                const isIncome = t.type === "income";
-                return (
-                  <motion.li
-                    key={t.id}
-                    layout
-                    initial={{ opacity: 0, y: -14, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{
-                      opacity: 0,
-                      x: 32,
-                      transition: { duration: 0.4, ease: "easeInOut" },
-                    }}
-                    transition={{ duration: 0.45, ease: "easeOut" }}
+          <ul className="divide-y">
+            <AnimatePresence initial={sorted.length === 0}>
+            {sorted.map((t) => {
+              const isIncome = t.type === "income";
+              return (
+                <motion.li
+                  key={t.id}
+                  layout
+                  initial={{ opacity: 0, y: -18, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{
+                    opacity: 0,
+                    x: 40,
+                    transition: { duration: 0.55, ease: "easeInOut" },
+                  }}
+                  transition={{ duration: 0.55, ease: "easeOut" }}
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div
@@ -256,7 +251,11 @@ export function FinanceClient() {
               })}
               </AnimatePresence>
             </ul>
-          )}
+            {sorted.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                No hay movimientos. Añade tu primer ingreso o gasto.
+              </p>
+            )}
         </CardContent>
       </Card>
     </div>

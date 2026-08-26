@@ -145,19 +145,19 @@ export function SportClient() {
 
             <>
               <ul className="divide-y">
-                <AnimatePresence initial={false}>
+                <AnimatePresence initial={sorted.length === 0}>
                 {sorted.map((w) => (
                   <motion.li
                     key={w.id}
                     layout
-                    initial={{ opacity: 0, y: -14, scale: 0.97 }}
+                    initial={{ opacity: 0, y: -18, scale: 0.96 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{
                       opacity: 0,
-                      x: 32,
-                      transition: { duration: 0.4, ease: "easeInOut" },
+                      x: 40,
+                      transition: { duration: 0.55, ease: "easeInOut" },
                     }}
-                    transition={{ duration: 0.45, ease: "easeOut" }}
+                    transition={{ duration: 0.55, ease: "easeOut" }}
                     className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                   >
                     <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
@@ -227,33 +227,28 @@ export function SportClient() {
               <HabitForm onDone={() => setShowHabit(false)} />
             </ResponsiveFormSheet>
 
-            {data.habits.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                Sin hábitos. Añade uno para empezar a seguirlo.
+            <div>
+              <p className="mb-2 text-sm text-muted-foreground">
+                {completedToday} de {data.habits.length} completados hoy.
               </p>
-            ) : (
-              <div>
-                <p className="mb-2 text-sm text-muted-foreground">
-                  {completedToday} de {data.habits.length} completados hoy.
-                </p>
-                <ul className="space-y-1">
-                  <AnimatePresence initial={false}>
-                  {data.habits.map((h) => {
-                    const done = data.habitCompletions.some(
-                      (c) => c.habit_id === h.id && c.completed_on === today,
-                    );
-                    return (
-                      <motion.li
-                        key={h.id}
-                        layout
-                        initial={{ opacity: 0, y: -14, scale: 0.97 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        exit={{
-                          opacity: 0,
-                          x: 32,
-                          transition: { duration: 0.4, ease: "easeInOut" },
-                        }}
-                        transition={{ duration: 0.45, ease: "easeOut" }}
+              <ul className="space-y-1">
+                <AnimatePresence initial={data.habits.length === 0}>
+                {data.habits.map((h) => {
+                  const done = data.habitCompletions.some(
+                    (c) => c.habit_id === h.id && c.completed_on === today,
+                  );
+                  return (
+                    <motion.li
+                      key={h.id}
+                      layout
+                      initial={{ opacity: 0, y: -18, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{
+                        opacity: 0,
+                        x: 40,
+                        transition: { duration: 0.55, ease: "easeInOut" },
+                      }}
+                      transition={{ duration: 0.55, ease: "easeOut" }}
                         className="flex items-center gap-2"
                       >
                         <button
@@ -303,9 +298,13 @@ export function SportClient() {
                       </motion.li>
                     );
                   })}
-                  </AnimatePresence>
-                </ul>
-              </div>
+                </AnimatePresence>
+              </ul>
+            </div>
+            {data.habits.length === 0 && (
+              <p className="text-sm text-muted-foreground">
+                Sin hábitos. Añade uno para empezar a seguirlo.
+              </p>
             )}
           </CardContent>
         </Card>

@@ -90,7 +90,7 @@ export function StatCards({ data }: { data: DashboardData }) {
   // Press / hover con física suave; la entrada a la pestaña la anima AppShell.
   const cardSpring = { type: "spring", stiffness: 500, damping: 32 } as const;
   const cardClass =
-    "flex flex-col rounded-xl border bg-card p-3.5 transition-shadow duration-200 ease-out motion-safe:hover:shadow-md";
+    "flex flex-col rounded-xl border bg-muted/40 p-3.5 transition-shadow duration-200 ease-out motion-safe:hover:shadow-md";
 
   return (
     <>
@@ -203,7 +203,7 @@ export function StatCards({ data }: { data: DashboardData }) {
         {cards.map(({ label, value, sub, icon: Icon, tint }) => (
           <Card
             key={label}
-            className="transition-[box-shadow,transform] duration-200 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md"
+            className="bg-muted/40 transition-[box-shadow,transform] duration-200 ease-out motion-safe:hover:-translate-y-0.5 motion-safe:hover:shadow-md"
           >
             <CardContent className="flex items-start gap-3 p-4">
               <div

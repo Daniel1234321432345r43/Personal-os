@@ -63,13 +63,13 @@ export function DashboardClient() {
 
         {/* Columna derecha */}
         <div className="space-y-6">
-          <Card>
+          <Card className="bg-muted/40">
             <CardContent className="pt-4">
               <TodayRoutines />
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="bg-muted/40">
             <CardContent className="pt-4">
               <UpcomingTasks data={data} />
             </CardContent>

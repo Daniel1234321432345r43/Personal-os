@@ -1068,22 +1068,31 @@ export function CalendarClient() {
                 exit={{ opacity: 0, y: -8 }}
                 transition={{ duration: 0.35, ease: "easeOut" }}
               >
-              {!selectedDayHasEvents ? (
-                <div className="py-8 text-center text-sm text-muted-foreground">
-                  <CalendarIcon className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
-                  No hay eventos registrados para este día.
-                </div>
-              ) : (
-                <div className="space-y-4 divide-y">
+              <div
+                className={cn(
+                  "py-8 text-center text-sm text-muted-foreground",
+                  selectedDayHasEvents && "hidden",
+                )}
+              >
+                <CalendarIcon className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
+                No hay eventos registrados para este día.
+              </div>
+
+              <div className="space-y-4 divide-y">
                   {/* Exámenes y entregas */}
-                  {(selectedDayEvents.exams.length > 0 ||
-                    selectedDayEvents.assignments.length > 0 ||
-                    selectedDayEvents.tasks.length > 0 ||
-                    selectedDayEvents.studySessions.length > 0) && (
-                    <div className="space-y-2 pt-2 first:pt-0">
+                  <div
+                    className={cn(
+                      "space-y-2 pt-2 first:pt-0",
+                      selectedDayEvents.exams.length === 0 &&
+                        selectedDayEvents.assignments.length === 0 &&
+                        selectedDayEvents.tasks.length === 0 &&
+                        selectedDayEvents.studySessions.length === 0 &&
+                        "hidden",
+                    )}
+                  >
                       <p className="text-xs font-semibold text-muted-foreground">Estudios y tareas</p>
                       <ul className="space-y-2">
-                        <AnimatePresence initial={false}>
+                        <AnimatePresence initial={true}>
                         {[
                           ...selectedDayEvents.exams,
                           ...selectedDayEvents.assignments,
@@ -1096,10 +1105,10 @@ export function CalendarClient() {
                             <motion.li
                               key={t.id}
                               layout
-                              initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                              initial={{ opacity: 0, y: -16, scale: 0.96 }}
                               animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, x: 24, transition: { duration: 0.35, ease: "easeInOut" } }}
-                              transition={{ duration: 0.4, ease: "easeOut" }}
+                              exit={{ opacity: 0, x: 40, transition: { duration: 0.55, ease: "easeInOut" } }}
+                              transition={{ duration: 0.55, ease: "easeOut" }}
                               className="flex items-start justify-between gap-2 rounded-lg border bg-card p-2.5 text-xs"
                             >
                               <div className="flex items-start gap-2 min-w-0 flex-1">
@@ -1175,11 +1184,16 @@ export function CalendarClient() {
                         </AnimatePresence>
                       </ul>
                     </div>
-                  )}
 
                   {/* Finanzas */}
-                  {(selectedDayEvents.incomes.length > 0 || selectedDayEvents.expenses.length > 0) && (
-                    <div className="space-y-2 pt-3">
+                  <div
+                    className={cn(
+                      "space-y-2 pt-3",
+                      selectedDayEvents.incomes.length === 0 &&
+                        selectedDayEvents.expenses.length === 0 &&
+                        "hidden",
+                    )}
+                  >
                       <div className="flex items-center justify-between text-xs">
                         <span className="font-semibold text-muted-foreground">Finanzas del día</span>
                         <span className={cn("font-bold", dayNet >= 0 ? "text-emerald-600" : "text-rose-600")}>
@@ -1188,15 +1202,15 @@ export function CalendarClient() {
                         </span>
                       </div>
                       <ul className="space-y-1.5">
-                        <AnimatePresence initial={false}>
+                        <AnimatePresence initial={true}>
                         {[...selectedDayEvents.incomes, ...selectedDayEvents.expenses].map((tx) => (
                           <motion.li
                             key={tx.id}
                             layout
-                            initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                            initial={{ opacity: 0, y: -16, scale: 0.96 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, x: 24, transition: { duration: 0.35, ease: "easeInOut" } }}
-                            transition={{ duration: 0.4, ease: "easeOut" }}
+                            exit={{ opacity: 0, x: 40, transition: { duration: 0.55, ease: "easeInOut" } }}
+                            transition={{ duration: 0.55, ease: "easeOut" }}
                             className="flex items-center justify-between rounded-lg border bg-card p-2 text-xs"
                           >
                             <div>
@@ -1230,22 +1244,25 @@ export function CalendarClient() {
                         </AnimatePresence>
                       </ul>
                     </div>
-                  )}
 
                   {/* Entrenamientos */}
-                  {selectedDayEvents.workouts.length > 0 && (
-                    <div className="space-y-2 pt-3">
+                  <div
+                    className={cn(
+                      "space-y-2 pt-3",
+                      selectedDayEvents.workouts.length === 0 && "hidden",
+                    )}
+                  >
                       <p className="text-xs font-semibold text-muted-foreground">Deporte y entrenamiento</p>
                       <ul className="space-y-1.5">
-                        <AnimatePresence initial={false}>
+                        <AnimatePresence initial={true}>
                         {selectedDayEvents.workouts.map((w) => (
                           <motion.li
                             key={w.id}
                             layout
-                            initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                            initial={{ opacity: 0, y: -16, scale: 0.96 }}
                             animate={{ opacity: 1, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, x: 24, transition: { duration: 0.35, ease: "easeInOut" } }}
-                            transition={{ duration: 0.4, ease: "easeOut" }}
+                            exit={{ opacity: 0, x: 40, transition: { duration: 0.55, ease: "easeInOut" } }}
+                            transition={{ duration: 0.55, ease: "easeOut" }}
                             className="flex items-center justify-between rounded-lg border border-purple-500/20 bg-purple-500/5 p-2 text-xs text-purple-900 dark:text-purple-200"
                           >
                             <div>
@@ -1272,9 +1289,7 @@ export function CalendarClient() {
                         </AnimatePresence>
                       </ul>
                     </div>
-                  )}
                 </div>
-              )}
               </motion.div>
               </AnimatePresence>
             </CardContent>
