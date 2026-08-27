@@ -15,6 +15,7 @@ export function ClassroomConnect() {
   const [session, setSession] = useState<boolean | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [importing, setImporting] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
 
@@ -74,7 +75,11 @@ export function ClassroomConnect() {
       const res = await fetch("/api/classroom", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        setResult(`Sincronizadas ${data.courses} asignaturas y ${data.tasks} tareas.`);
+        let msg = `Sincronizadas ${data.courses} asignaturas y ${data.tasks} tareas.`;
+        if (data.errors?.length) {
+          msg += ` Algunos elementos fallaron: ${data.errors.join(" | ")}`;
+        }
+        setResult(msg);
       } else {
         setResult(data.error ?? "Error al importar.");
       }
@@ -82,6 +87,26 @@ export function ClassroomConnect() {
       setResult("Error al importar.");
     } finally {
       setImporting(false);
+    }
+  }
+
+  async function disconnect() {
+    if (!window.confirm("¿Desconectar Google Classroom? Las tareas ya importadas se quedan en tu app, pero dejarás de recibir novedades.")) return;
+    setDisconnecting(true);
+    setResult(null);
+    try {
+      const res = await fetch("/api/classroom", { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setConnected(false);
+        setNotice({ kind: "success", text: "Google Classroom desconectado." });
+      } else {
+        setNotice({ kind: "error", text: data.error ?? "No se pudo desconectar." });
+      }
+    } catch {
+      setNotice({ kind: "error", text: "No se pudo desconectar." });
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -139,6 +164,16 @@ export function ClassroomConnect() {
               <RefreshCw className="h-4 w-4" />
             )}
             Importar ahora
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground hover:text-destructive"
+            onClick={disconnect}
+            disabled={disconnecting}
+          >
+            {disconnecting && <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />}
+            Desconectar
           </Button>
           <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
