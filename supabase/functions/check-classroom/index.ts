@@ -18,12 +18,16 @@ const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@localhost";
-const aiKey = Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY") ?? "";
-const aiModel = Deno.env.get("GOOGLE_GENERATIVE_AI_MODEL") ?? "gemini-2.0-flash";
+// IA: se usa OpenRouter si hay clave, si no Gemini, si no plantilla.
+const openrouterKey = Deno.env.get("OPENROUTER_API_KEY") ?? "";
+const openrouterModel = Deno.env.get("OPENROUTER_MODEL") ?? "openai/gpt-4o-mini";
+const geminiKey = Deno.env.get("GOOGLE_GENERATIVE_AI_API_KEY") ?? "";
+const geminiModel = Deno.env.get("GOOGLE_GENERATIVE_AI_MODEL") ?? "gemini-2.0-flash";
 
 const API_URL = "https://classroom.googleapis.com/v1";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const AI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${aiModel}:generateContent`;
+const OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions";
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent`;
 
 interface Course {
   id: string;
@@ -130,9 +134,8 @@ function dueDateToISO(due?: { year: number; month: number; day: number }): strin
   return `${due.year}-${m}-${d}`;
 }
 
-/** Pide a la IA que decida qué merece aviso y redacte el mensaje. */
-async function aiDecide(items: NewItem[]): Promise<AiDecision[]> {
-  if (!aiKey) return items.map((i) => ({
+function templateMessages(items: NewItem[]): AiDecision[] {
+  return items.map((i) => ({
     id: i.id,
     notify: true,
     message:
@@ -140,6 +143,12 @@ async function aiDecide(items: NewItem[]): Promise<AiDecision[]> {
         ? `📚 Te ha llegado una nueva tarea de ${i.courseName}: ${i.title}${i.due ? ` (para el ${i.due})` : ""}.`
         : `📄 Nuevo material de ${i.courseName}: ${i.title}`,
   }));
+}
+
+/** Pide a la IA que decida qué merece aviso y redacte el mensaje. */
+async function aiDecide(items: NewItem[]): Promise<AiDecision[]> {
+  const aiKey = openrouterKey || geminiKey;
+  if (!aiKey) return templateMessages(items);
 
   const list = items
     .map((i) =>
@@ -157,31 +166,51 @@ Para cada uno decide:
 Responde SOLO JSON, un array: [{"id":"...","notify":true,"message":"..."}]`;
 
   try {
-    const res = await fetch(`${AI_URL}?key=${aiKey}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
-      }),
-    });
-    if (!res.ok) throw new Error(`AI error (${res.status})`);
-    const data = await res.json();
-    const text: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    let text = "";
+
+    if (openrouterKey) {
+      // OpenRouter (API compatible con OpenAI).
+      const res = await fetch(OPENROUTER_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${openrouterKey}`,
+        },
+        body: JSON.stringify({
+          model: openrouterModel,
+          messages: [
+            { role: "system", content: "Devuelves solo JSON válido, sin texto adicional." },
+            { role: "user", content: prompt },
+          ],
+          temperature: 0.4,
+          max_tokens: 1024,
+        }),
+      });
+      if (!res.ok) throw new Error(`OpenRouter error (${res.status})`);
+      const data = await res.json();
+      text = data?.choices?.[0]?.message?.content ?? "";
+    } else {
+      // Gemini.
+      const res = await fetch(`${GEMINI_URL}?key=${geminiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.4, maxOutputTokens: 1024 },
+        }),
+      });
+      if (!res.ok) throw new Error(`Gemini error (${res.status})`);
+      const data = await res.json();
+      text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    }
+
     const json = text.replace(/```json|```/g, "").trim();
     const parsed = JSON.parse(json) as AiDecision[];
     if (!Array.isArray(parsed)) throw new Error("AI no devolvió un array");
     return parsed;
   } catch (err) {
     console.error("[check-classroom] error con la IA, usando plantilla:", err);
-    return items.map((i) => ({
-      id: i.id,
-      notify: true,
-      message:
-        i.kind === "coursework"
-          ? `📚 Te ha llegado una nueva tarea de ${i.courseName}: ${i.title}${i.due ? ` (para el ${i.due})` : ""}`
-          : `📄 Nuevo material de ${i.courseName}: ${i.title}`,
-    }));
+    return templateMessages(items);
   }
 }
 
