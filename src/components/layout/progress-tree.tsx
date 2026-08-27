@@ -45,17 +45,19 @@ function xpForDay(data: Data, key: string): number {
 }
 
 function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: boolean; transitionKey: number }) {
+  const treeSizes = ["h-[34%] w-[38%]", "h-[52%] w-[55%]", "h-[68%] w-[70%]", "h-[84%] w-[86%]", "h-[94%] w-[94%]"];
   return (
-    <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-gradient-to-b from-sky-300 via-sky-100 to-amber-100">
-      <motion.div className="absolute inset-[-12%] bg-[radial-gradient(ellipse_at_bottom,#65a30d33,transparent_55%)]" animate={reduced ? undefined : { x: [0, 12, 0] }} transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }} />
-      <motion.div className="absolute inset-x-[-10%] bottom-0 h-24 bg-amber-700/20 [clip-path:polygon(0_65%,25%_25%,50%_70%,75%_20%,100%_60%,100%_100%,0_100%)]" animate={reduced ? undefined : { x: [0, -18, 0] }} transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }} />
-      <div className="absolute right-7 top-7 h-10 w-10 rounded-full bg-amber-200/80 shadow-[0_0_28px_rgba(253,224,71,0.5)]" />
+    <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-[linear-gradient(180deg,#8ed5ed_0%,#d8f1e8_52%,#f2d39b_100%)]">
+      <motion.div className="absolute inset-x-[-8%] top-[38%] h-28 bg-[#79b99b]/70 [clip-path:polygon(0_75%,12%_42%,25%_65%,39%_25%,53%_62%,67%_32%,80%_58%,92%_20%,100%_48%,100%_100%,0_100%)]" animate={reduced ? undefined : { x: [0, 10, 0] }} transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }} />
+      <motion.div className="absolute inset-x-[-10%] bottom-0 h-28 bg-[#d5ad72] [clip-path:polygon(0_58%,18%_35%,36%_60%,54%_28%,73%_55%,88%_32%,100%_48%,100%_100%,0_100%)]" animate={reduced ? undefined : { x: [0, -14, 0] }} transition={{ duration: 13, repeat: Infinity, ease: "easeInOut" }} />
+      <div className="absolute left-[18%] top-[43%] text-2xl opacity-70">🌲</div><div className="absolute right-[18%] top-[39%] text-xl opacity-60">🌲</div><div className="absolute left-[7%] top-[51%] text-lg opacity-50">🌲</div><div className="absolute right-[7%] top-[49%] text-lg opacity-50">🌲</div>
+      <div className="absolute right-7 top-7 h-10 w-10 rounded-full bg-amber-100/90 shadow-[0_0_28px_rgba(253,224,71,0.5)]" />
       <AnimatePresence mode="wait">
         <motion.img
           key={`${level}-${transitionKey}`}
           src={`/Diseño arboles/tree-level-${level}.svg`}
           alt={`Ilustración de ${LEVELS[level].name}`}
-          className="absolute bottom-[-1.5rem] left-1/2 h-[94%] w-[94%] -translate-x-1/2 object-contain object-bottom mix-blend-multiply"
+          className={`absolute bottom-[-0.5rem] left-1/2 ${treeSizes[level]} -translate-x-1/2 object-contain object-bottom mix-blend-multiply`}
           style={{ transformOrigin: "50% 100%", filter: "drop-shadow(0 0 0 transparent)" }}
           initial={{ opacity: 0, scale: 0.72 }}
           animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [0.88, 1.08, 1], rotate: [-1.3, 1.3, -1.3] }}
