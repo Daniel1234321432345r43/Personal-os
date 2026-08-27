@@ -48,7 +48,7 @@ function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: 
   const treeSizes = ["h-[34%] w-[38%]", "h-[52%] w-[55%]", "h-[68%] w-[70%]", "h-[84%] w-[86%]", "h-[94%] w-[94%]"];
   return (
     <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-[#d8f1e8]">
-      <img src="/Diseño%20arboles/Fondo%20bosque.svg" alt="" aria-hidden="true" className="absolute inset-0 z-0 block h-full w-full object-cover object-bottom" />
+      <img src="/Diseño%20arboles/Fondo%20bosque.svg" alt="" aria-hidden="true" className="absolute inset-0 z-0 block h-full w-full object-cover object-bottom" onError={(event) => { event.currentTarget.style.display = "none"; }} />
       <AnimatePresence mode="wait">
         <motion.img
           key={`${level}-${transitionKey}`}
