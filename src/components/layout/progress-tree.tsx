@@ -44,11 +44,26 @@ function xpForDay(data: Data, key: string): number {
   return Math.max(-15, Math.min(DAILY_CAP, tasks.length * 20 + pomodoros.length * 25 + habits.length * 5 - missedHabits * 15));
 }
 
+function FallingLeaves({ reduced }: { reduced: boolean }) {
+  const leaves = [
+    { left: "18%", delay: 0, duration: 5.5, color: "#65a30d" },
+    { left: "31%", delay: 1.8, duration: 6.4, color: "#84cc16" },
+    { left: "44%", delay: 3.2, duration: 5.8, color: "#a3e635" },
+    { left: "57%", delay: 0.9, duration: 6.8, color: "#4d7c0f" },
+    { left: "70%", delay: 2.6, duration: 5.9, color: "#bef264" },
+    { left: "80%", delay: 4.1, duration: 6.2, color: "#65a30d" },
+  ];
+  return <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
+    {leaves.map((leaf, index) => <motion.span key={index} className="absolute top-[18%] h-2.5 w-1.5 rounded-full" style={{ left: leaf.left, backgroundColor: leaf.color }} animate={reduced ? { opacity: 0.65 } : { opacity: [0, 1, 1, 0], y: [0, 70, 145, 270], x: [0, 12, -10, 8], rotate: [0, 100, 210, 330] }} transition={reduced ? undefined : { delay: leaf.delay, duration: leaf.duration, repeat: Infinity, ease: "easeInOut" }} />)}
+  </div>;
+}
+
 function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: boolean; transitionKey: number }) {
   const treeSizes = ["h-[34%] w-[38%]", "h-[52%] w-[55%]", "h-[68%] w-[70%]", "h-[84%] w-[86%]", "h-[94%] w-[94%]"];
   return (
     <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-[#d8f1e8]">
       <img src="/tree-assets/Fondo%20bosque.svg" alt="" aria-hidden="true" className="absolute inset-0 z-0 block h-full w-full object-cover object-bottom" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+      <FallingLeaves reduced={reduced} />
       <AnimatePresence mode="wait">
         <motion.img
           key={`${level}-${transitionKey}`}
@@ -74,6 +89,7 @@ export function ProgressTree() {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [remoteLoaded, setRemoteLoaded] = useState(false);
   const [transitionKey, setTransitionKey] = useState(0);
+  const [pendingGrowthMessage, setPendingGrowthMessage] = useState(false);
   const reduced = useReducedMotion();
 
   useEffect(() => {
@@ -100,7 +116,7 @@ export function ProgressTree() {
     if (!open) return;
     const upgraded = calculated.level > tree.level;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(calculated));
-    if (upgraded) { setShowUpgrade(true); setTransitionKey((key) => key + 1); }
+    if (upgraded) { setShowUpgrade(true); setPendingGrowthMessage(true); setTransitionKey((key) => key + 1); }
     if (calculated.xp !== tree.xp || calculated.level !== tree.level) setTree(calculated);
   }, [calculated, open, tree.level, tree.xp]);
 
@@ -123,6 +139,7 @@ export function ProgressTree() {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent side="bottom" className="max-h-[94vh] rounded-t-3xl border-0 bg-sky-50 p-0 text-slate-900">
         <SheetHeader className="border-b border-sky-200 px-6 pb-3 pt-5"><SheetTitle className="flex items-center gap-2 text-slate-900"><Leaf className="h-5 w-5 text-emerald-600" /> Mi bosque de progreso</SheetTitle></SheetHeader>
+        {pendingGrowthMessage && <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mx-5 mt-4 rounded-xl border border-lime-300 bg-lime-100 p-3 text-center text-sm font-bold text-green-950"><Sparkles className="mx-auto mb-1 h-5 w-5 text-lime-700" />¡Tu árbol ha crecido! Has desbloqueado la fase {calculated.level + 1}.</motion.div>}
         <div className="overflow-y-auto px-5 pb-8 pt-4">
           <div className="mb-3 flex items-center justify-between"><span className="rounded-full bg-lime-400 px-3 py-1 text-xs font-black text-green-950">LVL {calculated.level + 1}</span><span className="flex items-center gap-1 text-sm font-semibold text-amber-700"><Sun className="h-4 w-4" /> {calculated.xp} XP</span></div>
           <TreeScene level={calculated.level} reduced={Boolean(reduced)} transitionKey={transitionKey} />
