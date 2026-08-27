@@ -55,8 +55,8 @@ function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: 
           key={`${level}-${transitionKey}`}
           src={`/Diseño arboles/tree-level-${level}.svg`}
           alt={`Ilustración de ${LEVELS[level].name}`}
-          className="absolute bottom-[-1.5rem] left-1/2 h-[94%] w-[94%] -translate-x-1/2 object-contain object-bottom"
-          style={{ transformOrigin: "50% 100%" }}
+          className="absolute bottom-[-1.5rem] left-1/2 h-[94%] w-[94%] -translate-x-1/2 object-contain object-bottom mix-blend-multiply"
+          style={{ transformOrigin: "50% 100%", filter: "drop-shadow(0 0 0 transparent)" }}
           initial={{ opacity: 0, scale: 0.72 }}
           animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [0.88, 1.08, 1], rotate: [-1.3, 1.3, -1.3] }}
           exit={{ opacity: 0, scale: 0.82 }}
