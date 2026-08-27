@@ -73,7 +73,10 @@ export async function exchangeCode(
     }),
   });
   if (!res.ok) {
-    throw new Error("No se pudo intercambiar el código de autorización.");
+    const body = await res.text();
+    throw new Error(
+      `Google OAuth (${res.status}): ${body.slice(0, 300)}`,
+    );
   }
   return res.json();
 }
@@ -93,7 +96,10 @@ export async function refreshAccessToken(
     }),
   });
   if (!res.ok) {
-    throw new Error("No se pudo refrescar el token de Google Classroom.");
+    const body = await res.text();
+    throw new Error(
+      `Google OAuth refresh (${res.status}): ${body.slice(0, 300)}`,
+    );
   }
   return res.json();
 }

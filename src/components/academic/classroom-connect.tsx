@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, GraduationCap, Loader2, RefreshCw, XCircle } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { cn } from "@/lib/utils";
 
@@ -10,15 +12,26 @@ type Notice = { kind: "success" | "error"; text: string } | null;
 
 export function ClassroomConnect() {
   const configured = isSupabaseConfigured();
+  const [session, setSession] = useState<boolean | null>(null);
   const [connected, setConnected] = useState<boolean | null>(null);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
 
+  // La conexión con Classroom necesita sesión en la app (el token se guarda
+  // asociado a tu cuenta de Supabase).
+  useEffect(() => {
+    createClient()
+      .auth.getSession()
+      .then(({ data }) => setSession(Boolean(data.session)))
+      .catch(() => setSession(false));
+  }, []);
+
   // Feedback al volver del flujo OAuth de Google (/academic?classroom=...).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("classroom");
+    const detail = params.get("detail");
     if (status === "connected") {
       setNotice({
         kind: "success",
@@ -27,7 +40,9 @@ export function ClassroomConnect() {
     } else if (status === "error") {
       setNotice({
         kind: "error",
-        text: "No se pudo conectar Google Classroom. Comprueba las credenciales y vuelve a intentarlo.",
+        text: detail
+          ? `No se pudo conectar Google Classroom. Detalle: ${detail}`
+          : "No se pudo conectar Google Classroom. Comprueba las credenciales y vuelve a intentarlo.",
       });
     } else if (status === "login") {
       setNotice({
@@ -75,6 +90,22 @@ export function ClassroomConnect() {
       <p className="text-sm text-muted-foreground">
         Configura Supabase y Google Classroom (variables de entorno) para
         sincronizar tus cursos y entregas automáticamente.
+      </p>
+    );
+  }
+
+  // Sin sesión en la app: hay que iniciar sesión para poder conectar.
+  if (session === false) {
+    return (
+      <p className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
+        <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+        <span>
+          Para conectar Google Classroom necesitas tener sesión iniciada en la
+          app (los permisos se guardan en tu cuenta).{" "}
+          <Link href="/login" className="font-medium underline">
+            Iniciar sesión
+          </Link>
+        </span>
       </p>
     );
   }

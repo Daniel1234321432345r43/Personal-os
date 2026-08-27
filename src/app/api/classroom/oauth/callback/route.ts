@@ -23,8 +23,12 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
+    // Sin sesión en la app: enviar al login y volver a Estudios al terminar.
     return NextResponse.redirect(
-      new URL("/academic?classroom=login", url.origin),
+      new URL(
+        `/login?next=${encodeURIComponent("/academic?classroom=login")}`,
+        url.origin,
+      ),
     );
   }
 
@@ -49,9 +53,14 @@ export async function GET(request: Request) {
     return NextResponse.redirect(
       new URL("/academic?classroom=connected", url.origin),
     );
-  } catch {
+  } catch (err) {
+    console.error("[classroom-oauth] error en el callback:", err);
+    const detail = err instanceof Error ? err.message.slice(0, 200) : "error desconocido";
     return NextResponse.redirect(
-      new URL("/academic?classroom=error", url.origin),
+      new URL(
+        `/academic?classroom=error&detail=${encodeURIComponent(detail)}`,
+        url.origin,
+      ),
     );
   }
 }

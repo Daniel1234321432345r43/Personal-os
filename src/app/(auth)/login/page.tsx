@@ -34,10 +34,18 @@ export default function LoginPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [next, setNext] = useState("/dashboard");
   const configured = isSupabaseConfigured();
   // Mientras se verifica si ya hay sesión, mostramos un loader para evitar
   // el "flashazo" (mostrar el formulario un instante y saltar a /dashboard).
   const [checkingSession, setCheckingSession] = useState(configured);
+
+  // Leer a dónde volver tras iniciar sesión (p. ej. /academic?classroom=login
+  // cuando vienes del flujo de conectar Google Classroom).
+  useEffect(() => {
+    const n = new URLSearchParams(window.location.search).get("next");
+    if (n && n.startsWith("/")) setNext(n);
+  }, []);
 
   // Si ya hay una sesión iniciada, no volver a mostrar el login.
   useEffect(() => {
@@ -49,7 +57,7 @@ export default function LoginPage() {
         if (!cancelled) {
           if (data.session) {
             markOnboardingComplete();
-            router.replace("/dashboard");
+            router.replace(next);
           } else {
             setCheckingSession(false);
           }
@@ -63,7 +71,7 @@ export default function LoginPage() {
     return () => {
       cancelled = true;
     };
-  }, [configured, router]);
+  }, [configured, router, next]);
 
   async function handleGoogle() {
     setLoading(true);
@@ -72,7 +80,9 @@ export default function LoginPage() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      },
     });
     if (error) {
       setError(error.message);
@@ -82,7 +92,7 @@ export default function LoginPage() {
 
   function handleSkip() {
     markOnboardingComplete();
-    router.push("/dashboard");
+    router.push(next);
   }
 
   if (checkingSession) return <FullScreenLoader />;
