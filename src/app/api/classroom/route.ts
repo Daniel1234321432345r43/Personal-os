@@ -2,16 +2,15 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   listCourses,
-  listCourseWork,
   refreshAccessToken,
-  dueDateToISO,
   type ClassroomCourse,
 } from "@/lib/classroom/client";
 
 /**
- * Importa asignaturas y tareas de Google Classroom a Supabase.
- * - Las asignaturas se guardan en `subjects` (clave: classroom_course_id).
- * - Las entregas se guardan en `tasks` (clave: classroom_id, type = assignment).
+ * Importa las asignaturas (cursos) de Google Classroom a Supabase.
+ * - Solo cursos → subjects (clave: classroom_course_id).
+ * - Las tareas/entregas NO se importan para no arrastrar todo el historial;
+ *   las novedades llegan por notificación (Edge Function check-classroom).
  */
 export async function POST() {
   try {
@@ -55,18 +54,15 @@ export async function POST() {
         .eq("user_id", user.id);
     }
 
-    // 2) Importar asignaturas (cursos activos).
+    // 2) Importar SOLO asignaturas (cursos activos). Las tareas no se
+    // importan para no traer todo el historial (tareas antiguas ya hechas);
+    // las novedades llegan por notificación (Edge Function check-classroom).
     const { courses = [] } = await listCourses(accessToken);
 
     let importedSubjects = 0;
-    let importedTasks = 0;
     const errors: string[] = [];
-    const subjectIdByCourse = new Map<string, string>();
 
     for (const course of courses) {
-      // 3) Importar entregas (courseWork) de cada curso. Si un curso falla,
-      // se registra el error y se continúa con el resto.
-      let subjectId: string | null = null;
       try {
         const { data: subject, error: subjectError } = await supabase
           .from("subjects")
@@ -87,55 +83,17 @@ export async function POST() {
           errors.push(`asignatura "${course.name}": ${subjectError.message}`);
           continue;
         }
-        subjectId = subject?.id ?? null;
-        importedSubjects += 1;
-        subjectIdByCourse.set(course.id, subject!.id);
+        if (subject) importedSubjects += 1;
       } catch (err) {
         errors.push(
           `asignatura "${course.name}": ${err instanceof Error ? err.message : String(err)}`,
         );
-        continue;
-      }
-
-      let courseWork: { id: string; title: string; description?: string; dueDate?: { year: number; month: number; day: number } }[] = [];
-      try {
-        const res = await listCourseWork(accessToken, course.id);
-        courseWork = res.courseWork ?? [];
-      } catch (err) {
-        errors.push(
-          `entregas de "${course.name}": ${err instanceof Error ? err.message : String(err)}`,
-        );
-        continue;
-      }
-
-      for (const cw of courseWork) {
-        const due = dueDateToISO(cw.dueDate);
-        const { error: taskError } = await supabase.from("tasks").upsert(
-          {
-            user_id: user.id,
-            title: cw.title,
-            description: cw.description ?? null,
-            type: "assignment",
-            category: "academic",
-            subject_id: subjectId,
-            classroom_id: cw.id,
-            due_date: due ? new Date(`${due}T23:59:59`).toISOString() : null,
-            status: "pending",
-          },
-          { onConflict: "user_id,classroom_id" },
-        );
-        if (taskError) {
-          errors.push(`tarea "${cw.title}": ${taskError.message}`);
-        } else {
-          importedTasks += 1;
-        }
       }
     }
 
     return NextResponse.json({
       ok: true,
       courses: importedSubjects,
-      tasks: importedTasks,
       errors: errors.length > 0 ? errors.slice(0, 5) : undefined,
     });
   } catch (err) {

@@ -5,9 +5,8 @@ import { sendWebPush } from "../_shared/web_push.js";
  * Revisa Google Classroom de todos los usuarios conectados y notifica por
  * push las novedades: tareas/entregas nuevas y anuncios/materiales nuevos.
  *
- * - Las tareas nuevas se importan a `tasks` (clave: classroom_id), igual que
- *   la importación manual.
- * - Los anuncios/materiales se registran en `classroom_seen` para no repetir.
+ * - SOLO avisa: no importa ni añade tareas a la app.
+ * - Todo lo visto se registra en `classroom_seen` para no repetir avisos.
  * - La IA (Gemini, opcional) decide si merece la pena avisar y redacta el
  *   mensaje. Sin clave de IA, se usa una plantilla.
  *
@@ -138,7 +137,7 @@ async function aiDecide(items: NewItem[]): Promise<AiDecision[]> {
     notify: true,
     message:
       i.kind === "coursework"
-        ? `📚 Nueva tarea de ${i.courseName}: ${i.title}${i.due ? ` (para el ${i.due})` : ""}. ¿Cuándo piensas hacerla?`
+        ? `📚 Te ha llegado una nueva tarea de ${i.courseName}: ${i.title}${i.due ? ` (para el ${i.due})` : ""}.`
         : `📄 Nuevo material de ${i.courseName}: ${i.title}`,
   }));
 
@@ -153,7 +152,7 @@ ${list}
 
 Para cada uno decide:
 1) notify: true solo si es una tarea/entrega/examen real o un material/apunte útil. Ignora saludos, anuncios sin contenido o cosas irrelevantes.
-2) message: un mensaje corto en español (máx. 140 caracteres) para una notificación push. Si es una tarea, empieza por "Nueva tarea de {curso}:" y sugiere planificarla ("¿Cuándo piensas hacerla?"). Si es un material/apunte, usa "Nuevo material de {curso}:" o "La profe de {curso} ha subido:". Incluye la fecha si la hay.
+2) message: un mensaje corto en español (máx. 140 caracteres) para una notificación push que SOLO avisa de que ha llegado algo nuevo (no se añade nada a la app, no sugieras planificarla). Si es una tarea, empieza por "Te ha llegado una nueva tarea de {curso}:". Si es un material/apunte, usa "Nuevo material de {curso}:" o "La profe de {curso} ha subido:". Incluye la fecha si la hay.
 
 Responde SOLO JSON, un array: [{"id":"...","notify":true,"message":"..."}]`;
 
@@ -180,7 +179,7 @@ Responde SOLO JSON, un array: [{"id":"...","notify":true,"message":"..."}]`;
       notify: true,
       message:
         i.kind === "coursework"
-          ? `📚 Nueva tarea de ${i.courseName}: ${i.title}${i.due ? ` (para el ${i.due})` : ""}`
+          ? `📚 Te ha llegado una nueva tarea de ${i.courseName}: ${i.title}${i.due ? ` (para el ${i.due})` : ""}`
           : `📄 Nuevo material de ${i.courseName}: ${i.title}`,
     }));
   }
@@ -231,7 +230,8 @@ Deno.serve(async () => {
         "/courses?courseStates=ACTIVE",
       );
 
-      // IDs de coursework ya importados → solo los nuevos son novedad.
+      // IDs ya conocidos: tareas importadas a mano + ya avisados antes.
+      // (Esta función SOLO avisa, no importa tareas a la app.)
       const { data: existingTasks } = await supabase
         .from("tasks")
         .select("classroom_id")
@@ -241,16 +241,15 @@ Deno.serve(async () => {
         (existingTasks ?? []).map((t) => t.classroom_id as string),
       );
 
-      // IDs de anuncios/materiales ya avisados.
       const { data: seenRows } = await supabase
         .from("classroom_seen")
         .select("external_id, kind")
         .eq("user_id", userId);
-      const seenAnnouncements = new Set(
-        (seenRows ?? [])
-          .filter((r) => r.kind === "announcement")
-          .map((r) => r.external_id as string),
-      );
+      const seenAnnouncements = new Set();
+      for (const r of seenRows ?? []) {
+        if (r.kind === "coursework") seenCoursework.add(r.external_id as string);
+        else if (r.kind === "announcement") seenAnnouncements.add(r.external_id as string);
+      }
 
       const newItems: NewItem[] = [];
 
@@ -338,40 +337,6 @@ Deno.serve(async () => {
             sent = true;
           } catch (err) {
             console.error("[check-classroom] error web push:", err);
-          }
-        }
-
-        // Importar la tarea nueva a Supabase para que aparezca en la app.
-        if (item.kind === "coursework" && sent) {
-          try {
-            const { data: subject } = await supabase
-              .from("subjects")
-              .upsert(
-                {
-                  user_id: userId,
-                  name: item.courseName,
-                  classroom_course_id: item.courseId,
-                  classroom_name: item.courseName,
-                },
-                { onConflict: "user_id,classroom_course_id" },
-              )
-              .select("id")
-              .single();
-            await supabase.from("tasks").upsert(
-              {
-                user_id: userId,
-                title: item.title,
-                type: "assignment",
-                category: "academic",
-                subject_id: subject?.id ?? null,
-                classroom_id: item.id,
-                due_date: item.due ? new Date(`${item.due}T23:59:59`).toISOString() : null,
-                status: "pending",
-              },
-              { onConflict: "user_id,classroom_id" },
-            );
-          } catch (err) {
-            console.error("[check-classroom] error importando tarea:", err);
           }
         }
 

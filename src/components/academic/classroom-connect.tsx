@@ -75,7 +75,7 @@ export function ClassroomConnect() {
       const res = await fetch("/api/classroom", { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        let msg = `Sincronizadas ${data.courses} asignaturas y ${data.tasks} tareas.`;
+        let msg = `Sincronizadas ${data.courses} asignaturas. Las tareas nuevas te llegarán por notificación.`;
         if (data.errors?.length) {
           msg += ` Algunos elementos fallaron: ${data.errors.join(" | ")}`;
         }
