@@ -8,79 +8,61 @@ import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/comp
 import { todayKey } from "@/lib/format";
 import { useData } from "@/components/providers/data-provider";
 
-const STORAGE_KEY = "nucleo:progress-tree:v2";
-const DAY = 86_400_000;
-const DAILY_CAP = 70;
+const STORAGE_KEY = "nucleo:progress-tree:v3";
+const TREE_API = "/api/tree/progress";
+const DAILY_CAP = 120;
 
 const LEVELS = [
-  { name: "Brote", subtitle: "Primeros pasos", required: 0, emoji: "🌱" },
-  { name: "Arbusto", subtitle: "Constancia inicial", required: 100, emoji: "🌿" },
-  { name: "Joven Secuoya", subtitle: "Hábito consolidado", required: 300, emoji: "🌳" },
-  { name: "Secuoya Milenaria", subtitle: "Dominio total", required: 700, emoji: "🌲" },
+  { name: "Brote", subtitle: "0 - 100 XP", required: 0, emoji: "🌱" },
+  { name: "Planta joven", subtitle: "101 - 300 XP", required: 101, emoji: "🌿" },
+  { name: "Árbol mediano", subtitle: "301 - 650 XP", required: 301, emoji: "🌳" },
+  { name: "Árbol grande", subtitle: "651 - 1200 XP", required: 651, emoji: "🌲" },
+  { name: "Secuoya final", subtitle: "1201+ XP", required: 1201, emoji: "🌲" },
 ] as const;
 
 type SavedTree = { level: number; xp: number; lastCalculated: string; xpByDay: Record<string, number> };
-
-function emptyTree(): SavedTree {
-  return { level: 0, xp: 0, lastCalculated: todayKey(), xpByDay: {} };
-}
-
+function emptyTree(): SavedTree { return { level: 0, xp: 0, lastCalculated: todayKey(), xpByDay: {} }; }
 function readTree(): SavedTree {
   if (typeof window === "undefined") return emptyTree();
   try {
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "null") as Partial<SavedTree> | null;
     if (parsed && typeof parsed.xp === "number") return { ...emptyTree(), ...parsed, xpByDay: parsed.xpByDay ?? {} };
-  } catch { /* Estado local inválido: se recupera con un árbol nuevo. */ }
+  } catch { /* Estado local inválido. */ }
   return emptyTree();
 }
 
 type Data = ReturnType<typeof useData>["data"];
-
 function dayKey(date: Date) { return date.toISOString().slice(0, 10); }
 function dateValue(value: string | null | undefined) { return value ? new Date(`${value.slice(0, 10)}T00:00:00`).getTime() : 0; }
+function levelForXp(xp: number) { return Math.max(0, LEVELS.reduce((current, item, index) => xp >= item.required ? index : current, 0)); }
 
 function xpForDay(data: Data, key: string): number {
-  const habits = data.habitCompletions.filter((item) => item.completed_on === key).length;
-  const tasks = data.tasks.filter((item) => item.status === "done" && item.updated_at.slice(0, 10) === key).length;
-  const pomodoros = data.tasks.filter((item) => item.type === "study_session" && item.status === "done" && item.updated_at.slice(0, 10) === key).length;
-  const overdue = data.tasks.some((item) => item.due_date && item.due_date < key && item.status !== "done");
-  // Un día con entregas vencidas no premia acciones aisladas: la penalización impide crecer gratis.
-  if (overdue) return 0;
-  const login = key === todayKey() ? 5 : 0;
-  return Math.min(DAILY_CAP, login + Math.min(habits, 3) * 10 + tasks * 15 + Math.min(pomodoros, 2) * 10);
+  const tasks = data.tasks.filter((item) => item.status === "done" && item.updated_at.slice(0, 10) === key);
+  const pomodoros = tasks.filter((item) => item.type === "study_session");
+  const habits = data.habitCompletions.filter((item) => item.completed_on === key);
+  const missedHabits = key < todayKey() ? data.habits.filter((habit) => !habits.some((item) => item.habit_id === habit.id)).length : 0;
+  return Math.max(-15, Math.min(DAILY_CAP, tasks.length * 20 + pomodoros.length * 25 + habits.length * 5 - missedHabits * 15));
 }
 
-function TreeScene({ level, reduced }: { level: number; reduced: boolean }) {
-  const colors = ["from-sky-300 via-sky-200 to-amber-100", "from-sky-400 via-emerald-100 to-lime-100", "from-sky-500 via-emerald-200 to-green-100", "from-sky-600 via-emerald-400 to-green-200"];
-  const treeScale = [0.55, 0.75, 1, 1.2][level];
-  const background = colors[level];
+function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: boolean; transitionKey: number }) {
   return (
-    <div className={`relative isolate h-72 overflow-hidden rounded-2xl bg-gradient-to-b ${background}`}>
-      <div className="absolute right-6 top-7 h-10 w-10 rounded-full bg-amber-200/80 shadow-[0_0_28px_rgba(253,224,71,0.5)]" />
-      <div className="absolute left-8 top-16 h-3 w-14 rounded-full bg-white/45 blur-sm" />
-      <div className="absolute left-0 right-0 bottom-0 h-24 bg-gradient-to-t from-amber-700/30 to-transparent" />
-      {level >= 1 && <><div className="absolute bottom-12 left-10 h-12 w-7 rounded-t-full bg-green-700/50" /><div className="absolute bottom-10 right-12 h-16 w-9 rounded-t-full bg-green-800/50" /></>}
-      {level >= 2 && <div className="absolute bottom-0 left-0 right-0 h-16 bg-green-700/30 [clip-path:polygon(0_60%,20%_20%,40%_65%,60%_15%,80%_55%,100%_10%,100%_100%,0_100%)]" />}
-      {level === 0 && <>
-        <div className="absolute bottom-16 left-0 right-0 h-14 bg-amber-300/45 [clip-path:polygon(0_70%,25%_25%,50%_65%,75%_20%,100%_60%,100%_100%,0_100%)]" />
-        <div className="absolute bottom-10 left-8 h-2 w-2 rounded-full bg-stone-500/70" /><div className="absolute bottom-14 right-8 h-3 w-4 rounded-full bg-stone-500/60" />
-        <div className="absolute bottom-20 left-1/3 h-1 w-16 rotate-12 bg-amber-600/25" />
-      </>}
-      {level === 3 && <><div className="absolute inset-0 bg-emerald-950/15" /><div className="absolute bottom-0 left-1/4 h-28 w-2 rotate-12 bg-green-950/30" /><div className="absolute bottom-0 right-1/4 h-32 w-3 -rotate-12 bg-green-950/30" /></>}
-      <motion.div className="absolute bottom-9 left-1/2 origin-bottom -translate-x-1/2" style={{ scale: treeScale }} animate={reduced ? undefined : { rotate: [-1, 1, -1] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}>
-        <svg width="170" height="210" viewBox="0 0 170 210" role="img" aria-label={`Ilustración de ${LEVELS[level].name}`}>
-          <path d="M83 205 C80 165 81 125 85 85" stroke="#713f12" strokeWidth="14" strokeLinecap="round" fill="none" />
-          <path d="M84 125 C57 105 46 87 40 68 M84 112 C111 94 120 77 126 57" stroke="#713f12" strokeWidth="7" strokeLinecap="round" fill="none" />
-          <path d="M84 82 C65 67 62 47 64 30 M85 79 C102 61 108 43 106 24" stroke="#713f12" strokeWidth="5" strokeLinecap="round" fill="none" />
-          {level === 0 ? <path d="M84 72 C67 64 70 41 84 29 C98 41 101 64 84 72Z" fill="#65a30d" /> : <>
-            <circle cx="42" cy="54" r={level === 3 ? 38 : 27} fill="#166534" /><circle cx="91" cy="35" r={level === 3 ? 48 : 31} fill="#15803d" /><circle cx="130" cy="60" r={level === 3 ? 38 : 26} fill="#166534" /><circle cx="84" cy="76" r={level === 3 ? 52 : 35} fill="#22c55e" />
-            {level === 3 && <circle cx="38" cy="105" r="29" fill="#14532d" />}
-          </>}
-          <path d="M55 204 Q85 193 115 204" stroke="#92400e" strokeWidth="5" fill="none" strokeLinecap="round" />
-          <path d="M82 199 C68 202 62 207 55 207 M87 199 C101 201 108 206 116 207" stroke="#92400e" strokeWidth="3" fill="none" strokeLinecap="round" />
-          <path d="M78 155 L84 146 M91 133 L96 125 M76 116 L72 108" stroke="#a16207" strokeWidth="2" strokeLinecap="round" opacity=".8" />
-        </svg>
-      </motion.div>
+    <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-gradient-to-b from-sky-300 via-sky-100 to-amber-100">
+      <motion.div className="absolute inset-[-12%] bg-[radial-gradient(ellipse_at_bottom,#65a30d33,transparent_55%)]" animate={reduced ? undefined : { x: [0, 12, 0] }} transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }} />
+      <motion.div className="absolute inset-x-[-10%] bottom-0 h-24 bg-amber-700/20 [clip-path:polygon(0_65%,25%_25%,50%_70%,75%_20%,100%_60%,100%_100%,0_100%)]" animate={reduced ? undefined : { x: [0, -18, 0] }} transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }} />
+      <div className="absolute right-7 top-7 h-10 w-10 rounded-full bg-amber-200/80 shadow-[0_0_28px_rgba(253,224,71,0.5)]" />
+      <AnimatePresence mode="wait">
+        <motion.img
+          key={`${level}-${transitionKey}`}
+          src={`/Diseño arboles/tree-level-${level}.svg`}
+          alt={`Ilustración de ${LEVELS[level].name}`}
+          className="absolute bottom-3 left-1/2 h-[88%] w-[88%] -translate-x-1/2 object-contain"
+          style={{ transformOrigin: "50% 100%" }}
+          initial={{ opacity: 0, scale: 0.72 }}
+          animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [0.88, 1.08, 1], rotate: [-1.3, 1.3, -1.3] }}
+          exit={{ opacity: 0, scale: 0.82 }}
+          transition={{ opacity: { duration: 0.25 }, scale: { type: "spring", stiffness: 360, damping: 16 }, rotate: { duration: 5, repeat: Infinity, ease: "easeInOut" } }}
+        />
+      </AnimatePresence>
       <div className="absolute left-4 top-4 rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-green-950 backdrop-blur">ESCENA · {LEVELS[level].name}</div>
     </div>
   );
@@ -91,7 +73,19 @@ export function ProgressTree() {
   const [open, setOpen] = useState(false);
   const [tree, setTree] = useState<SavedTree>(() => readTree());
   const [showUpgrade, setShowUpgrade] = useState(false);
+  const [remoteLoaded, setRemoteLoaded] = useState(false);
+  const [transitionKey, setTransitionKey] = useState(0);
   const reduced = useReducedMotion();
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(TREE_API).then((response) => response.ok ? response.json() : null).then((remote: { xp?: number; level?: number } | null) => {
+      if (cancelled || !remote || typeof remote.xp !== "number") return;
+      setTree((current) => ({ ...current, xp: Math.max(current.xp, remote.xp ?? 0), level: Math.max(current.level, remote.level ?? 0) }));
+      setRemoteLoaded(true);
+    }).catch(() => setRemoteLoaded(true));
+    return () => { cancelled = true; };
+  }, []);
 
   const calculated = useMemo(() => {
     if (!open) return tree;
@@ -100,34 +94,30 @@ export function ProgressTree() {
     const today = new Date(`${todayKey()}T00:00:00`);
     while (cursor <= today) { const key = dayKey(cursor); if (nextDays[key] == null) nextDays[key] = xpForDay(data, key); cursor.setDate(cursor.getDate() + 1); }
     const xp = Math.max(0, tree.xp + Object.entries(nextDays).filter(([key]) => dateValue(key) >= dateValue(tree.lastCalculated)).reduce((sum, [, value]) => sum + value, 0));
-    const level = Math.max(tree.level, LEVELS.reduce((current, item, index) => xp >= item.required ? index : current, 0));
-    return { level, xp, lastCalculated: todayKey(), xpByDay: nextDays };
+    return { level: levelForXp(xp), xp, lastCalculated: todayKey(), xpByDay: nextDays };
   }, [data, open, tree]);
 
   useEffect(() => {
     if (!open) return;
     const upgraded = calculated.level > tree.level;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(calculated));
-    if (upgraded) setShowUpgrade(true);
+    if (upgraded) { setShowUpgrade(true); setTransitionKey((key) => key + 1); }
     if (calculated.xp !== tree.xp || calculated.level !== tree.level) setTree(calculated);
   }, [calculated, open, tree.level, tree.xp]);
+
+  useEffect(() => {
+    if (!remoteLoaded || !open) return;
+    const sync = async (source: string, ids: string[], xp: number) => { await Promise.all(ids.map((sourceId) => fetch(TREE_API, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ source, sourceId, xp }) }))); };
+    void sync("task", data.tasks.filter((item) => item.status === "done").map((item) => item.id), 20);
+    void sync("habit", data.habitCompletions.map((item) => item.id), 5);
+    void sync("pomodoro", data.tasks.filter((item) => item.type === "study_session" && item.status === "done").map((item) => item.id), 25);
+  }, [data.habitCompletions, data.tasks, open, remoteLoaded]);
 
   const current = LEVELS[calculated.level];
   const next = LEVELS[calculated.level + 1];
   const percentage = next ? ((calculated.xp - current.required) / (next.required - current.required)) * 100 : 100;
   const weekXp = Array.from({ length: 7 }, (_, index) => { const date = new Date(); date.setDate(date.getDate() - index); return calculated.xpByDay[dayKey(date)] ?? 0; }).reduce((sum, value) => sum + value, 0);
-  const hasHabits = data.habits.length > 0;
-  const hasActivity = weekXp > 0 || data.tasks.length > 0;
-  const hasOverdue = data.tasks.some((item) => item.due_date && item.due_date < todayKey() && item.status !== "done");
-  const diagnosis = !hasActivity && calculated.xp === 0
-    ? "¡Bienvenido a tu bosque! Todavía no has completado hábitos o entregas hoy. Completa tu primera tarea o rutina para conseguir tu primera experiencia (XP)."
-    : !hasHabits
-      ? "No tienes hábitos configurados en Deporte o Estudios. ¡Crea tus primeras rutinas para empezar a darle luz a tu árbol!"
-      : calculated.xp <= 50
-        ? `¡Tienes ${calculated.xp} XP de experiencia! Sigue esforzándote completando tus tareas y hábitos diarios para seguir desbloqueando el crecimiento.`
-        : hasOverdue
-          ? "Esta semana has fallado varios hábitos y tienes entregas vencidas. Tu árbol necesita más constancia."
-          : "¡Gran trabajo! Estás manteniendo tus hábitos y tareas al día. Tu árbol está ganando fuerza para subir de nivel.";
+  const diagnosis = calculated.xp === 0 ? "Empieza completando una tarea, un hábito o un Pomodoro para conseguir XP." : next ? `${calculated.xp} XP acumulados. Te faltan ${Math.max(0, next.required - calculated.xp)} XP para la siguiente fase.` : "¡Has alcanzado la Secuoya final! Sigue cuidando tu constancia.";
 
   return <>
     <Button variant="ghost" size="icon" className="h-9 w-9 text-emerald-600 dark:text-emerald-400" onClick={() => setOpen(true)} aria-label="Abrir árbol de progreso"><Leaf className="h-5 w-5" /></Button>
@@ -136,12 +126,12 @@ export function ProgressTree() {
         <SheetHeader className="border-b border-sky-200 px-6 pb-3 pt-5"><SheetTitle className="flex items-center gap-2 text-slate-900"><Leaf className="h-5 w-5 text-emerald-600" /> Mi bosque de progreso</SheetTitle></SheetHeader>
         <div className="overflow-y-auto px-5 pb-8 pt-4">
           <div className="mb-3 flex items-center justify-between"><span className="rounded-full bg-lime-400 px-3 py-1 text-xs font-black text-green-950">LVL {calculated.level + 1}</span><span className="flex items-center gap-1 text-sm font-semibold text-amber-700"><Sun className="h-4 w-4" /> {calculated.xp} XP</span></div>
-          <TreeScene level={calculated.level} reduced={Boolean(reduced)} />
-          <AnimatePresence mode="wait">{showUpgrade && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-3 rounded-xl bg-lime-400 p-3 text-center text-sm font-bold text-green-950"><Sparkles className="mx-auto mb-1 h-5 w-5" /> ¡Fase actualizada! Nuevas ramas han brotado.</motion.div>}</AnimatePresence>
+          <TreeScene level={calculated.level} reduced={Boolean(reduced)} transitionKey={transitionKey} />
+          <AnimatePresence mode="wait">{showUpgrade && <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="mt-3 rounded-xl bg-lime-400 p-3 text-center text-sm font-bold text-green-950"><Sparkles className="mx-auto mb-1 h-5 w-5" /> ¡Fase actualizada! Tu árbol ha crecido.</motion.div>}</AnimatePresence>
           <div className="mt-4 flex items-end justify-between"><div><p className="text-lg font-semibold">{current.emoji} {current.name}</p><p className="text-sm text-slate-600">{current.subtitle}</p></div><p className="text-xs text-slate-500">{next ? `${Math.max(0, next.required - calculated.xp)} XP para el siguiente nivel` : "Nivel máximo"}</p></div>
-          <div className="mt-3 space-y-2"><div className="flex justify-between text-xs text-slate-300"><span>Experiencia / luz solar</span><span>{Math.round(Math.max(0, calculated.xp - current.required))} / {next ? next.required - current.required : 1}</span></div><div className="h-2 overflow-hidden rounded-full bg-sky-200"><motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${Math.max(0, Math.min(100, percentage))}%` }} /></div></div>
+          <div className="mt-3 space-y-2"><div className="flex justify-between text-xs text-slate-500"><span>Progreso de fase</span><span>{Math.round(Math.max(0, calculated.xp - current.required))} / {next ? next.required - current.required : 1}</span></div><div className="h-2 overflow-hidden rounded-full bg-sky-200"><motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${Math.max(0, Math.min(100, percentage))}%` }} /></div></div>
           <p className="mt-5 rounded-xl bg-white/75 p-4 text-sm leading-relaxed text-slate-700 shadow-sm">{diagnosis}</p>
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500"><Target className="h-4 w-4" /> XP determinista · cap diario {DAILY_CAP} · hábitos · tareas · pomodoros</div>
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500"><Target className="h-4 w-4" /> +20 tareas · +25 pomodoros · +5 hábitos · -15 hábitos incumplidos</div>
           <SheetClose asChild><Button variant="outline" className="mt-5 w-full border-sky-300 bg-white/60 text-slate-700 hover:bg-white"><X className="h-4 w-4" /> Cerrar</Button></SheetClose>
         </div>
       </SheetContent>
