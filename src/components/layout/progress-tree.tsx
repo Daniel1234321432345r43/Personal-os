@@ -51,15 +51,21 @@ function xpForDay(data: Data, key: string): number {
 }
 
 function TreeScene({ level, reduced }: { level: number; reduced: boolean }) {
-  const colors = ["from-amber-100 via-orange-100 to-yellow-50", "from-lime-100 via-emerald-100 to-sky-100", "from-green-200 via-emerald-100 to-sky-100", "from-emerald-700 via-green-600 to-teal-700"];
+  const colors = ["from-sky-300 via-sky-200 to-amber-100", "from-sky-400 via-emerald-100 to-lime-100", "from-sky-500 via-emerald-200 to-green-100", "from-sky-600 via-emerald-400 to-green-200"];
   const treeScale = [0.55, 0.75, 1, 1.2][level];
   const background = colors[level];
   return (
     <div className={`relative isolate h-72 overflow-hidden rounded-2xl bg-gradient-to-b ${background}`}>
-      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-amber-700/30 to-transparent" />
+      <div className="absolute right-6 top-7 h-10 w-10 rounded-full bg-amber-200/80 shadow-[0_0_28px_rgba(253,224,71,0.5)]" />
+      <div className="absolute left-8 top-16 h-3 w-14 rounded-full bg-white/45 blur-sm" />
+      <div className="absolute left-0 right-0 bottom-0 h-24 bg-gradient-to-t from-amber-700/30 to-transparent" />
       {level >= 1 && <><div className="absolute bottom-12 left-10 h-12 w-7 rounded-t-full bg-green-700/50" /><div className="absolute bottom-10 right-12 h-16 w-9 rounded-t-full bg-green-800/50" /></>}
       {level >= 2 && <div className="absolute bottom-0 left-0 right-0 h-16 bg-green-700/30 [clip-path:polygon(0_60%,20%_20%,40%_65%,60%_15%,80%_55%,100%_10%,100%_100%,0_100%)]" />}
-      {level === 0 && <div className="absolute bottom-16 left-0 right-0 h-14 bg-amber-300/35 [clip-path:polygon(0_70%,25%_25%,50%_65%,75%_20%,100%_60%,100%_100%,0_100%)]" />}
+      {level === 0 && <>
+        <div className="absolute bottom-16 left-0 right-0 h-14 bg-amber-300/45 [clip-path:polygon(0_70%,25%_25%,50%_65%,75%_20%,100%_60%,100%_100%,0_100%)]" />
+        <div className="absolute bottom-10 left-8 h-2 w-2 rounded-full bg-stone-500/70" /><div className="absolute bottom-14 right-8 h-3 w-4 rounded-full bg-stone-500/60" />
+        <div className="absolute bottom-20 left-1/3 h-1 w-16 rotate-12 bg-amber-600/25" />
+      </>}
       {level === 3 && <><div className="absolute inset-0 bg-emerald-950/15" /><div className="absolute bottom-0 left-1/4 h-28 w-2 rotate-12 bg-green-950/30" /><div className="absolute bottom-0 right-1/4 h-32 w-3 -rotate-12 bg-green-950/30" /></>}
       <motion.div className="absolute bottom-9 left-1/2 origin-bottom -translate-x-1/2" style={{ scale: treeScale }} animate={reduced ? undefined : { rotate: [-1, 1, -1] }} transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}>
         <svg width="170" height="210" viewBox="0 0 170 210" role="img" aria-label={`Ilustración de ${LEVELS[level].name}`}>
@@ -71,6 +77,8 @@ function TreeScene({ level, reduced }: { level: number; reduced: boolean }) {
             {level === 3 && <circle cx="38" cy="105" r="29" fill="#14532d" />}
           </>}
           <path d="M55 204 Q85 193 115 204" stroke="#92400e" strokeWidth="5" fill="none" strokeLinecap="round" />
+          <path d="M82 199 C68 202 62 207 55 207 M87 199 C101 201 108 206 116 207" stroke="#92400e" strokeWidth="3" fill="none" strokeLinecap="round" />
+          <path d="M78 155 L84 146 M91 133 L96 125 M76 116 L72 108" stroke="#a16207" strokeWidth="2" strokeLinecap="round" opacity=".8" />
         </svg>
       </motion.div>
       <div className="absolute left-4 top-4 rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-green-950 backdrop-blur">ESCENA · {LEVELS[level].name}</div>
@@ -108,22 +116,33 @@ export function ProgressTree() {
   const next = LEVELS[calculated.level + 1];
   const percentage = next ? ((calculated.xp - current.required) / (next.required - current.required)) * 100 : 100;
   const weekXp = Array.from({ length: 7 }, (_, index) => { const date = new Date(); date.setDate(date.getDate() - index); return calculated.xpByDay[dayKey(date)] ?? 0; }).reduce((sum, value) => sum + value, 0);
-  const diagnosis = weekXp >= 100 ? "¡Muy bien! Esta semana has mantenido tus hábitos y avanzado en tus sesiones de estudio. Tu árbol está creciendo fuerte." : "Esta semana has fallado varios hábitos y no has trabajado diariamente en tus entregas. Tu árbol necesita más constancia.";
+  const hasHabits = data.habits.length > 0;
+  const hasActivity = weekXp > 0 || data.tasks.length > 0;
+  const hasOverdue = data.tasks.some((item) => item.due_date && item.due_date < todayKey() && item.status !== "done");
+  const diagnosis = !hasActivity && calculated.xp === 0
+    ? "¡Bienvenido a tu bosque! Todavía no has completado hábitos o entregas hoy. Completa tu primera tarea o rutina para conseguir tu primera experiencia (XP)."
+    : !hasHabits
+      ? "No tienes hábitos configurados en Deporte o Estudios. ¡Crea tus primeras rutinas para empezar a darle luz a tu árbol!"
+      : calculated.xp <= 50
+        ? `¡Tienes ${calculated.xp} XP de experiencia! Sigue esforzándote completando tus tareas y hábitos diarios para seguir desbloqueando el crecimiento.`
+        : hasOverdue
+          ? "Esta semana has fallado varios hábitos y tienes entregas vencidas. Tu árbol necesita más constancia."
+          : "¡Gran trabajo! Estás manteniendo tus hábitos y tareas al día. Tu árbol está ganando fuerza para subir de nivel.";
 
   return <>
     <Button variant="ghost" size="icon" className="h-9 w-9 text-emerald-600 dark:text-emerald-400" onClick={() => setOpen(true)} aria-label="Abrir árbol de progreso"><Leaf className="h-5 w-5" /></Button>
     <Sheet open={open} onOpenChange={setOpen}>
-      <SheetContent side="bottom" className="max-h-[94vh] rounded-t-3xl border-0 bg-slate-950 p-0 text-white">
-        <SheetHeader className="border-b border-white/10 px-6 pb-3 pt-5"><SheetTitle className="flex items-center gap-2 text-white"><Leaf className="h-5 w-5 text-lime-400" /> Mi bosque de progreso</SheetTitle></SheetHeader>
+      <SheetContent side="bottom" className="max-h-[94vh] rounded-t-3xl border-0 bg-sky-50 p-0 text-slate-900">
+        <SheetHeader className="border-b border-sky-200 px-6 pb-3 pt-5"><SheetTitle className="flex items-center gap-2 text-slate-900"><Leaf className="h-5 w-5 text-emerald-600" /> Mi bosque de progreso</SheetTitle></SheetHeader>
         <div className="overflow-y-auto px-5 pb-8 pt-4">
-          <div className="mb-3 flex items-center justify-between"><span className="rounded-full bg-lime-400 px-3 py-1 text-xs font-black text-green-950">LVL {calculated.level + 1}</span><span className="flex items-center gap-1 text-sm text-amber-300"><Sun className="h-4 w-4" /> {calculated.xp} XP</span></div>
+          <div className="mb-3 flex items-center justify-between"><span className="rounded-full bg-lime-400 px-3 py-1 text-xs font-black text-green-950">LVL {calculated.level + 1}</span><span className="flex items-center gap-1 text-sm font-semibold text-amber-700"><Sun className="h-4 w-4" /> {calculated.xp} XP</span></div>
           <TreeScene level={calculated.level} reduced={Boolean(reduced)} />
           <AnimatePresence mode="wait">{showUpgrade && <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="mt-3 rounded-xl bg-lime-400 p-3 text-center text-sm font-bold text-green-950"><Sparkles className="mx-auto mb-1 h-5 w-5" /> ¡Fase actualizada! Nuevas ramas han brotado.</motion.div>}</AnimatePresence>
-          <div className="mt-4 flex items-end justify-between"><div><p className="text-lg font-semibold">{current.emoji} {current.name}</p><p className="text-sm text-slate-300">{current.subtitle}</p></div><p className="text-xs text-slate-400">{next ? `${Math.max(0, next.required - calculated.xp)} XP para el siguiente nivel` : "Nivel máximo"}</p></div>
-          <div className="mt-3 space-y-2"><div className="flex justify-between text-xs text-slate-300"><span>Experiencia / luz solar</span><span>{Math.round(Math.max(0, calculated.xp - current.required))} / {next ? next.required - current.required : 1}</span></div><div className="h-2 overflow-hidden rounded-full bg-white/15"><motion.div className="h-full rounded-full bg-lime-400" animate={{ width: `${Math.max(0, Math.min(100, percentage))}%` }} /></div></div>
-          <p className="mt-5 rounded-xl bg-white/10 p-4 text-sm leading-relaxed text-slate-200">{diagnosis}</p>
-          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-400"><Target className="h-4 w-4" /> XP determinista · cap diario {DAILY_CAP} · hábitos · tareas · pomodoros</div>
-          <SheetClose asChild><Button variant="outline" className="mt-5 w-full border-white/20 bg-transparent text-white hover:bg-white/10"><X className="h-4 w-4" /> Cerrar</Button></SheetClose>
+          <div className="mt-4 flex items-end justify-between"><div><p className="text-lg font-semibold">{current.emoji} {current.name}</p><p className="text-sm text-slate-600">{current.subtitle}</p></div><p className="text-xs text-slate-500">{next ? `${Math.max(0, next.required - calculated.xp)} XP para el siguiente nivel` : "Nivel máximo"}</p></div>
+          <div className="mt-3 space-y-2"><div className="flex justify-between text-xs text-slate-300"><span>Experiencia / luz solar</span><span>{Math.round(Math.max(0, calculated.xp - current.required))} / {next ? next.required - current.required : 1}</span></div><div className="h-2 overflow-hidden rounded-full bg-sky-200"><motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${Math.max(0, Math.min(100, percentage))}%` }} /></div></div>
+          <p className="mt-5 rounded-xl bg-white/75 p-4 text-sm leading-relaxed text-slate-700 shadow-sm">{diagnosis}</p>
+          <div className="mt-4 flex items-center justify-center gap-2 text-xs text-slate-500"><Target className="h-4 w-4" /> XP determinista · cap diario {DAILY_CAP} · hábitos · tareas · pomodoros</div>
+          <SheetClose asChild><Button variant="outline" className="mt-5 w-full border-sky-300 bg-white/60 text-slate-700 hover:bg-white"><X className="h-4 w-4" /> Cerrar</Button></SheetClose>
         </div>
       </SheetContent>
     </Sheet>
