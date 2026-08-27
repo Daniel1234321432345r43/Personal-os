@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Loader2, RotateCw } from "lucide-react";
+import { ProgressTree } from "@/components/layout/progress-tree";
 import {
   Sparkles,
   LayoutDashboard,
@@ -255,6 +256,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             </SheetContent>
           </Sheet>
           <Brand />
+          <div className="ml-auto">
+            <ProgressTree />
+          </div>
         </header>
 
         {/* Pull-to-refresh indicator */}
