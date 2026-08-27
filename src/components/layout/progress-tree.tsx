@@ -48,15 +48,14 @@ function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: 
   const treeSizes = ["h-[34%] w-[38%]", "h-[52%] w-[55%]", "h-[68%] w-[70%]", "h-[84%] w-[86%]", "h-[94%] w-[94%]"];
   return (
     <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-[#d8f1e8]">
-      <img src="/Diseño arboles/Fondo bosque.svg" alt="" aria-hidden="true" className="absolute inset-0 z-0 h-full w-full object-cover object-bottom" />
-      <motion.div className="absolute inset-x-[-8%] bottom-0 z-[1] h-10 bg-transparent" animate={reduced ? undefined : { x: [0, 8, 0] }} transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }} />
+      <img src="/Diseño%20arboles/Fondo%20bosque.svg" alt="" aria-hidden="true" className="absolute inset-0 z-0 block h-full w-full object-cover object-bottom" />
       <AnimatePresence mode="wait">
         <motion.img
           key={`${level}-${transitionKey}`}
           src={`/Diseño arboles/tree-level-${level}.svg`}
           alt={`Ilustración de ${LEVELS[level].name}`}
-          className={`absolute bottom-[-0.5rem] left-1/2 ${treeSizes[level]} -translate-x-1/2 object-contain object-bottom mix-blend-multiply`}
-          style={{ transformOrigin: "50% 100%", filter: "drop-shadow(0 0 0 transparent)" }}
+          className={`absolute bottom-0 left-1/2 z-10 ${treeSizes[level]} -translate-x-1/2 object-contain object-bottom`}
+          style={{ transformOrigin: "50% 100%" }}
           initial={{ opacity: 0, scale: 0.72 }}
           animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [0.88, 1.08, 1], rotate: [-1.3, 1.3, -1.3] }}
           exit={{ opacity: 0, scale: 0.82 }}
