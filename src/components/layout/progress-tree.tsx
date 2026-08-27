@@ -52,7 +52,7 @@ function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: 
       <AnimatePresence mode="wait">
         <motion.img
           key={`${level}-${transitionKey}`}
-          src={`/Diseño arboles/tree-level-${level}.svg`}
+          src={`/Dise%C3%B1o%20arboles/tree-level-${level}.svg`}
           alt={`Ilustración de ${LEVELS[level].name}`}
           className={`absolute bottom-0 left-1/2 z-10 ${treeSizes[level]} -translate-x-1/2 object-contain object-bottom`}
           style={{ transformOrigin: "50% 100%" }}
