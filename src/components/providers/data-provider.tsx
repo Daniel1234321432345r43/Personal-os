@@ -1330,6 +1330,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         try {
           if (typeof window !== "undefined") {
             window.localStorage.removeItem(STORAGE_KEY);
+            window.localStorage.removeItem("nucleo:progress-tree:v2");
+            window.localStorage.removeItem("nucleo:progress-tree:v3");
             if (userId) window.localStorage.removeItem(userStorageKey(userId));
           }
         } catch {
@@ -1352,6 +1354,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           "transactions",
           "grades",
           "budgets",
+          "tree_progress",
+          "tree_xp_events",
         ] as const;
 
         let ok = true;

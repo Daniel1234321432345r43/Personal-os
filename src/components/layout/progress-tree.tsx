@@ -54,7 +54,7 @@ function FallingLeaves({ reduced }: { reduced: boolean }) {
     { left: "80%", delay: 4.1, duration: 6.2, color: "#65a30d" },
   ];
   return <div className="pointer-events-none absolute left-[18%] right-[18%] top-[4%] bottom-[18%] z-20 overflow-hidden" aria-hidden="true">
-    {leaves.map((leaf, index) => <motion.span key={index} className="absolute top-[18%] h-2.5 w-1.5 rounded-full" style={{ left: leaf.left, backgroundColor: leaf.color }} animate={reduced ? { opacity: 0.65 } : { opacity: [0, 1, 1, 0], y: [0, 70, 145, 270], x: [0, 12, -10, 8], rotate: [0, 100, 210, 330] }} transition={reduced ? undefined : { delay: leaf.delay, duration: leaf.duration, repeat: Infinity, ease: "easeInOut" }} />)}
+    {leaves.map((leaf, index) => <motion.span key={index} className="absolute top-[18%] h-2.5 w-1.5 rounded-full" style={{ left: leaf.left, backgroundColor: leaf.color }} animate={reduced ? { opacity: 0.65 } : { opacity: [0, 1, 1, 0], y: [0, 70, 145, 270], x: [0, 32, -24, 42], rotate: [0, 140, 260, 420] }} transition={reduced ? undefined : { delay: leaf.delay, duration: leaf.duration, repeat: Infinity, ease: "easeInOut" }} />)}
   </div>;
 }
 
@@ -72,9 +72,9 @@ function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: 
           className={`absolute bottom-[-1.5rem] left-1/2 z-10 ${treeSizes[level]} -translate-x-1/2 object-contain object-bottom`}
           style={{ transformOrigin: "50% 100%" }}
           initial={{ opacity: 0, scale: 0.72 }}
-          animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [0.88, 1.08, 1], rotate: [-1.3, 1.3, -1.3] }}
+          animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [0.88, 1.08, 1] }}
           exit={{ opacity: 0, scale: 0.82 }}
-          transition={{ opacity: { duration: 0.25 }, scale: { type: "spring", stiffness: 360, damping: 16 }, rotate: { duration: 5, repeat: Infinity, ease: "easeInOut" } }}
+          transition={{ opacity: { duration: 0.25 }, scale: { type: "spring", stiffness: 360, damping: 16 } }}
         />
       </AnimatePresence>
       <div className="absolute left-4 top-4 rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-green-950 backdrop-blur">ESCENA · {LEVELS[level].name}</div>
