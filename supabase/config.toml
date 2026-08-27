@@ -9,3 +9,7 @@ project_id = "culninznvavjryhedeqc"
 [functions.send-reminders]
 verify_jwt = false
 schedule = "* * * * *"
+
+[functions.check-classroom]
+verify_jwt = false
+schedule = "*/15 * * * *"

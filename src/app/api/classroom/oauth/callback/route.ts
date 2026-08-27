@@ -23,7 +23,9 @@ export async function GET(request: Request) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    return NextResponse.redirect(new URL("/login", url.origin));
+    return NextResponse.redirect(
+      new URL("/academic?classroom=login", url.origin),
+    );
   }
 
   try {
@@ -33,7 +35,7 @@ export async function GET(request: Request) {
 
     const tokens = await exchangeCode(code, redirectUri);
 
-    await supabase.from("google_tokens").upsert(
+    const { error: upsertError } = await supabase.from("google_tokens").upsert(
       {
         user_id: user.id,
         access_token: tokens.access_token,
@@ -42,6 +44,7 @@ export async function GET(request: Request) {
       },
       { onConflict: "user_id" },
     );
+    if (upsertError) throw upsertError;
 
     return NextResponse.redirect(
       new URL("/academic?classroom=connected", url.origin),

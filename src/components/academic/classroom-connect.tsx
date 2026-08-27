@@ -2,14 +2,44 @@
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { GraduationCap, RefreshCw, Loader2 } from "lucide-react";
+import { CheckCircle2, GraduationCap, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/env";
+import { cn } from "@/lib/utils";
+
+type Notice = { kind: "success" | "error"; text: string } | null;
 
 export function ClassroomConnect() {
   const configured = isSupabaseConfigured();
   const [connected, setConnected] = useState<boolean | null>(null);
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice>(null);
+
+  // Feedback al volver del flujo OAuth de Google (/academic?classroom=...).
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const status = params.get("classroom");
+    if (status === "connected") {
+      setNotice({
+        kind: "success",
+        text: "¡Conectado a Google Classroom! Pulsa \"Importar ahora\" para traer tus cursos y entregas.",
+      });
+    } else if (status === "error") {
+      setNotice({
+        kind: "error",
+        text: "No se pudo conectar Google Classroom. Comprueba las credenciales y vuelve a intentarlo.",
+      });
+    } else if (status === "login") {
+      setNotice({
+        kind: "error",
+        text: "Para conectar Google Classroom primero inicia sesión en la app (\"Continuar con Google\" en la pantalla de acceso).",
+      });
+    }
+    if (status) {
+      // Limpia el parámetro para que el aviso no se repita al recargar.
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, []);
 
   useEffect(() => {
     if (!configured) {
@@ -50,7 +80,25 @@ export function ClassroomConnect() {
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-3">
+      {notice && (
+        <p
+          className={cn(
+            "flex items-start gap-2 rounded-lg border p-3 text-sm",
+            notice.kind === "success"
+              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+              : "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
+          )}
+        >
+          {notice.kind === "success" ? (
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
+          ) : (
+            <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          )}
+          <span>{notice.text}</span>
+        </p>
+      )}
+      <div className="flex flex-wrap items-center gap-2">
       {connected ? (
         <>
           <Button variant="outline" onClick={importNow} disabled={importing}>
@@ -75,6 +123,7 @@ export function ClassroomConnect() {
         </Button>
       )}
       {result && <p className="w-full text-sm text-muted-foreground">{result}</p>}
+      </div>
     </div>
   );
 }
