@@ -3,12 +3,12 @@ import { sendWebPush } from "../_shared/web_push.js";
 
 /**
  * Revisa Google Classroom de todos los usuarios conectados y notifica por
- * push las novedades: tareas/entregas nuevas y anuncios/materiales nuevos.
+ * push solo las TAREAS/ENTREGAS nuevas (no anuncios ni materiales).
  *
  * - SOLO avisa: no importa ni añade tareas a la app.
  * - Todo lo visto se registra en `classroom_seen` para no repetir avisos.
- * - La IA (Gemini, opcional) decide si merece la pena avisar y redacta el
- *   mensaje. Sin clave de IA, se usa una plantilla.
+ * - La IA (OpenRouter/Gemini, opcional) decide si merece la pena avisar y
+ *   redacta el mensaje. Sin clave de IA, se usa una plantilla.
  *
  * Programación: supabase/config.toml ([functions.check-classroom], cada 15 min).
  */
@@ -44,19 +44,8 @@ interface CourseWork {
   dueDate?: { year: number; month: number; day: number };
 }
 
-interface Announcement {
-  id: string;
-  text?: string;
-  creationTime?: string;
-  materials?: {
-    driveFile?: { driveFile?: { title?: string } };
-    link?: { title?: string };
-    youtubeVideo?: { title?: string };
-  }[];
-}
-
 interface NewItem {
-  kind: "coursework" | "announcement";
+  kind: "coursework";
   id: string;
   courseId: string;
   courseName: string;
@@ -138,10 +127,7 @@ function templateMessages(items: NewItem[]): AiDecision[] {
   return items.map((i) => ({
     id: i.id,
     notify: true,
-    message:
-      i.kind === "coursework"
-        ? `📚 Te ha llegado una nueva tarea de ${i.courseName}: ${i.title}${i.due ? ` (para el ${i.due})` : ""}.`
-        : `📄 Nuevo material de ${i.courseName}: ${i.title}`,
+    message: `📚 Te ha llegado una nueva tarea de ${i.courseName}: ${i.title}${i.due ? ` (para el ${i.due})` : ""}.`,
   }));
 }
 
@@ -156,14 +142,18 @@ async function aiDecide(items: NewItem[]): Promise<AiDecision[]> {
     )
     .join("\n");
 
-  const prompt = `Eres el asistente personal "Núcleo". Han llegado estos elementos nuevos de Google Classroom de un estudiante:
+  const prompt = `Eres el asistente personal "Núcleo". Han llegado estas TAREAS nuevas de Google Classroom de un estudiante:
 ${list}
 
-Para cada uno decide:
-1) notify: true solo si es una tarea/entrega/examen real o un material/apunte útil. Ignora saludos, anuncios sin contenido o cosas irrelevantes.
-2) message: un mensaje corto en español (máx. 140 caracteres) para una notificación push que SOLO avisa de que ha llegado algo nuevo (no se añade nada a la app, no sugieras planificarla). Si es una tarea, empieza por "Te ha llegado una nueva tarea de {curso}:". Si es un material/apunte, usa "Nuevo material de {curso}:" o "La profe de {curso} ha subido:". Incluye la fecha si la hay.
+REGLAS — solo trabajos/entregas:
+- notify: true SOLO si es una tarea, entrega o examen REAL con título descriptivo y concreto (ej: "Ejercicios tema 4", "Ensayo sobre la Revolución").
+- notify: false si es un saludo, felicitación, aviso genérico, recordatorio vago, cambio de horario, o cualquier cosa que NO sea una tarea concreta.
+- notify: false si el título está vacío, es solo texto vago, o no queda claro qué hay que entregar.
+- En caso de duda, pon notify: false. Es mejor no avisar que avisar de algo que no es una tarea.
 
-Responde SOLO JSON, un array: [{"id":"...","notify":true,"message":"..."}]`;
+message (solo si notify=true): un mensaje corto en español (máx. 140 chars) para notificación push. Empieza por "Te ha llegado una nueva tarea de {curso}:" y añade la fecha si la hay. No añadas nada a la app, no sugieras planificarla.
+
+Responde SOLO JSON: [{"id":"...","notify":true,"message":"..."}]`;
 
   try {
     let text = "";
@@ -274,10 +264,8 @@ Deno.serve(async () => {
         .from("classroom_seen")
         .select("external_id, kind")
         .eq("user_id", userId);
-      const seenAnnouncements = new Set();
       for (const r of seenRows ?? []) {
         if (r.kind === "coursework") seenCoursework.add(r.external_id as string);
-        else if (r.kind === "announcement") seenAnnouncements.add(r.external_id as string);
       }
 
       const newItems: NewItem[] = [];
@@ -304,40 +292,8 @@ Deno.serve(async () => {
           });
         }
 
-        // 2) Anuncios/materiales nuevos (requiere scope announcements.readonly;
-        //    si falta, la API responde 403 y se ignora con gracia).
-        try {
-          const { announcements = [] } = await apiGet<{ announcements?: Announcement[] }>(
-            accessToken,
-            `/courses/${encodeURIComponent(course.id)}/announcements`,
-          );
-          for (const a of announcements) {
-            if (seenAnnouncements.has(a.id)) continue;
-            // Solo novedades recientes (48 h).
-            if (a.creationTime && Date.now() - new Date(a.creationTime).getTime() > 48 * 3600 * 1000) {
-              continue;
-            }
-            const m = a.materials?.[0];
-            const title =
-              m?.driveFile?.driveFile?.title ??
-              m?.link?.title ??
-              m?.youtubeVideo?.title ??
-              (a.text ?? "Material nuevo").split("\n")[0].slice(0, 80);
-            newItems.push({
-              kind: "announcement",
-              id: a.id,
-              courseId: course.id,
-              courseName: course.name,
-              title,
-            });
-          }
-        } catch (err) {
-          // 403 = falta el scope; el resto de cursos sigue.
-          console.warn(
-            `[check-classroom] anuncios no disponibles (${course.name}):`,
-            (err as Error).message.slice(0, 120),
-          );
-        }
+        // Solo se revisan tareas/entregas (NO anuncios ni materiales).
+        // El usuario pidió notificaciones solo para tareas nuevas.
       }
 
       if (newItems.length === 0) continue;
