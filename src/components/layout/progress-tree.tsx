@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Leaf, Sparkles, Target, X, Sun, Trees, Sprout } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { todayKey } from "@/lib/format";
+import { localDayKey, todayKey } from "@/lib/format";
 import { useData } from "@/components/providers/data-provider";
 import { DAILY_CAP, effectiveXpCap } from "@/lib/xp-cap";
 
@@ -54,12 +54,20 @@ function readCelebrated(): Set<string> {
 }
 
 type Data = ReturnType<typeof useData>["data"];
-function dayKey(date: Date) { return date.toISOString().slice(0, 10); }
+// Clave LOCAL del día (igual que todayKey): toISOString() devolvía UTC y, en
+// zonas con offset (p. ej. España UTC+2), hoy nunca coincidía con la clave
+// local y el XP de hoy no se recalculaba al abrir el bosque.
+function dayKey(date: Date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
 function dateValue(value: string | null | undefined) { return value ? new Date(`${value.slice(0, 10)}T00:00:00`).getTime() : 0; }
 function levelForXp(xp: number) { return Math.max(0, LEVELS.reduce((current, item, index) => xp >= item.required ? index : current, 0)); }
 
 function xpForDay(data: Data, key: string): number {
-  const tasks = data.tasks.filter((item) => item.status === "done" && item.updated_at.slice(0, 10) === key);
+  const tasks = data.tasks.filter((item) => item.status === "done" && localDayKey(item.updated_at) === key);
   const pomodoros = tasks.filter((item) => item.type === "study_session");
   const habits = data.habitCompletions.filter((item) => item.completed_on === key);
   const missedHabits = key < todayKey() ? data.habits.filter((habit) => !habits.some((item) => item.habit_id === habit.id)).length : 0;
@@ -93,12 +101,12 @@ const POSITION_LABELS: Record<TreePosition, string> = {
   center: "Centro",
 };
 
-const POSITION_CFG: Record<TreePosition, { z: number; scale: number; left: string; centered: boolean }> = {
+const POSITION_CFG: Record<TreePosition, { z: number; scale: number; left?: string; right?: string; centered: boolean }> = {
   // Detrás: capa inferior y todas las fases más pequeñas.
   back: { z: 1, scale: 0.5, left: "50%", centered: true },
   // Laterales: capa media y tamaño intermedio.
   left: { z: 2, scale: 0.78, left: "8%", centered: false },
-  right: { z: 2, scale: 0.78, left: "90%", centered: false },
+  right: { z: 2, scale: 0.78, right: "8%", centered: false },
   // Delante: capa superior y todas las fases más grandes.
   front: { z: 6, scale: 1.35, left: "50%", centered: true },
   // El árbol activo crece en el centro, entre los laterales y el frente.
@@ -122,6 +130,7 @@ function TreeScene({ level, position, trees, reduced, transitionKey, particles, 
             className={`absolute bottom-[-1.5rem] ${TREE_SIZES[4]} object-contain object-bottom`}
             style={{
               left: cfg.left,
+              right: cfg.right,
               zIndex: cfg.z,
               transformOrigin: "50% 100%",
               transform: cfg.centered ? `translateX(-50%) scale(${cfg.scale})` : `scale(${cfg.scale})`,
@@ -135,11 +144,11 @@ function TreeScene({ level, position, trees, reduced, transitionKey, particles, 
           key={`${level}-${transitionKey}`}
           src={`/tree-assets/tree-level-${level}.svg`}
           alt={`Ilustración de ${LEVELS[level].name}`}
-          className={`absolute bottom-[-1.5rem] ${TREE_SIZES[level]} object-contain object-bottom ${active.centered ? "left-1/2" : ""}`}
-          style={{ left: active.centered ? undefined : active.left, zIndex: active.z, transformOrigin: "50% 100%" }}
-          initial={{ opacity: 0, scale: 0.72 * active.scale }}
-          animate={reduced ? { opacity: 1, scale: 1 * active.scale } : { opacity: 1, scale: [0.88 * active.scale, 1.08 * active.scale, 1 * active.scale] }}
-          exit={{ opacity: 0, scale: 0.82 * active.scale }}
+          className={`absolute bottom-[-1.5rem] ${TREE_SIZES[level]} object-contain object-bottom`}
+          style={{ left: active.left, right: active.right, zIndex: active.z, transformOrigin: "50% 100%" }}
+          initial={{ opacity: 0, scale: 0.72 * active.scale, x: active.centered ? "-50%" : 0 }}
+          animate={reduced ? { opacity: 1, scale: 1 * active.scale, x: active.centered ? "-50%" : 0 } : { opacity: 1, scale: [0.88 * active.scale, 1.08 * active.scale, 1 * active.scale], x: active.centered ? "-50%" : 0 }}
+          exit={{ opacity: 0, scale: 0.82 * active.scale, x: active.centered ? "-50%" : 0 }}
           transition={{ opacity: { duration: 0.25 }, scale: { type: "spring", stiffness: 360, damping: 16 } }}
         />
       </AnimatePresence>
@@ -170,6 +179,11 @@ export function ProgressTree() {
   const [remoteLoaded, setRemoteLoaded] = useState(false);
   const [transitionKey, setTransitionKey] = useState(0);
   const [pendingGrowthMessage, setPendingGrowthMessage] = useState(false);
+  // Nivel que el usuario vio por última vez. NO lo toca el sync remoto (que
+  // puede adelantar tree.level silenciosamente): solo avanza al mostrar la
+  // felicitación o al plantar un árbol nuevo, para que la subida de fase
+  // siempre se detecte al abrir el bosque.
+  const [seenLevel, setSeenLevel] = useState(() => readTree().level);
   const [celebrated] = useState(() => readCelebrated());
   const [particles, setParticles] = useState<Particle[]>([]);
   const [planting, setPlanting] = useState(false);
@@ -210,11 +224,11 @@ export function ProgressTree() {
 
   useEffect(() => {
     if (!open) return;
-    const upgraded = calculated.level > tree.level;
+    const upgraded = calculated.level > seenLevel;
     localStorage.setItem(STORAGE_KEY, JSON.stringify(calculated));
-    if (upgraded) { setShowUpgrade(true); setPendingGrowthMessage(true); setTransitionKey((key) => key + 1); }
+    if (upgraded) { setShowUpgrade(true); setPendingGrowthMessage(true); setTransitionKey((key) => key + 1); setSeenLevel(calculated.level); }
     if (calculated.xp !== tree.xp || calculated.level !== tree.level) setTree(calculated);
-  }, [calculated, open, tree.level, tree.xp]);
+  }, [calculated, open, seenLevel]);
 
   useEffect(() => {
     if (!remoteLoaded || !open) return;
@@ -231,7 +245,7 @@ export function ProgressTree() {
     type TodayEvent = { id: string; value: number; color: string; celebrated: boolean };
     const events: TodayEvent[] = [];
     for (const task of data.tasks) {
-      if (task.status !== "done" || task.updated_at.slice(0, 10) !== today) continue;
+      if (task.status !== "done" || localDayKey(task.updated_at) !== today) continue;
       const id = `task:${task.id}`;
       const pomodoro = task.type === "study_session";
       events.push({ id, value: pomodoro ? 25 : 20, color: pomodoro ? XP_COLORS.pomodoro : XP_COLORS.task, celebrated: celebrated.has(id) });
@@ -270,6 +284,7 @@ export function ProgressTree() {
       treesPlanted: current.treesPlanted + 1,
       position,
     }));
+    setSeenLevel(0);
     setPlanting(false);
     setTransitionKey((key) => key + 1);
     // Refleja el plantado en Supabase (idempotente; si falla, el local manda).

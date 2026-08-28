@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { useData } from "@/components/providers/data-provider";
-import { todayKey } from "@/lib/format";
+import { localDayKey, todayKey } from "@/lib/format";
 import { effectiveXpCap } from "@/lib/xp-cap";
 
 const STORAGE_KEY = "nucleo:xp-toast:v1";
@@ -73,7 +73,7 @@ export function XpToast() {
     type TodayEvent = { id: string; value: number; color: string; label: string; celebrated: boolean };
     const events: TodayEvent[] = [];
     for (const task of data.tasks) {
-      if (task.status !== "done" || task.updated_at.slice(0, 10) !== today) continue;
+      if (task.status !== "done" || localDayKey(task.updated_at) !== today) continue;
       const id = `task:${task.id}`;
       const pomodoro = task.type === "study_session";
       events.push({

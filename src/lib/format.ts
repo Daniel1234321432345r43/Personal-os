@@ -41,3 +41,15 @@ export function todayKey(): string {
   const d = String(now.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 }
+
+/** Convierte un instante ISO (UTC) a la clave del día LOCAL (YYYY-MM-DD).
+ *  Útil para atribuir `updated_at` (que viaja en UTC) al día que el usuario
+ *  ve en su navegador, igual que hace `todayKey()`. */
+export function localDayKey(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso.slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
