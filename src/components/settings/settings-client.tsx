@@ -45,6 +45,7 @@ export function SettingsClient() {
   const [resetting, setResetting] = useState(false);
   const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
+  const provider = getProvider(settings.provider);
   const aiContent = (
     <CardContent className="space-y-5">
       {/* Nombre del Secretario IA */}
@@ -69,8 +70,6 @@ export function SettingsClient() {
   if (!hydrated) {
     return <LoadingState />;
   }
-
-  const provider = getProvider(settings.provider);
 
   function update(patch: Partial<typeof settings>) {
     setSettings({ ...settings, ...patch });
