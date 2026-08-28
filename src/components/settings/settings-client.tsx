@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown, Leaf } from "lucide-react";
+import { isXpCapDisabled, setXpCapDisabled } from "@/lib/xp-cap";
 
 function LoadingState() {
   return (
@@ -43,6 +44,7 @@ export function SettingsClient() {
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const [xpCapDisabled, setXpCapDisabledState] = useState(() => isXpCapDisabled());
   const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [aiOpen, setAiOpen] = useState(false);
   const provider = getProvider(settings.provider);
@@ -281,6 +283,39 @@ export function SettingsClient() {
               <p className="text-xs text-muted-foreground">
                 Por defecto: 25 minutos de trabajo y 5 de descanso.
               </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <Leaf className="h-4 w-4 text-emerald-600" />
+                Bosque de progreso
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                El bosque limita el XP diario a 120 para fomentar constancia.
+                Puedes desactivarlo para probar el crecimiento sin tope.
+              </p>
+              <Button
+                type="button"
+                variant={xpCapDisabled ? "outline" : "default"}
+                className={xpCapDisabled ? "w-full" : "w-full bg-emerald-600 hover:bg-emerald-700"}
+                onClick={() => {
+                  const next = !xpCapDisabled;
+                  setXpCapDisabledState(next);
+                  setXpCapDisabled(next);
+                }}
+              >
+                {xpCapDisabled ? "Restaurar límite diario (120 XP)" : "Quitar límite diario de XP"}
+              </Button>
+              {xpCapDisabled && (
+                <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+                  Límite diario desactivado: el XP del bosque ya no se corta a 120
+                  por día.
+                </p>
+              )}
             </CardContent>
           </Card>
 

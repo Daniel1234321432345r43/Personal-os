@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Sparkles } from "lucide-react";
 import { useData } from "@/components/providers/data-provider";
 import { todayKey } from "@/lib/format";
+import { effectiveXpCap } from "@/lib/xp-cap";
 
 const STORAGE_KEY = "nucleo:xp-toast:v1";
 
@@ -13,6 +14,7 @@ type Toast = {
   value: number;
   color: string;
   label: string;
+  limit?: boolean;
 };
 
 /** IDs de completados ya avisados hoy ("tipo:YYYY-MM-DD:id"), para no repetir el toast. */
@@ -45,8 +47,11 @@ function ToastItem({ toast, reduced, onDone }: { toast: Toast; reduced: boolean;
       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-white" style={{ backgroundColor: toast.color }}>
         <Sparkles className="h-3.5 w-3.5" />
       </span>
-      <span className="text-sm font-black" style={{ color: toast.color }}>+{toast.value} XP</span>
-      <span className="text-xs font-medium text-slate-600">{toast.label}</span>
+      {toast.limit ? (
+        <span className="flex flex-col"><span className="text-sm font-black" style={{ color: toast.color }}>Límite diario alcanzado</span><span className="text-xs font-medium text-slate-600">Consigue más XP mañana</span></span>
+      ) : (
+        <span className="flex items-center gap-2"><span className="text-sm font-black" style={{ color: toast.color }}>+{toast.value} XP</span><span className="text-xs font-medium text-slate-600">{toast.label}</span></span>
+      )}
     </motion.div>
   );
 }
@@ -64,24 +69,37 @@ export function XpToast() {
 
   useEffect(() => {
     const today = todayKey();
-    const earned: Toast[] = [];
+    // Eventos de HOY en su orden real (tareas, luego hábitos), marcando si ya fueron celebrados.
+    type TodayEvent = { id: string; value: number; color: string; label: string; celebrated: boolean };
+    const events: TodayEvent[] = [];
     for (const task of data.tasks) {
       if (task.status !== "done" || task.updated_at.slice(0, 10) !== today) continue;
       const id = `task:${task.id}`;
-      if (celebrated.current.has(id)) continue;
-      celebrated.current.add(id);
-      earned.push(
-        task.type === "study_session"
-          ? { id, value: 25, color: "#ea580c", label: "Pomodoro completado" }
-          : { id, value: 20, color: "#16a34a", label: "Tarea completada" },
-      );
+      const pomodoro = task.type === "study_session";
+      events.push({
+        id,
+        value: pomodoro ? 25 : 20,
+        color: pomodoro ? "#ea580c" : "#16a34a",
+        label: pomodoro ? "Pomodoro completado" : "Tarea completada",
+        celebrated: celebrated.current.has(id),
+      });
     }
     for (const habit of data.habitCompletions) {
       if (habit.completed_on !== today) continue;
       const id = `habit:${habit.id}`;
-      if (celebrated.current.has(id)) continue;
-      celebrated.current.add(id);
-      earned.push({ id, value: 5, color: "#0ea5e9", label: "Hábito completado" });
+      events.push({ id, value: 5, color: "#0ea5e9", label: "Hábito completado", celebrated: celebrated.current.has(id) });
+    }
+    // XP bruto de HOY: partiendo de lo ya celebrado, saber si cada nuevo evento cruza el tope diario.
+    let acc = events.reduce((sum, event) => sum + (event.celebrated ? event.value : 0), 0);
+    const earned: Toast[] = [];
+    for (const event of events) {
+      if (event.celebrated) continue;
+      celebrated.current.add(event.id);
+      acc += event.value;
+      // Si al sumar este evento superamos el cap, ya no aporta XP: avisar del límite.
+      earned.push(acc > effectiveXpCap()
+        ? { id: event.id, value: event.value, color: event.color, label: "Consigue más XP mañana", limit: true }
+        : { id: event.id, value: event.value, color: event.color, label: event.label });
     }
     if (earned.length === 0) return;
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify([...celebrated.current].slice(-200))); } catch { /* Almacenamiento no disponible. */ }

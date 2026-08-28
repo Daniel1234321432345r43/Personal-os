@@ -8,11 +8,11 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from("tree_progress")
-    .select("xp, level, updated_at")
+    .select("xp, level, updated_at, trees, trees_planted")
     .eq("user_id", user.id)
     .maybeSingle();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json(data ?? { xp: 0, level: 0, updated_at: null });
+  return NextResponse.json(data ?? { xp: 0, level: 0, updated_at: null, trees: [], trees_planted: 0 });
 }
 
 export async function POST(request: Request) {
