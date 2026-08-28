@@ -44,8 +44,27 @@ export function SettingsClient() {
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
-  // La configuración de IA arranca colapsada (acordeón) para no abrumar.
   const [aiOpen, setAiOpen] = useState(false);
+  const aiContent = (
+    <CardContent className="space-y-5">
+      {/* Nombre del Secretario IA */}
+      <div className={fieldClass}>
+        <label className={`${labelClass} flex items-center gap-1.5`} htmlFor="ai-assistant-name">
+          <Bot className="h-4 w-4 text-primary" />
+          Nombre de tu Secretario IA
+        </label>
+        <input id="ai-assistant-name" value={settings.assistantName ?? "Núcleo"} onChange={(e) => update({ assistantName: e.target.value })} placeholder="ej. Núcleo, Jarvis, Sofía, Alex..." className={inputClass} />
+        <p className="text-xs text-muted-foreground">Nombre con el que se identificará tu asistente en el chat, los saludos y las respuestas.</p>
+      </div>
+      <div className="border-t pt-4"><div className={fieldClass}><label className={labelClass} htmlFor="ai-provider">Proveedor</label><select id="ai-provider" value={settings.provider} onChange={(e) => changeProvider(e.target.value as AiProviderId)} className={selectClass}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></div></div>
+      {provider.models.length > 0 && <div className={fieldClass}><label className={labelClass} htmlFor="ai-model">Modelo</label><select id="ai-model" value={settings.model} onChange={(e) => update({ model: e.target.value })} className={selectClass}>{provider.models.map((m) => <option key={m.id} value={m.id}>{m.label} ({m.id})</option>)}</select></div>}
+      <div className={fieldClass}><label className={labelClass} htmlFor="ai-model-custom">Modelo personalizado (opcional)</label><input id="ai-model-custom" value={settings.model} onChange={(e) => update({ model: e.target.value })} placeholder={provider.defaultModel || "ej. nombre-del-modelo"} className={inputClass} /><p className="text-xs text-muted-foreground">Puedes escribir cualquier ID de modelo válido para el proveedor.</p></div>
+      {provider.needsBaseURL && <div className={fieldClass}><label className={labelClass} htmlFor="ai-baseurl">Base URL (API compatible con OpenAI)</label><input id="ai-baseurl" value={settings.baseURL} onChange={(e) => update({ baseURL: e.target.value })} placeholder={provider.baseURLPlaceholder} className={inputClass} /><div className="flex flex-wrap gap-2 pt-1">{provider.presets.map((preset) => <Button key={preset.label} type="button" variant="outline" size="sm" className="rounded-full text-xs" onClick={() => update({ baseURL: preset.baseURL })}>{preset.label}</Button>)}</div></div>}
+      <div className={fieldClass}><label className={labelClass} htmlFor="ai-key">{provider.apiKeyLabel}</label><div className="relative"><input id="ai-key" type={showKey ? "text" : "password"} value={settings.apiKey} onChange={(e) => update({ apiKey: e.target.value })} placeholder={provider.apiKeyPlaceholder} autoComplete="off" spellCheck={false} className={`${inputClass} pr-9`} /><button type="button" onClick={() => setShowKey((v) => !v)} className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground" aria-label={showKey ? "Ocultar clave" : "Mostrar clave"}>{showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div>{!settings.apiKey && envConfigured && <p className="text-xs text-muted-foreground">Sin clave escrita: se usará la configurada en el servidor (.env.local).</p>}</div>
+      <div className="flex items-center gap-2"><Button type="button" onClick={testConnection} disabled={testing}>{testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}Probar conexión</Button></div>
+      {testResult && <p className={`rounded-lg border p-3 text-sm ${testResult.ok ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>{testResult.message}</p>}
+    </CardContent>
+  );
 
   if (!hydrated) {
     return <LoadingState />;
@@ -161,193 +180,34 @@ export function SettingsClient() {
           <CardHeader className="pb-3">
             <button
               type="button"
-              onClick={() => setAiOpen((v) => !v)}
+              onClick={() => setAiOpen((value) => !value)}
               aria-expanded={aiOpen}
-              className="flex w-full items-center justify-between gap-3 text-left"
+              className="flex w-full items-center justify-between gap-3 text-left lg:pointer-events-none"
             >
               <CardTitle className="text-base">Personalización e IA</CardTitle>
-              <motion.span
-                animate={{ rotate: aiOpen ? 180 : 0 }}
-                transition={{ duration: 0.3, ease: "easeInOut" }}
-                className="shrink-0 text-muted-foreground"
-              >
-                <ChevronDown className="h-4 w-4" />
-              </motion.span>
+              <span className="shrink-0 text-muted-foreground lg:hidden">
+                <motion.span
+                  animate={{ rotate: aiOpen ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="block"
+                >
+                  <ChevronDown className="h-4 w-4" />
+                </motion.span>
+              </span>
             </button>
           </CardHeader>
-          <AnimatePresence initial={false}>
-            {aiOpen && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{
-                  height: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] },
-                  opacity: { duration: 0.3 },
-                }}
-                className="overflow-hidden"
-              >
-          <CardContent className="space-y-5">
-            {/* Nombre del Secretario IA */}
-            <div className={fieldClass}>
-              <label className={`${labelClass} flex items-center gap-1.5`} htmlFor="ai-assistant-name">
-                <Bot className="h-4 w-4 text-primary" />
-                Nombre de tu Secretario IA
-              </label>
-              <input
-                id="ai-assistant-name"
-                value={settings.assistantName ?? "Núcleo"}
-                onChange={(e) => update({ assistantName: e.target.value })}
-                placeholder="ej. Núcleo, Jarvis, Sofía, Alex..."
-                className={inputClass}
-              />
-              <p className="text-xs text-muted-foreground">
-                Nombre con el que se identificará tu asistente en el chat, los saludos y las respuestas.
-              </p>
-            </div>
-
-            <div className="border-t pt-4">
-              <div className={fieldClass}>
-                <label className={labelClass} htmlFor="ai-provider">
-                  Proveedor
-                </label>
-                <select
-                  id="ai-provider"
-                  value={settings.provider}
-                  onChange={(e) => changeProvider(e.target.value as AiProviderId)}
-                  className={selectClass}
-                >
-                  {PROVIDERS.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {provider.models.length > 0 && (
-              <div className={fieldClass}>
-                <label className={labelClass} htmlFor="ai-model">
-                  Modelo
-                </label>
-                <select
-                  id="ai-model"
-                  value={settings.model}
-                  onChange={(e) => update({ model: e.target.value })}
-                  className={selectClass}
-                >
-                  {provider.models.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.label} ({m.id})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div className={fieldClass}>
-              <label className={labelClass} htmlFor="ai-model-custom">
-                Modelo personalizado (opcional)
-              </label>
-              <input
-                id="ai-model-custom"
-                value={settings.model}
-                onChange={(e) => update({ model: e.target.value })}
-                placeholder={provider.defaultModel || "ej. nombre-del-modelo"}
-                className={inputClass}
-              />
-              <p className="text-xs text-muted-foreground">
-                Puedes escribir cualquier ID de modelo válido para el proveedor.
-              </p>
-            </div>
-
-            {provider.needsBaseURL && (
-              <div className={fieldClass}>
-                <label className={labelClass} htmlFor="ai-baseurl">
-                  Base URL (API compatible con OpenAI)
-                </label>
-                <input
-                  id="ai-baseurl"
-                  value={settings.baseURL}
-                  onChange={(e) => update({ baseURL: e.target.value })}
-                  placeholder={provider.baseURLPlaceholder}
-                  className={inputClass}
-                />
-                <div className="flex flex-wrap gap-2 pt-1">
-                  {provider.presets.map((preset) => (
-                    <Button
-                      key={preset.label}
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full text-xs"
-                      onClick={() => update({ baseURL: preset.baseURL })}
-                    >
-                      {preset.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className={fieldClass}>
-              <label className={labelClass} htmlFor="ai-key">
-                {provider.apiKeyLabel}
-              </label>
-              <div className="relative">
-                <input
-                  id="ai-key"
-                  type={showKey ? "text" : "password"}
-                  value={settings.apiKey}
-                  onChange={(e) => update({ apiKey: e.target.value })}
-                  placeholder={provider.apiKeyPlaceholder}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className={`${inputClass} pr-9`}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowKey((v) => !v)}
-                  className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground"
-                  aria-label={showKey ? "Ocultar clave" : "Mostrar clave"}
-                >
-                  {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              {!settings.apiKey && envConfigured && (
-                <p className="text-xs text-muted-foreground">
-                  Sin clave escrita: se usará la configurada en el servidor (.env.local).
-                </p>
+          <div className="hidden lg:block">
+            {aiContent}
+          </div>
+          <div className="lg:hidden">
+            <AnimatePresence initial={false}>
+              {aiOpen && (
+                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ height: { duration: 0.25 }, opacity: { duration: 0.15 } }} className="overflow-hidden">
+                  {aiContent}
+                </motion.div>
               )}
-            </div>
-
-            <div className="flex items-center gap-2">
-              <Button type="button" onClick={testConnection} disabled={testing}>
-                {testing ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <PlugZap className="h-4 w-4" />
-                )}
-                Probar conexión
-              </Button>
-            </div>
-
-            {testResult && (
-              <p
-                className={`rounded-lg border p-3 text-sm ${
-                  testResult.ok
-                    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                    : "border-destructive/30 bg-destructive/10 text-destructive"
-                }`}
-              >
-                {testResult.message}
-              </p>
-            )}
-          </CardContent>
-              </motion.div>
-            )}
-          </AnimatePresence>
+            </AnimatePresence>
+          </div>
         </Card>
 
         <div className="space-y-6">
