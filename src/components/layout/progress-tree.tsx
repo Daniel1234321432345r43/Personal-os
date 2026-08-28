@@ -32,7 +32,14 @@ const LEVELS = [
 ] as const;
 
 type SavedTree = { level: number; xp: number; lastCalculated: string; xpByDay: Record<string, number>; trees: PlantedTree[]; treesPlanted: number; position: TreePosition };
-function emptyTree(): SavedTree { return { level: 0, xp: 0, lastCalculated: todayKey(), xpByDay: {}, trees: [], treesPlanted: 0, position: "center" }; }
+// Clave del día anterior (local). emptyTree() arranca desde aquí: xp=0 significa
+// "no hay XP hasta ayer", así la primera apertura del día cuenta HOY sin duplicarlo.
+function yesterdayKey(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return dayKey(d);
+}
+function emptyTree(): SavedTree { return { level: 0, xp: 0, lastCalculated: yesterdayKey(), xpByDay: {}, trees: [], treesPlanted: 0, position: "center" }; }
 function readTree(): SavedTree {
   if (typeof window === "undefined") return emptyTree();
   try {
@@ -193,11 +200,12 @@ export function ProgressTree() {
   useEffect(() => {
     let cancelled = false;
     fetch(TREE_API).then((response) => response.ok ? response.json() : null).then((remote: { xp?: number; level?: number; trees?: PlantedTree[]; trees_planted?: number } | null) => {
-      if (cancelled || !remote || typeof remote.xp !== "number") return;
+      if (cancelled || !remote) return;
       setTree((current) => ({
         ...current,
-        xp: Math.max(current.xp, remote.xp ?? 0),
-        level: Math.max(current.level, remote.level ?? 0),
+        // El XP/level remoto NO se fusiona: su total no respeta el tope diario
+        // y ya incluye días que el cálculo local volvería a sumar (doble conteo
+        // que crecía con cada recarga). El local, con su tope, manda.
         trees: Array.isArray(remote.trees) && remote.trees.length > current.trees.length ? remote.trees : current.trees,
         treesPlanted: Math.max(current.treesPlanted, remote.trees_planted ?? 0),
       }));
@@ -218,7 +226,7 @@ export function ProgressTree() {
       if (key === todayKey() || nextDays[key] == null) nextDays[key] = xpForDay(data, key);
       cursor.setDate(cursor.getDate() + 1);
     }
-    const xp = Math.max(0, tree.xp + Object.entries(nextDays).filter(([key]) => dateValue(key) >= dateValue(tree.lastCalculated)).reduce((sum, [, value]) => sum + value, 0));
+    const xp = Math.max(0, tree.xp + Object.entries(nextDays).filter(([key]) => dateValue(key) > dateValue(tree.lastCalculated)).reduce((sum, [, value]) => sum + value, 0));
     return { ...tree, level: levelForXp(xp), xp, lastCalculated: todayKey(), xpByDay: nextDays };
   }, [data, open, tree]);
 
@@ -229,6 +237,16 @@ export function ProgressTree() {
     if (upgraded) { setShowUpgrade(true); setPendingGrowthMessage(true); setTransitionKey((key) => key + 1); setSeenLevel(calculated.level); }
     if (calculated.xp !== tree.xp || calculated.level !== tree.level) setTree(calculated);
   }, [calculated, open, seenLevel]);
+
+  // La felicitación de fase nueva solo debe verse una vez por subida: al cerrar
+  // el bosque se limpia, para que al volver a entrar no siga ahí (solo
+  // reaparece si hay una subida de fase nueva).
+  useEffect(() => {
+    if (!open) {
+      setPendingGrowthMessage(false);
+      setShowUpgrade(false);
+    }
+  }, [open]);
 
   useEffect(() => {
     if (!remoteLoaded || !open) return;
@@ -246,13 +264,13 @@ export function ProgressTree() {
     const events: TodayEvent[] = [];
     for (const task of data.tasks) {
       if (task.status !== "done" || localDayKey(task.updated_at) !== today) continue;
-      const id = `task:${task.id}`;
+      const id = `task:${today}:${task.id}`;
       const pomodoro = task.type === "study_session";
       events.push({ id, value: pomodoro ? 25 : 20, color: pomodoro ? XP_COLORS.pomodoro : XP_COLORS.task, celebrated: celebrated.has(id) });
     }
     for (const habit of data.habitCompletions) {
       if (habit.completed_on !== today) continue;
-      const id = `habit:${habit.id}`;
+      const id = `habit:${today}:${habit.id}`;
       events.push({ id, value: 5, color: XP_COLORS.habit, celebrated: celebrated.has(id) });
     }
     // XP bruto de HOY: partiendo de lo ya celebrado, saber si cada nuevo evento cruza el tope diario.

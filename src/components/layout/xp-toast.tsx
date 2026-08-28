@@ -74,7 +74,7 @@ export function XpToast() {
     const events: TodayEvent[] = [];
     for (const task of data.tasks) {
       if (task.status !== "done" || localDayKey(task.updated_at) !== today) continue;
-      const id = `task:${task.id}`;
+      const id = `task:${today}:${task.id}`;
       const pomodoro = task.type === "study_session";
       events.push({
         id,
@@ -86,7 +86,7 @@ export function XpToast() {
     }
     for (const habit of data.habitCompletions) {
       if (habit.completed_on !== today) continue;
-      const id = `habit:${habit.id}`;
+      const id = `habit:${today}:${habit.id}`;
       events.push({ id, value: 5, color: "#0ea5e9", label: "Hábito completado", celebrated: celebrated.current.has(id) });
     }
     // XP bruto de HOY: partiendo de lo ya celebrado, saber si cada nuevo evento cruza el tope diario.
