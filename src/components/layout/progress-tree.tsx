@@ -9,8 +9,13 @@ import { todayKey } from "@/lib/format";
 import { useData } from "@/components/providers/data-provider";
 
 const STORAGE_KEY = "nucleo:progress-tree:v3";
+const CELEBRATED_KEY = "nucleo:progress-tree:celebrated";
 const TREE_API = "/api/tree/progress";
 const DAILY_CAP = 120;
+
+const XP_COLORS = { task: "#16a34a", pomodoro: "#ea580c", habit: "#0ea5e9" } as const;
+
+type Particle = { id: string; value: number; color: string; x: number; delay: number };
 
 const LEVELS = [
   { name: "Brote", subtitle: "0 - 100 XP", required: 0, emoji: "🌱" },
@@ -29,6 +34,17 @@ function readTree(): SavedTree {
     if (parsed && typeof parsed.xp === "number") return { ...emptyTree(), ...parsed, xpByDay: parsed.xpByDay ?? {} };
   } catch { /* Estado local inválido. */ }
   return emptyTree();
+}
+
+/** IDs de completados ya celebrados hoy ("tipo:YYYY-MM-DD:id"), para no repetir partículas. */
+function readCelebrated(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const today = todayKey();
+    const parsed = JSON.parse(localStorage.getItem(CELEBRATED_KEY) ?? "[]") as unknown;
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string" && id.startsWith(today)) : []);
+  } catch { /* Estado local inválido. */ }
+  return new Set();
 }
 
 type Data = ReturnType<typeof useData>["data"];
@@ -58,7 +74,7 @@ function FallingLeaves({ reduced }: { reduced: boolean }) {
   </div>;
 }
 
-function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: boolean; transitionKey: number }) {
+function TreeScene({ level, reduced, transitionKey, particles, onParticleDone }: { level: number; reduced: boolean; transitionKey: number; particles: Particle[]; onParticleDone: (id: string) => void }) {
   const treeSizes = ["h-[68%] w-[76%]", "h-[100%] w-[110%]", "h-[136%] w-[140%]", "h-[168%] w-[172%]", "h-[188%] w-[188%]"];
   return (
     <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-[#d8f1e8]">
@@ -77,7 +93,21 @@ function TreeScene({ level, reduced, transitionKey }: { level: number; reduced: 
           transition={{ opacity: { duration: 0.25 }, scale: { type: "spring", stiffness: 360, damping: 16 } }}
         />
       </AnimatePresence>
-      <div className="absolute left-4 top-4 rounded-full bg-white/70 px-3 py-1 text-xs font-semibold text-green-950 backdrop-blur">ESCENA · {LEVELS[level].name}</div>
+      <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden" aria-hidden="true">
+        {particles.map((particle) => (
+          <motion.span
+            key={particle.id}
+            className="absolute"
+            style={{ left: "50%", top: "38%" }}
+            initial={{ opacity: 0, y: 0, scale: 0.5 }}
+            animate={reduced ? { opacity: [0, 1, 0], y: -60 } : { opacity: [0, 1, 1, 0], y: [0, -60, -130, -200], x: [0, particle.x * 0.35, particle.x * 0.7, particle.x], scale: [0.5, 1.15, 1.05, 0.9] }}
+            transition={{ duration: 2.6, ease: "easeOut", delay: particle.delay }}
+            onAnimationComplete={() => onParticleDone(particle.id)}
+          >
+            <span className="block -translate-x-1/2 whitespace-nowrap rounded-full bg-white/90 px-2.5 py-1 text-xs font-black shadow-md" style={{ color: particle.color }}>+{particle.value} XP</span>
+          </motion.span>
+        ))}
+      </div>
     </div>
   );
 }
@@ -90,6 +120,8 @@ export function ProgressTree() {
   const [remoteLoaded, setRemoteLoaded] = useState(false);
   const [transitionKey, setTransitionKey] = useState(0);
   const [pendingGrowthMessage, setPendingGrowthMessage] = useState(false);
+  const [celebrated] = useState(() => readCelebrated());
+  const [particles, setParticles] = useState<Particle[]>([]);
   const reduced = useReducedMotion();
 
   useEffect(() => {
@@ -107,7 +139,13 @@ export function ProgressTree() {
     const nextDays = { ...tree.xpByDay };
     const cursor = new Date(`${tree.lastCalculated}T00:00:00`);
     const today = new Date(`${todayKey()}T00:00:00`);
-    while (cursor <= today) { const key = dayKey(cursor); if (nextDays[key] == null) nextDays[key] = xpForDay(data, key); cursor.setDate(cursor.getDate() + 1); }
+    while (cursor <= today) {
+      const key = dayKey(cursor);
+      // El día de hoy se recalcula siempre: las tareas/hábitos de hoy cambian
+      // durante el día y el bosque debe reflejarlo al abrirlo sin reiniciar.
+      if (key === todayKey() || nextDays[key] == null) nextDays[key] = xpForDay(data, key);
+      cursor.setDate(cursor.getDate() + 1);
+    }
     const xp = Math.max(0, tree.xp + Object.entries(nextDays).filter(([key]) => dateValue(key) >= dateValue(tree.lastCalculated)).reduce((sum, [, value]) => sum + value, 0));
     return { level: levelForXp(xp), xp, lastCalculated: todayKey(), xpByDay: nextDays };
   }, [data, open, tree]);
@@ -128,6 +166,30 @@ export function ProgressTree() {
     void sync("pomodoro", data.tasks.filter((item) => item.type === "study_session" && item.status === "done").map((item) => item.id), 25);
   }, [data.habitCompletions, data.tasks, open, remoteLoaded]);
 
+  useEffect(() => {
+    if (!open) return;
+    const today = todayKey();
+    const earned: { id: string; value: number; color: string }[] = [];
+    for (const task of data.tasks) {
+      if (task.status !== "done" || task.updated_at.slice(0, 10) !== today) continue;
+      const id = `task:${task.id}`;
+      if (celebrated.has(id)) continue;
+      celebrated.add(id);
+      earned.push(task.type === "study_session" ? { id, value: 25, color: XP_COLORS.pomodoro } : { id, value: 20, color: XP_COLORS.task });
+    }
+    for (const habit of data.habitCompletions) {
+      if (habit.completed_on !== today) continue;
+      const id = `habit:${habit.id}`;
+      if (celebrated.has(id)) continue;
+      celebrated.add(id);
+      earned.push({ id, value: 5, color: XP_COLORS.habit });
+    }
+    if (earned.length === 0) return;
+    try { localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...celebrated].slice(-200))); } catch { /* Almacenamiento no disponible. */ }
+    const burst = earned.slice(0, 8).map((item, index) => ({ id: `${item.id}:${Date.now()}:${index}`, value: item.value, color: item.color, x: Math.round((Math.random() - 0.5) * 140), delay: index * 0.18 }));
+    setParticles((prev) => [...prev, ...burst]);
+  }, [celebrated, data.habitCompletions, data.tasks, open]);
+
   const current = LEVELS[calculated.level];
   const next = LEVELS[calculated.level + 1];
   const percentage = next ? ((calculated.xp - current.required) / (next.required - current.required)) * 100 : 100;
@@ -139,10 +201,10 @@ export function ProgressTree() {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent side="bottom" className="max-h-[94vh] rounded-t-3xl border-0 bg-sky-50 p-0 text-slate-900">
         <SheetHeader className="border-b border-sky-200 px-6 pb-3 pt-5"><SheetTitle className="flex items-center gap-2 text-slate-900"><Leaf className="h-5 w-5 text-emerald-600" /> Mi bosque de progreso</SheetTitle></SheetHeader>
-        {pendingGrowthMessage && <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mx-5 mt-4 rounded-xl border border-lime-300 bg-lime-100 p-3 text-center text-sm font-bold text-green-950"><Sparkles className="mx-auto mb-1 h-5 w-5 text-lime-700" />¡Tu árbol ha crecido! Has desbloqueado la fase {calculated.level + 1}.</motion.div>}
+        {pendingGrowthMessage && <motion.div initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="mx-5 mt-4 rounded-xl border border-lime-300 bg-lime-100 p-3 text-center text-sm font-bold text-green-950"><Sparkles className="mx-auto mb-1 h-5 w-5 text-lime-700" />¡Tu árbol ha crecido! Has desbloqueado la fase {LEVELS[calculated.level].emoji} {LEVELS[calculated.level].name}.</motion.div>}
         <div className="overflow-y-auto px-5 pb-8 pt-4">
           <div className="mb-3 flex items-center justify-between"><span className="rounded-full bg-lime-400 px-3 py-1 text-xs font-black text-green-950">LVL {calculated.level + 1}</span><span className="flex items-center gap-1 text-sm font-semibold text-amber-700"><Sun className="h-4 w-4" /> {calculated.xp} XP</span></div>
-          <TreeScene level={calculated.level} reduced={Boolean(reduced)} transitionKey={transitionKey} />
+          <TreeScene level={calculated.level} reduced={Boolean(reduced)} transitionKey={transitionKey} particles={particles} onParticleDone={(id) => setParticles((prev) => prev.filter((p) => p.id !== id))} />
           <AnimatePresence mode="wait">{showUpgrade && <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} className="mt-3 rounded-xl bg-lime-400 p-3 text-center text-sm font-bold text-green-950"><Sparkles className="mx-auto mb-1 h-5 w-5" /> ¡Fase actualizada! Tu árbol ha crecido.</motion.div>}</AnimatePresence>
           <div className="mt-4 flex items-end justify-between"><div><p className="text-lg font-semibold">{current.emoji} {current.name}</p><p className="text-sm text-slate-600">{current.subtitle}</p></div><p className="text-xs text-slate-500">{next ? `${Math.max(0, next.required - calculated.xp)} XP para el siguiente nivel` : "Nivel máximo"}</p></div>
           <div className="mt-3 space-y-2"><div className="flex justify-between text-xs text-slate-500"><span>Progreso de fase</span><span>{Math.round(Math.max(0, calculated.xp - current.required))} / {next ? next.required - current.required : 1}</span></div><div className="h-2 overflow-hidden rounded-full bg-sky-200"><motion.div className="h-full rounded-full bg-emerald-500" animate={{ width: `${Math.max(0, Math.min(100, percentage))}%` }} /></div></div>
