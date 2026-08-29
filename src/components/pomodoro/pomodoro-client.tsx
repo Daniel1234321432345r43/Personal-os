@@ -156,7 +156,10 @@ export function PomodoroClient() {
         const key = "nucleo:pomodoro-completions:v1";
         const current = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
         const completions = Array.isArray(current) ? current.filter((value): value is string => typeof value === "string") : [];
-        completions.push(`pomodoro:${todayKey()}:${crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`);
+        const id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+          ? crypto.randomUUID()
+          : `${Date.now()}-${Math.random()}`;
+        completions.push(`pomodoro:${todayKey()}:${id}`);
         localStorage.setItem(key, JSON.stringify(completions.slice(-500)));
       } catch { /* El temporizador sigue funcionando aunque falle el almacenamiento. */ }
       void showCompletionNotification(

@@ -11,6 +11,7 @@ import { effectiveXpCap } from "@/lib/xp-cap";
 
 const STORAGE_KEY = "nucleo:progress-tree:v4";
 const CELEBRATED_KEY = "nucleo:progress-tree:celebrated";
+const POMODORO_KEY = "nucleo:pomodoro-completions:v1";
 const TREE_API = "/api/tree/progress";
 const XP_COLORS = { task: "#16a34a", pomodoro: "#ea580c", habit: "#0ea5e9" } as const;
 
@@ -44,16 +45,19 @@ function readCelebrated(): Set<string> {
 }
 type Data = ReturnType<typeof useData>["data"];
 function levelForXp(xp: number) { return Math.max(0, LEVELS.reduce((current, item, index) => xp >= item.required ? index : current, 0)); }
+function pomodoroCountForDay(key: string): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const stored = JSON.parse(localStorage.getItem(POMODORO_KEY) ?? "[]") as unknown;
+    return Array.isArray(stored)
+      ? stored.filter((value) => typeof value === "string" && value.startsWith(`pomodoro:${key}:`)).length
+      : 0;
+  } catch { return 0; }
+}
 function xpForDay(data: Data, key: string): number {
   const tasks = data.tasks.filter((item) => item.status === "done" && item.type !== "study_session" && localDayKey(item.updated_at) === key);
   const habits = data.habitCompletions.filter((item) => item.completed_on === key);
-  let pomodoros = 0;
-  if (typeof window !== "undefined") {
-    try {
-      const stored = JSON.parse(localStorage.getItem("nucleo:pomodoro-completions:v1") ?? "[]") as unknown;
-      pomodoros = Array.isArray(stored) ? stored.filter((value) => value === `pomodoro:${key}` || (typeof value === "string" && value.startsWith(`pomodoro:${key}:`))).length : 0;
-    } catch { /* Historial no disponible. */ }
-  }
+  const pomodoros = pomodoroCountForDay(key);
   const missedHabits = key < todayKey() ? data.habits.filter((habit) => !habits.some((item) => item.habit_id === habit.id)).length : 0;
   const noWorkout = key < todayKey() && !data.workouts.some((item) => item.date === key) ? 10 : 0;
   return Math.max(-25, Math.min(effectiveXpCap(), tasks.length * 20 + pomodoros * 25 + habits.length * 5 - missedHabits * 15 - noWorkout));

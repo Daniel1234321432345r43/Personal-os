@@ -8,6 +8,7 @@ import { localDayKey, todayKey } from "@/lib/format";
 import { effectiveXpCap } from "@/lib/xp-cap";
 
 const STORAGE_KEY = "nucleo:xp-toast:v1";
+const POMODORO_KEY = "nucleo:pomodoro-completions:v1";
 
 type Toast = {
   id: string;
@@ -85,6 +86,15 @@ export function XpToast() {
         label: "Tarea completada",
         celebrated: celebrated.current.has(id),
       });
+    }
+    let pomodoroCompletions: string[] = [];
+    try {
+      const stored = JSON.parse(localStorage.getItem(POMODORO_KEY) ?? "[]") as unknown;
+      pomodoroCompletions = Array.isArray(stored) ? stored.filter((value): value is string => typeof value === "string" && value.startsWith(`pomodoro:${today}:`)) : [];
+    } catch { /* Historial no disponible. */ }
+    for (const completion of pomodoroCompletions) {
+      const id = completion;
+      events.push({ id, value: 25, color: "#ea580c", label: "Pomodoro completado", celebrated: celebrated.current.has(id) });
     }
     for (const habit of data.habitCompletions) {
       if (habit.completed_on !== today) continue;
