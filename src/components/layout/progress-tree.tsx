@@ -89,7 +89,6 @@ export function ProgressTree() {
   }, []);
 
   const calculated = useMemo(() => {
-    if (!open) return tree;
     const nextDays = { ...tree.xpByDay };
     const cursor = new Date(`${tree.lastCalculated}T00:00:00`);
     const today = new Date(`${todayKey()}T00:00:00`);
