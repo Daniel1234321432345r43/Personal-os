@@ -20,7 +20,7 @@ type Particle = { id: string; value: number; color: string; limit: boolean; x: n
 /** Posición de un árbol dentro de la escena. "center" es el árbol activo inicial. */
 type TreePosition = "back" | "front" | "left" | "right" | "center";
 
-/** Árbol ya cultivado (completado): queda visible en la escena. */
+/** Árbol ya cultivado (completado): queda integrado en las escenas y en el historial. */
 type PlantedTree = { id: string; position: TreePosition; plantedAt: string };
 
 const LEVELS = [
@@ -55,7 +55,9 @@ function readCelebrated(): Set<string> {
   try {
     const today = todayKey();
     const parsed = JSON.parse(localStorage.getItem(CELEBRATED_KEY) ?? "[]") as unknown;
-    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string" && id.startsWith(today)) : []);
+    // Los IDs tienen el formato "tipo:YYYY-MM-DD:id" (p. ej. "task:2026-08-29:abc"):
+    // se busca la fecha entre separadores, no con startsWith (que nunca coincidiría).
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string" && id.includes(`:${today}:`)) : []);
   } catch { /* Estado local inválido. */ }
   return new Set();
 }
@@ -84,22 +86,53 @@ function xpForDay(data: Data, key: string): number {
 }
 
 function FallingLeaves({ reduced }: { reduced: boolean }) {
+  // Hojas pequeñas repartidas por toda la escena, con deriva de viento.
   const leaves = [
-    { left: "18%", delay: 0, duration: 5.5, color: "#65a30d" },
-    { left: "31%", delay: 1.8, duration: 6.4, color: "#84cc16" },
-    { left: "44%", delay: 3.2, duration: 5.8, color: "#a3e635" },
-    { left: "57%", delay: 0.9, duration: 6.8, color: "#4d7c0f" },
-    { left: "70%", delay: 2.6, duration: 5.9, color: "#bef264" },
-    { left: "80%", delay: 4.1, duration: 6.2, color: "#65a30d" },
+    { left: "3%", delay: 0, duration: 6.2, color: "#65a30d", drift: 52 },
+    { left: "13%", delay: 2.4, duration: 7.4, color: "#84cc16", drift: 64 },
+    { left: "23%", delay: 1.2, duration: 6.8, color: "#a3e635", drift: 40 },
+    { left: "33%", delay: 3.6, duration: 8, color: "#4d7c0f", drift: 58 },
+    { left: "43%", delay: 0.8, duration: 6.4, color: "#bef264", drift: 46 },
+    { left: "53%", delay: 2.9, duration: 7.2, color: "#65a30d", drift: 54 },
+    { left: "63%", delay: 1.6, duration: 8.4, color: "#84cc16", drift: 42 },
+    { left: "73%", delay: 4, duration: 6.6, color: "#a3e635", drift: 60 },
+    { left: "83%", delay: 2.2, duration: 7.8, color: "#4d7c0f", drift: 50 },
+    { left: "93%", delay: 0.5, duration: 6.9, color: "#bef264", drift: 36 },
   ];
-  return <div className="pointer-events-none absolute left-[18%] right-[18%] top-[4%] bottom-[18%] z-20 overflow-hidden" aria-hidden="true">
-    {leaves.map((leaf, index) => <motion.span key={index} className="absolute top-[18%] h-2.5 w-1.5 rounded-full" style={{ left: leaf.left, backgroundColor: leaf.color }} animate={reduced ? { opacity: 0.65 } : { opacity: [0, 1, 1, 0], y: [0, 70, 145, 270], x: [0, 32, -24, 42], rotate: [0, 140, 260, 420] }} transition={reduced ? undefined : { delay: leaf.delay, duration: leaf.duration, repeat: Infinity, ease: "easeInOut" }} />)}
-  </div>;
+  // Ráfagas de viento que cruzan la escena de izquierda a derecha.
+  const gusts = [
+    { top: "16%", delay: 0, duration: 3.6, height: 2, opacity: 0.5 },
+    { top: "36%", delay: 1.8, duration: 4.2, height: 1.5, opacity: 0.35 },
+    { top: "56%", delay: 3.2, duration: 3.9, height: 2.5, opacity: 0.45 },
+    { top: "76%", delay: 4.8, duration: 4.4, height: 1.5, opacity: 0.3 },
+  ];
+  return <>
+    <div className="pointer-events-none absolute inset-0 z-10 overflow-hidden" aria-hidden="true">
+      {gusts.map((gust, index) => (
+        <motion.span
+          key={`gust-${index}`}
+          className="absolute rounded-full bg-gradient-to-r from-transparent via-white/70 to-transparent blur-[1px]"
+          style={{ top: gust.top, left: "-30%", width: "30%", height: gust.height, opacity: gust.opacity }}
+          animate={reduced ? { opacity: 0 } : { left: ["-30%", "110%"], opacity: [0, gust.opacity, gust.opacity, 0] }}
+          transition={reduced ? undefined : { delay: gust.delay, duration: gust.duration, repeat: Infinity, ease: "easeInOut", times: [0, 0.25, 0.75, 1] }}
+        />
+      ))}
+    </div>
+    <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" aria-hidden="true">
+      {leaves.map((leaf, index) => (
+        <motion.span
+          key={index}
+          className="absolute top-[-4%] h-1.5 w-2 rounded-full"
+          style={{ left: leaf.left, backgroundColor: leaf.color }}
+          animate={reduced ? { opacity: 0.6 } : { opacity: [0, 1, 1, 0], y: [0, 120, 240, 340], x: [0, leaf.drift * 0.4, leaf.drift * 0.8, leaf.drift], rotate: [0, 180, 360, 540] }}
+          transition={reduced ? undefined : { delay: leaf.delay, duration: leaf.duration, repeat: Infinity, ease: "easeInOut" }}
+        />
+      ))}
+    </div>
+  </>;
 }
 
-const TREE_SIZES = ["h-[68%] w-[76%]", "h-[100%] w-[110%]", "h-[136%] w-[140%]", "h-[168%] w-[172%]", "h-[188%] w-[188%]"];
-
-/** Configuración visual de cada posición: capa (z-index) y escala relativa. */
+/** Etiqueta de cada posición donde se puede plantar un árbol. */
 const POSITION_LABELS: Record<TreePosition, string> = {
   back: "Detrás",
   front: "Delante",
@@ -108,57 +141,24 @@ const POSITION_LABELS: Record<TreePosition, string> = {
   center: "Centro",
 };
 
-const POSITION_CFG: Record<TreePosition, { z: number; scale: number; left?: string; right?: string; centered: boolean }> = {
-  // Detrás: capa inferior y todas las fases más pequeñas.
-  back: { z: 1, scale: 0.5, left: "50%", centered: true },
-  // Laterales: capa media y tamaño intermedio.
-  left: { z: 2, scale: 0.78, left: "8%", centered: false },
-  right: { z: 2, scale: 0.78, right: "8%", centered: false },
-  // Delante: capa superior y todas las fases más grandes.
-  front: { z: 6, scale: 1.35, left: "50%", centered: true },
-  // El árbol activo crece en el centro, entre los laterales y el frente.
-  center: { z: 4, scale: 1, left: "50%", centered: true },
-};
-
-function TreeScene({ level, position, trees, reduced, transitionKey, particles, onParticleDone }: { level: number; position: TreePosition; trees: PlantedTree[]; reduced: boolean; transitionKey: number; particles: Particle[]; onParticleDone: (id: string) => void }) {
-  const active = POSITION_CFG[position];
+function TreeScene({ level, reduced, transitionKey, particles, onParticleDone }: { level: number; reduced: boolean; transitionKey: number; particles: Particle[]; onParticleDone: (id: string) => void }) {
   return (
     <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-[#d8f1e8]">
-      <img src="/tree-assets/Fondo%20bosque.svg" alt="" aria-hidden="true" className="absolute inset-0 z-0 block h-full w-full object-cover object-bottom" onError={(event) => { event.currentTarget.style.display = "none"; }} />
-      <FallingLeaves reduced={reduced} />
-      {/* Árboles ya cultivados: cada uno se queda en la posición donde se plantó. */}
-      {trees.map((tree) => {
-        const cfg = POSITION_CFG[tree.position];
-        return (
-          <img
-            key={tree.id}
-            src="/tree-assets/tree-level-4.svg"
-            alt="Árbol cultivado"
-            className={`absolute bottom-[-1.5rem] ${TREE_SIZES[4]} object-contain object-bottom`}
-            style={{
-              left: cfg.left,
-              right: cfg.right,
-              zIndex: cfg.z,
-              transformOrigin: "50% 100%",
-              transform: cfg.centered ? `translateX(-50%) scale(${cfg.scale})` : `scale(${cfg.scale})`,
-            }}
-          />
-        );
-      })}
-      {/* Árbol activo: crece en su posición, con la escala de su fase. */}
+      {/* Escena completa del nivel: el paisaje evolucionado lleva el árbol integrado. */}
       <AnimatePresence mode="wait">
         <motion.img
           key={`${level}-${transitionKey}`}
-          src={`/tree-assets/tree-level-${level}.svg`}
+          src={`/tree-assets/escena-nivel-${level}.svg`}
           alt={`Ilustración de ${LEVELS[level].name}`}
-          className={`absolute bottom-[-1.5rem] ${TREE_SIZES[level]} object-contain object-bottom`}
-          style={{ left: active.left, right: active.right, zIndex: active.z, transformOrigin: "50% 100%" }}
-          initial={{ opacity: 0, scale: 0.72 * active.scale, x: active.centered ? "-50%" : 0 }}
-          animate={reduced ? { opacity: 1, scale: 1 * active.scale, x: active.centered ? "-50%" : 0 } : { opacity: 1, scale: [0.88 * active.scale, 1.08 * active.scale, 1 * active.scale], x: active.centered ? "-50%" : 0 }}
-          exit={{ opacity: 0, scale: 0.82 * active.scale, x: active.centered ? "-50%" : 0 }}
-          transition={{ opacity: { duration: 0.25 }, scale: { type: "spring", stiffness: 360, damping: 16 } }}
+          className="absolute inset-0 z-0 block h-full w-full object-cover object-bottom"
+          initial={{ opacity: 0, scale: 1.06 }}
+          animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [1.06, 1.02, 1] }}
+          exit={{ opacity: 0, scale: 0.985 }}
+          transition={reduced ? { opacity: { duration: 0.35 } } : { opacity: { duration: 0.35 }, scale: { type: "spring", stiffness: 260, damping: 20 } }}
+          onError={(event) => { event.currentTarget.style.display = "none"; }}
         />
       </AnimatePresence>
+      <FallingLeaves reduced={reduced} />
       <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden" aria-hidden="true">
         {particles.map((particle) => (
           <motion.span
@@ -226,8 +226,16 @@ export function ProgressTree() {
       if (key === todayKey() || nextDays[key] == null) nextDays[key] = xpForDay(data, key);
       cursor.setDate(cursor.getDate() + 1);
     }
-    const xp = Math.max(0, tree.xp + Object.entries(nextDays).filter(([key]) => dateValue(key) > dateValue(tree.lastCalculated)).reduce((sum, [, value]) => sum + value, 0));
-    return { ...tree, level: levelForXp(xp), xp, lastCalculated: todayKey(), xpByDay: nextDays };
+    // tree.xp ya incluye los días hasta tree.lastCalculated (incluido). Si la
+    // última apertura ya fue HOY, el XP fresco de hoy se recalcula en xpByDay
+    // pero la suma de días posteriores no lo volvería a añadir: hay que
+    // sustituir el valor horneado de hoy por el fresco para que el XP ganado
+    // después de la última apertura se refleje al instante (sin duplicarlo).
+    const todayKeyStr = todayKey();
+    const laterDays = Object.entries(nextDays).filter(([key]) => dateValue(key) > dateValue(tree.lastCalculated)).reduce((sum, [, value]) => sum + value, 0);
+    const todayCorrection = dateValue(tree.lastCalculated) >= dateValue(todayKeyStr) ? (nextDays[todayKeyStr] ?? 0) - (tree.xpByDay[todayKeyStr] ?? 0) : 0;
+    const xp = Math.max(0, tree.xp + laterDays + todayCorrection);
+    return { ...tree, level: levelForXp(xp), xp, lastCalculated: todayKeyStr, xpByDay: nextDays };
   }, [data, open, tree]);
 
   useEffect(() => {
@@ -332,10 +340,10 @@ export function ProgressTree() {
     <Sheet open={open} onOpenChange={setOpen}>
       <SheetContent side="bottom" className="max-h-[94vh] rounded-t-3xl border-0 bg-sky-50 p-0 text-slate-900">
         <SheetHeader className="border-b border-sky-200 px-6 pb-3 pt-5"><SheetTitle className="flex items-center gap-2 text-slate-900"><Leaf className="h-5 w-5 text-emerald-600" /> Mi bosque de progreso</SheetTitle></SheetHeader>
-        {pendingGrowthMessage && <motion.div initial={{ opacity: 0, y: -10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: "spring", stiffness: 260, damping: 18 }} className="mx-5 mt-4 flex flex-col items-center gap-1.5 rounded-2xl border border-lime-300 bg-gradient-to-b from-lime-100 to-emerald-50 p-4 text-center"><Sparkles className="h-6 w-6 text-lime-600" /><p className="text-lg font-black text-green-950">¡Tu árbol ha crecido! 🎉</p><img src={`/tree-assets/tree-level-${calculated.level}.svg`} alt={`Fase ${LEVELS[calculated.level].name}`} className="h-28 w-28 object-contain" /><p className="text-base font-bold text-green-900">Has desbloqueado la fase {LEVELS[calculated.level].emoji} {LEVELS[calculated.level].name}</p><p className="text-xs font-medium text-green-700">Sigue cuidándolo para que siga creciendo.</p></motion.div>}
+        {pendingGrowthMessage && <motion.div initial={{ opacity: 0, y: -10, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ type: "spring", stiffness: 260, damping: 18 }} className="mx-5 mt-4 flex flex-col items-center gap-1.5 rounded-2xl border border-lime-300 bg-gradient-to-b from-lime-100 to-emerald-50 p-4 text-center"><Sparkles className="h-6 w-6 text-lime-600" /><p className="text-lg font-black text-green-950">¡Tu árbol ha crecido! 🎉</p><img src={`/tree-assets/escena-nivel-${calculated.level}.svg`} alt={`Fase ${LEVELS[calculated.level].name}`} className="h-24 w-40 rounded-lg object-cover object-bottom" /><p className="text-base font-bold text-green-900">Has desbloqueado la fase {LEVELS[calculated.level].emoji} {LEVELS[calculated.level].name}</p><p className="text-xs font-medium text-green-700">Sigue cuidándolo para que siga creciendo.</p></motion.div>}
         <div className="overflow-y-auto px-5 pb-8 pt-4">
           <div className="mb-3 flex items-center justify-between"><span className="rounded-full bg-lime-400 px-3 py-1 text-xs font-black text-green-950">LVL {calculated.level + 1}</span><span className="flex items-center gap-2"><span className="flex items-center gap-1 text-sm font-semibold text-amber-700"><Sun className="h-4 w-4" /> {calculated.xp} XP</span><Button variant="outline" size="sm" className="h-8 gap-1 rounded-full border-emerald-300 bg-white/70 px-2.5 text-xs font-bold text-emerald-700 hover:bg-white" onClick={() => setShowForest((value) => !value)} aria-label="Ver árboles cultivados"><Trees className="h-4 w-4" /> {calculated.treesPlanted}</Button></span></div>
-          <TreeScene level={calculated.level} position={calculated.position} trees={calculated.trees} reduced={Boolean(reduced)} transitionKey={transitionKey} particles={particles} onParticleDone={(id) => setParticles((prev) => prev.filter((p) => p.id !== id))} />
+          <TreeScene level={calculated.level} reduced={Boolean(reduced)} transitionKey={transitionKey} particles={particles} onParticleDone={(id) => setParticles((prev) => prev.filter((p) => p.id !== id))} />
           <AnimatePresence>
             {showForest && (
               <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">

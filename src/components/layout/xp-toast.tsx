@@ -23,7 +23,9 @@ function readCelebrated(): Set<string> {
   try {
     const today = todayKey();
     const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? "[]") as unknown;
-    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string" && id.startsWith(today)) : []);
+    // Los IDs tienen el formato "tipo:YYYY-MM-DD:id" (p. ej. "task:2026-08-29:abc"):
+    // se busca la fecha entre separadores, no con startsWith (que nunca coincidiría).
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string" && id.includes(`:${today}:`)) : []);
   } catch { /* Estado local inválido. */ }
   return new Set();
 }
