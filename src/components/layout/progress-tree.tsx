@@ -45,12 +45,18 @@ function readCelebrated(): Set<string> {
 type Data = ReturnType<typeof useData>["data"];
 function levelForXp(xp: number) { return Math.max(0, LEVELS.reduce((current, item, index) => xp >= item.required ? index : current, 0)); }
 function xpForDay(data: Data, key: string): number {
-  const tasks = data.tasks.filter((item) => item.status === "done" && localDayKey(item.updated_at) === key);
-  const pomodoros = tasks.filter((item) => item.type === "study_session");
+  const tasks = data.tasks.filter((item) => item.status === "done" && item.type !== "study_session" && localDayKey(item.updated_at) === key);
   const habits = data.habitCompletions.filter((item) => item.completed_on === key);
+  let pomodoros = 0;
+  if (typeof window !== "undefined") {
+    try {
+      const stored = JSON.parse(localStorage.getItem("nucleo:pomodoro-completions:v1") ?? "[]") as unknown;
+      pomodoros = Array.isArray(stored) ? stored.filter((value) => value === `pomodoro:${key}` || (typeof value === "string" && value.startsWith(`pomodoro:${key}:`))).length : 0;
+    } catch { /* Historial no disponible. */ }
+  }
   const missedHabits = key < todayKey() ? data.habits.filter((habit) => !habits.some((item) => item.habit_id === habit.id)).length : 0;
   const noWorkout = key < todayKey() && !data.workouts.some((item) => item.date === key) ? 10 : 0;
-  return Math.max(-25, Math.min(effectiveXpCap(), tasks.length * 20 + pomodoros.length * 25 + habits.length * 5 - missedHabits * 15 - noWorkout));
+  return Math.max(-25, Math.min(effectiveXpCap(), tasks.length * 20 + pomodoros * 25 + habits.length * 5 - missedHabits * 15 - noWorkout));
 }
 function FallingLeaves({ reduced }: { reduced: boolean }) {
   const leaves = ["#65a30d", "#84cc16", "#a3e635", "#4d7c0f", "#bef264", "#65a30d", "#84cc16", "#a3e635"];
@@ -117,7 +123,7 @@ export function ProgressTree() {
     const today = todayKey();
     type TodayEvent = { id: string; value: number; color: string; celebrated: boolean };
     const events: TodayEvent[] = [];
-    for (const task of data.tasks) { if (task.status !== "done" || localDayKey(task.updated_at) !== today) continue; const pomodoro = task.type === "study_session"; const id = `task:${today}:${task.id}`; events.push({ id, value: pomodoro ? 25 : 20, color: pomodoro ? XP_COLORS.pomodoro : XP_COLORS.task, celebrated: celebrated.has(id) }); }
+    for (const task of data.tasks) { if (task.status !== "done" || task.type === "study_session" || localDayKey(task.updated_at) !== today) continue; const id = `task:${today}:${task.id}`; events.push({ id, value: 20, color: XP_COLORS.task, celebrated: celebrated.has(id) }); }
     for (const habit of data.habitCompletions) { if (habit.completed_on !== today) continue; const id = `habit:${today}:${habit.id}`; events.push({ id, value: 5, color: XP_COLORS.habit, celebrated: celebrated.has(id) }); }
     let acc = events.reduce((sum, event) => sum + (event.celebrated ? event.value : 0), 0);
     const pending: { id: string; value: number; color: string; limit: boolean }[] = [];

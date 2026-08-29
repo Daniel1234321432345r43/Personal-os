@@ -5,6 +5,7 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
 import { registerServiceWorker } from "@/lib/push";
+import { todayKey } from "@/lib/format";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -151,6 +152,13 @@ export function PomodoroClient() {
 
     playChime();
     if (wasWork) {
+      try {
+        const key = "nucleo:pomodoro-completions:v1";
+        const current = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
+        const completions = Array.isArray(current) ? current.filter((value): value is string => typeof value === "string") : [];
+        completions.push(`pomodoro:${todayKey()}:${crypto.randomUUID?.() ?? `${Date.now()}-${Math.random()}`}`);
+        localStorage.setItem(key, JSON.stringify(completions.slice(-500)));
+      } catch { /* El temporizador sigue funcionando aunque falle el almacenamiento. */ }
       void showCompletionNotification(
         "Pomodoro completado 🍅",
         `¡Buen trabajo! Descansa ${breakMinutes} min.${taskLabel}`,

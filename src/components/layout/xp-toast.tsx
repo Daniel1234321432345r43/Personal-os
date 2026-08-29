@@ -77,12 +77,12 @@ export function XpToast() {
     for (const task of data.tasks) {
       if (task.status !== "done" || localDayKey(task.updated_at) !== today) continue;
       const id = `task:${today}:${task.id}`;
-      const pomodoro = task.type === "study_session";
+      if (task.type === "study_session") continue;
       events.push({
         id,
-        value: pomodoro ? 25 : 20,
-        color: pomodoro ? "#ea580c" : "#16a34a",
-        label: pomodoro ? "Pomodoro completado" : "Tarea completada",
+        value: 20,
+        color: "#16a34a",
+        label: "Tarea completada",
         celebrated: celebrated.current.has(id),
       });
     }
