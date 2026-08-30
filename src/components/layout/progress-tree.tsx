@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Leaf, Sparkles, Target, X, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,19 @@ import { useXpSystem, LEVELS } from "@/lib/xp-system";
 import { effectiveXpCap } from "@/lib/xp-cap";
 
 const TREE_API = "/api/tree/progress";
+
+type SceneTime = "day" | "night";
+
+function getSceneTime(date = new Date()): SceneTime {
+  const hour = date.getHours();
+  return hour >= 21 || hour < 7 ? "night" : "day";
+}
+
+function sceneAsset(level: number, time: SceneTime): string {
+  return time === "night"
+    ? `/tree-assets/escena-nivel-${level}-noche.svg`
+    : `/tree-assets/escena-nivel-${level}.svg`;
+}
 
 type Particle = {
   id: string;
@@ -58,26 +71,66 @@ function FallingLeaves({ reduced }: { reduced: boolean }) {
   );
 }
 
+function WindStreaks({ reduced }: { reduced: boolean }) {
+  const streaks = [
+    { top: "16%", delay: 0,    dur: 5.2, o: 0.35, w: "26%", h: "2px" },
+    { top: "30%", delay: 1.7,  dur: 6.4, o: 0.22, w: "42%", h: "1.5px" },
+    { top: "11%", delay: 3.1,  dur: 4.9, o: 0.28, w: "20%", h: "2px" },
+    { top: "24%", delay: 4.3,  dur: 5.8, o: 0.2,  w: "34%", h: "1.5px" },
+    { top: "38%", delay: 2.4,  dur: 6.9, o: 0.16, w: "28%", h: "1px" },
+  ];
+  return (
+    <div
+      className="pointer-events-none absolute inset-0 z-10 overflow-hidden"
+      aria-hidden="true"
+    >
+      {streaks.map((s, index) => (
+        <motion.span
+          key={index}
+          className="absolute left-[-35%] rounded-full bg-gradient-to-r from-transparent via-white to-transparent"
+          style={{ top: s.top, height: s.h, width: s.w, opacity: s.o }}
+          animate={
+            reduced
+              ? { opacity: s.o * 0.4, x: 0 }
+              : { left: ["-35%", "110%"], opacity: [0, s.o, s.o, 0] }
+          }
+          transition={
+            reduced
+              ? undefined
+              : { delay: s.delay, duration: s.dur, repeat: Infinity, ease: "easeInOut" }
+          }
+        />
+      ))}
+    </div>
+  );
+}
+
 function TreeScene({
   level,
   reduced,
   transitionKey,
   particles,
+  sceneTime,
 }: {
   level: number;
   reduced: boolean;
   transitionKey: number;
   particles: Particle[];
+  sceneTime: SceneTime;
 }) {
   return (
-    <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-[#d8f1e8]">
+    <div
+      className={`relative isolate aspect-square w-full overflow-hidden rounded-2xl ${
+        sceneTime === "night" ? "bg-slate-950" : "bg-[#d8f1e8]"
+      }`}
+    >
       <AnimatePresence mode="wait">
         <motion.img
           key={`${level}-${transitionKey}`}
-          src={`/tree-assets/escena-nivel-${level}.svg`}
+          src={sceneAsset(level, sceneTime)}
           alt={`Ilustración de ${LEVELS[level].name}`}
-          className="absolute inset-0 z-0 block h-full w-full object-cover"
-          style={{ objectPosition: "50% 12%" }}
+          className="absolute inset-0 z-0 block h-full w-full object-contain"
+          style={{ objectPosition: "center" }}
           initial={{ opacity: 0, scale: 1.06 }}
           animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [1.06, 1.02, 1] }}
           exit={{ opacity: 0, scale: 0.985 }}
@@ -87,10 +140,15 @@ function TreeScene({
               : { opacity: { duration: 0.35 }, scale: { type: "spring", stiffness: 260, damping: 20 } }
           }
           onError={(event) => {
-            event.currentTarget.style.display = "none";
+            if (sceneTime === "night") {
+              event.currentTarget.src = sceneAsset(level, "day");
+            } else {
+              event.currentTarget.style.display = "none";
+            }
           }}
         />
       </AnimatePresence>
+      <WindStreaks reduced={reduced} />
       <FallingLeaves reduced={reduced} />
       <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden" aria-hidden="true">
         {particles.map((particle) => (
@@ -135,6 +193,13 @@ export function ProgressTree() {
   const [seenLevel, setSeenLevel] = useState(() => tree.level);
   const [remoteLoaded, setRemoteLoaded] = useState(false);
   const reduced = useReducedMotion();
+  const [now, setNow] = useState(() => new Date());
+  const sceneTime = useMemo(() => getSceneTime(now), [now]);
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(timer);
+  }, []);
 
   // Posición visual de la barra la última vez que se abrió el panel: al volver
   // a abrirlo, la barra se desplaza desde ese punto hasta el actual (1.6s).
@@ -218,7 +283,7 @@ export function ProgressTree() {
 
   const diagnosis =
     tree.xp === 0
-      ? "Empieza completando una tarea, un hábito o un Pomodoro para conseguir XP."
+      ? "Empieza completando una tarea o un hábito para conseguir XP."
       : next
         ? `${tree.xp} XP acumulados. Te faltan ${Math.max(0, next.required - tree.xp)} XP para la siguiente fase.`
         : "¡Has alcanzado la Secuoya final! Sigue cuidando tu constancia.";
@@ -256,7 +321,7 @@ export function ProgressTree() {
                 ¡Tu árbol ha crecido! 🎉
               </p>
               <img
-                src={`/tree-assets/escena-nivel-${tree.level}.svg`}
+                src={sceneAsset(tree.level, sceneTime)}
                 alt={`Fase ${LEVELS[tree.level].name}`}
                 className="h-24 w-40 rounded-lg object-cover object-bottom"
               />
@@ -283,6 +348,7 @@ export function ProgressTree() {
               reduced={Boolean(reduced)}
               transitionKey={transitionKey}
               particles={particles}
+              sceneTime={sceneTime}
             />
             <AnimatePresence mode="wait">
               {showUpgrade && (
@@ -334,7 +400,7 @@ export function ProgressTree() {
               {diagnosis}
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-2 text-center text-xs text-slate-500">
-              <Target className="h-4 w-4" /> +20 tareas · +25 pomodoros · +5 hábitos ·
+              <Target className="h-4 w-4" /> +20 tareas · +5 hábitos ·
               -15 hábitos incumplidos · -10 día sin entrenar · tope {effectiveXpCap()}
               /día
             </div>
