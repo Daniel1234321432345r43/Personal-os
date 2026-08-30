@@ -22,6 +22,11 @@ export async function POST(req: Request) {
     return Response.json({ error: "Suscripción incompleta." }, { status: 400 });
   }
 
+  console.info("[push/subscribe] guardando suscripción", {
+    userId: user.id,
+    endpoint: subscription.endpoint.slice(0, 80),
+  });
+
   const { error } = await supabase.from("push_subscriptions").upsert(
     {
       user_id: user.id,
@@ -34,8 +39,10 @@ export async function POST(req: Request) {
   );
 
   if (error) {
+    console.error("[push/subscribe] error guardando suscripción:", error.message);
     return Response.json({ error: error.message }, { status: 500 });
   }
 
+  console.info("[push/subscribe] suscripción guardada correctamente", { userId: user.id });
   return Response.json({ ok: true });
 }

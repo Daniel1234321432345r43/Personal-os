@@ -21,6 +21,7 @@ export function PushManager() {
   const [subscribed, setSubscribed] = useState(false);
   const [busy, setBusy] = useState<"subscribe" | "unsubscribe" | "test" | null>(null);
   const [status, setStatus] = useState<Status>(null);
+  const [diagnostics, setDiagnostics] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!supported) return;
@@ -54,6 +55,32 @@ export function PushManager() {
       : { ok: false, message: result.error ?? "No se pudo desactivar." });
     await refresh();
     setBusy(null);
+  }
+
+  async function handleDiagnostics() {
+    setBusy("test");
+    setStatus(null);
+    setDiagnostics(null);
+    try {
+      const [subscription, keyResponse] = await Promise.all([
+        getPushSubscription(),
+        fetch("/api/push/vapid-public-key"),
+      ]);
+      const keyData = await keyResponse.json().catch(() => null);
+      setDiagnostics(
+        [
+          `Permiso del navegador: ${permission ?? "desconocido"}`,
+          `Service Worker: registrado`,
+          `Suscripción local: ${subscription ? "sí" : "no"}`,
+          `Clave VAPID pública: ${keyResponse.ok && keyData?.publicKey ? "disponible" : "ERROR"}`,
+          "Para comprobar el cron y la función send-reminders, revisa Supabase → Edge Functions → Logs.",
+        ].join("\n"),
+      );
+    } catch {
+      setDiagnostics("No se pudieron completar las comprobaciones del navegador.");
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function handleTest() {
@@ -144,6 +171,18 @@ export function PushManager() {
           </Button>
         )}
       </div>
+
+      {canTest && (
+        <Button type="button" variant="ghost" onClick={handleDiagnostics} disabled={busy !== null}>
+          Diagnosticar notificaciones
+        </Button>
+      )}
+
+      {diagnostics && (
+        <pre className="whitespace-pre-wrap rounded-lg border bg-muted/40 p-3 text-xs text-muted-foreground">
+          {diagnostics}
+        </pre>
+      )}
 
       {status && (
         <p

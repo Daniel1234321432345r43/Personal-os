@@ -125,6 +125,16 @@ Deno.serve(async () => {
       const target = item.scheduled.getTime() - item.remindBeforeMinutes * 60000;
       const diff = nowMs - target;
       const inWindow = diff >= -TASK_WINDOW_BEFORE_MS && diff <= TASK_WINDOW_AFTER_MS;
+      console.log("[send-reminders] tarea evaluada", {
+        userId,
+        entityId: item.entityId,
+        scheduled: item.scheduled.toISOString(),
+        remindBeforeMinutes: item.remindBeforeMinutes,
+        target: new Date(target).toISOString(),
+        diffMs: diff,
+        inWindow,
+        subscriptions: userSubs.length,
+      });
 
       if (!inWindow) continue;
 
