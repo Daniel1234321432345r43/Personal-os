@@ -1,24 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 import { useData } from "@/components/providers/data-provider";
 import { localDayKey, todayKey } from "@/lib/format";
 import { effectiveXpCap } from "@/lib/xp-cap";
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
-export const XP_REWARDS = {
-  task: 20,
-  pomodoro: 25,
-  habit: 5,
-} as const;
-
-export const XP_COLORS = {
-  task: "#16a34a",
-  pomodoro: "#ea580c",
-  habit: "#0ea5e9",
-} as const;
-
+export const XP_REWARDS = { task: 20, pomodoro: 25, habit: 5 } as const;
+export const XP_COLORS = { task: "#16a34a", pomodoro: "#ea580c", habit: "#0ea5e9" } as const;
 export const XP_LABELS = {
   task: "Tarea completada",
   pomodoro: "Pomodoro completado",
@@ -53,8 +43,8 @@ export type SavedTree = {
 
 // ─── Almacenamiento ──────────────────────────────────────────────────────────
 
-const TREE_KEY = "nucleo:progress-tree:v5";
-const CELEBRATED_KEY = "nucleo:xp-celebrated:v1";
+const TREE_KEY = "nucleo:progress-tree:v6";
+const CELEBRATED_KEY = "nucleo:xp-celebrated:v2";
 const POMODORO_KEY = "nucleo:pomodoro-completions:v1";
 
 function dayKey(date: Date): string {
@@ -84,9 +74,7 @@ function readTree(): SavedTree {
 
 function writeTree(tree: SavedTree): void {
   if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(TREE_KEY, JSON.stringify(tree));
-  } catch { /* Almacenamiento no disponible. */ }
+  try { localStorage.setItem(TREE_KEY, JSON.stringify(tree)); } catch { /* noop */ }
 }
 
 function readCelebratedToday(): Set<string> {
@@ -104,12 +92,10 @@ function readCelebratedToday(): Set<string> {
 
 function writeCelebratedToday(set: Set<string>): void {
   if (typeof window === "undefined") return;
-  try {
-    localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...set].slice(-200)));
-  } catch { /* Almacenamiento no disponible. */ }
+  try { localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...set].slice(-200))); } catch { /* noop */ }
 }
 
-// ─── Cálculo de XP ───────────────────────────────────────────────────────────
+// ─── Cálculo ─────────────────────────────────────────────────────────────────
 
 export function levelForXp(xp: number): number {
   return Math.max(0, LEVELS.reduce((current, item, index) => (xp >= item.required ? index : current), 0));
@@ -117,61 +103,50 @@ export function levelForXp(xp: number): number {
 
 type DataSnapshot = ReturnType<typeof useData>["data"];
 
-/**
- * Calcula el XP de un día concreto. Los días pasados ya están fijos en
- * tree.xpByDay, por lo que borrar una tarea después no resta el XP histórico.
- */
-export function xpForDay(data: DataSnapshot, key: string, pomodoroCount: number): number {
+function getPomodoroCompletionsToday(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const today = todayKey();
+    const stored = JSON.parse(localStorage.getItem(POMODORO_KEY) ?? "[]") as unknown;
+    return Array.isArray(stored)
+      ? stored.filter((v: unknown): v is string => typeof v === "string" && v.startsWith(`pomodoro:${today}:`))
+      : [];
+  } catch { return []; }
+}
+
+function xpForDay(data: DataSnapshot, key: string, pomodoroCount: number): number {
   const tasks = data.tasks.filter(
-    (item) =>
-      item.status === "done" &&
-      item.type !== "study_session" &&
-      localDayKey(item.updated_at) === key
+    (item) => item.status === "done" && item.type !== "study_session" && localDayKey(item.updated_at) === key
   );
   const habits = data.habitCompletions.filter((item) => item.completed_on === key);
-
   const missedHabits = key < todayKey()
     ? data.habits.filter((habit) => !habits.some((item) => item.habit_id === habit.id)).length
     : 0;
   const noWorkout = key < todayKey() && !data.workouts.some((item) => item.date === key) ? 10 : 0;
-
-  const raw =
-    tasks.length * XP_REWARDS.task +
-    pomodoroCount * XP_REWARDS.pomodoro +
-    habits.length * XP_REWARDS.habit -
-    missedHabits * 15 -
-    noWorkout;
-
+  const raw = tasks.length * XP_REWARDS.task + pomodoroCount * XP_REWARDS.pomodoro + habits.length * XP_REWARDS.habit - missedHabits * 15 - noWorkout;
   return Math.max(-25, Math.min(effectiveXpCap(), raw));
 }
 
-function recalculateTree(
-  data: DataSnapshot,
-  tree: SavedTree,
-  pomodoroCount: number
-): SavedTree {
+function recalculateTree(data: DataSnapshot, tree: SavedTree, pomodoroCount: number): SavedTree {
   const nextDays = { ...tree.xpByDay };
   const cursor = new Date(`${tree.lastCalculated}T00:00:00`);
   const today = new Date(`${todayKey()}T00:00:00`);
-
   while (cursor <= today) {
     const key = dayKey(cursor);
-    // Los días pasados ya están fijos. Solo se recalcula hoy.
     if (key === todayKey() || nextDays[key] == null) {
       nextDays[key] = xpForDay(data, key, pomodoroCount);
     }
     cursor.setDate(cursor.getDate() + 1);
   }
-
   const xp = Math.max(0, Object.values(nextDays).reduce((sum, v) => sum + v, 0));
-
   return { xp, level: levelForXp(xp), xpByDay: nextDays, lastCalculated: todayKey() };
 }
 
-// ─── Store global compartido ──────────────────────────────────────────────────
-// XpToast y ProgressTree llaman a useXpSystem() por separado, pero deben
-// compartir el MISMO estado. Este store global garantiza que ambos componentes
-// vean los mismos datos y notificaciones.
+// ─── Store externo: una sola fuente de verdad ─────────────────────────────────
+//
+// XpToast y ProgressTree NO procesan eventos. Solo leen el store.
+// Un único componente <XpEngine /> (montado en AppShell) procesa los datos
+// y actualiza el store. Esto elimina el bug de doble procesamiento.
 
 type XpStoreState = {
   tree: SavedTree;
@@ -203,34 +178,25 @@ function setStoreState(next: Partial<XpStoreState>) {
   emitChange();
 }
 
-// ─── Instancia única del motor de XP ──────────────────────────────────────────
-// Se inicializa una sola vez. Usa refs para recordar el estado previo de cada
-// tarea/hábito y detectar transiciones reales (no → done).
+// ─── Motor: estado persistente entre renders ───────────────────────────────────
 
-let engineInitialized = false;
+let celebratedSet = readCelebratedToday();
+let currentTree = readTree();
 let prevTaskStatus = new Map<string, string>();
 let prevHabitKeys = new Set<string>();
 let prevPomodoroSet = new Set<string>();
-let celebratedSet = readCelebratedToday();
-let currentTree = readTree();
-let lastProcessedKey = "";
 
-function getPomodoroCompletionsToday(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const today = todayKey();
-    const stored = JSON.parse(localStorage.getItem(POMODORO_KEY) ?? "[]") as unknown;
-    return Array.isArray(stored)
-      ? stored.filter((v: unknown): v is string => typeof v === "string" && v.startsWith(`pomodoro:${today}:`))
-      : [];
-  } catch { return []; }
-}
-
+/**
+ * Procesa todos los eventos de XP. Se llama UNA sola vez por cambio de datos
+ * desde <XpEngine />, no desde los consumidores.
+ */
 function processXpEvents(data: DataSnapshot): void {
   const today = todayKey();
   const newNotifications: XpNotification[] = [];
 
   // ── 1. Detectar tareas que pasaron a "done" ──────────────────────────
+  // Igual que los hábitos: comparamos el estado anterior con el actual.
+  // Si antes era "pending" y ahora es "done", es un evento nuevo.
   const currentStatus = new Map<string, string>();
   for (const task of data.tasks) {
     currentStatus.set(task.id, task.status);
@@ -243,14 +209,12 @@ function processXpEvents(data: DataSnapshot): void {
       const eventId = `task:${today}:${task.id}`;
       if (!celebratedSet.has(eventId)) {
         celebratedSet.add(eventId);
-        const currentTodayXp = currentTree.xpByDay[today] ?? 0;
-        const isOverLimit = currentTodayXp >= effectiveXpCap();
         newNotifications.push({
           id: `${eventId}:${Date.now()}`,
           value: XP_REWARDS.task,
           color: XP_COLORS.task,
-          label: isOverLimit ? XP_LABELS.limit : XP_LABELS.task,
-          limit: isOverLimit,
+          label: XP_LABELS.task,
+          limit: false,
         });
       }
     }
@@ -262,14 +226,12 @@ function processXpEvents(data: DataSnapshot): void {
   for (const completion of pomodoroCompletions) {
     if (!prevPomodoroSet.has(completion) && !celebratedSet.has(completion)) {
       celebratedSet.add(completion);
-      const currentTodayXp = currentTree.xpByDay[today] ?? 0;
-      const isOverLimit = currentTodayXp >= effectiveXpCap();
       newNotifications.push({
         id: `${completion}:${Date.now()}`,
         value: XP_REWARDS.pomodoro,
         color: XP_COLORS.pomodoro,
-        label: isOverLimit ? XP_LABELS.limit : XP_LABELS.pomodoro,
-        limit: isOverLimit,
+        label: XP_LABELS.pomodoro,
+        limit: false,
       });
     }
   }
@@ -285,14 +247,12 @@ function processXpEvents(data: DataSnapshot): void {
       const eventId = `habit:${today}:${completion.habit_id}`;
       if (!celebratedSet.has(eventId)) {
         celebratedSet.add(eventId);
-        const currentTodayXp = currentTree.xpByDay[today] ?? 0;
-        const isOverLimit = currentTodayXp >= effectiveXpCap();
         newNotifications.push({
           id: `${eventId}:${Date.now()}`,
           value: XP_REWARDS.habit,
           color: XP_COLORS.habit,
-          label: isOverLimit ? XP_LABELS.limit : XP_LABELS.habit,
-          limit: isOverLimit,
+          label: XP_LABELS.habit,
+          limit: false,
         });
       }
     }
@@ -300,55 +260,56 @@ function processXpEvents(data: DataSnapshot): void {
   prevHabitKeys = nextHabitKeys;
 
   // ── 4. Recalcular XP ─────────────────────────────────────────────────
-  const pomodoroCount = pomodoroCompletions.length;
-  const next = recalculateTree(data, currentTree, pomodoroCount);
+  const next = recalculateTree(data, currentTree, pomodoroCompletions.length);
+  writeTree(next);
+  currentTree = next;
 
-  if (next.xp !== currentTree.xp || next.level !== currentTree.level) {
-    writeTree(next);
-    currentTree = next;
-  } else {
-    writeTree(next);
-    currentTree = next;
-  }
-
-  // ── 5. Emitir notificaciones y guardar estado ───────────────────────
+  // ── 5. Emitir cambios al store ───────────────────────────────────────
   if (newNotifications.length > 0) {
     writeCelebratedToday(celebratedSet);
     setStoreState({
       tree: currentTree,
       notifications: [...storeState.notifications, ...newNotifications.slice(0, 5)],
     });
-  } else if (next.xp !== storeState.tree.xp || next.level !== storeState.tree.level) {
+  } else {
     setStoreState({ tree: currentTree });
   }
-
-  lastProcessedKey = today;
 }
 
-function initEngine(data: DataSnapshot): () => void {
-  // Procesar eventos cuando cambian los datos.
-  processXpEvents(data);
+// ─── Componente motor: se monta UNA sola vez en AppShell ─────────────────────
 
-  // Escuchar cambios en localStorage de Pomodoros (para detectar sesiones
-  // completadas desde el componente Pomodoro que escribe en localStorage).
-  let storageHandler: ((e: StorageEvent) => void) | null = null;
-  if (typeof window !== "undefined") {
-    storageHandler = (e: StorageEvent) => {
-      if (e.key === POMODORO_KEY) {
+/**
+ * Componente invisible que procesa todos los eventos de XP.
+ * Se monta una sola vez en AppShell. Ningún otro componente procesa eventos;
+ * XpToast y ProgressTree solo leen el store.
+ */
+export function XpEngine() {
+  const { data } = useData();
+
+  // Procesar cuando cambian los datos. Como este componente se monta una sola
+  // vez, processXpEvents se ejecuta una sola vez por cambio de datos.
+  useEffect(() => {
+    processXpEvents(data);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.tasks, data.habitCompletions, data.workouts, data.habits]);
+
+  // Poll localStorage para Pomodoros (el evento "storage" no se dispara en la
+  // misma pestaña donde se escribe).
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const pomodoros = getPomodoroCompletionsToday();
+      if (pomodoros.length !== prevPomodoroSet.size) {
         processXpEvents(data);
       }
-    };
-    window.addEventListener("storage", storageHandler);
-  }
+    }, 1000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
 
-  return () => {
-    if (storageHandler && typeof window !== "undefined") {
-      window.removeEventListener("storage", storageHandler);
-    }
-  };
+  return null;
 }
 
-// ─── Hook público ─────────────────────────────────────────────────────────────
+// ─── Hook público: los consumidores solo leen ─────────────────────────────────
 
 export type XpSystem = {
   tree: SavedTree;
@@ -357,52 +318,11 @@ export type XpSystem = {
 };
 
 /**
- * Hook central que gestiona todo el sistema de XP y notificaciones.
- * Usa useSyncExternalStore para que todos los componentes compartan el mismo
- * estado. Detecta tareas/hábitos/Pomodoros completados en tiempo real, emite
- * notificaciones inmediatas y actualiza el XP siempre (incluso con el panel
- * cerrado). El XP histórico persiste aunque se borren las tareas después.
+ * Hook de solo lectura. Lee el tree y las notificaciones del store global.
+ * No procesa eventos — eso lo hace <XpEngine />.
  */
 export function useXpSystem(): XpSystem {
-  const { data } = useData();
   const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
-  const cleanupRef = useRef<(() => void) | null>(null);
-
-  // Procesar eventos cada vez que cambian los datos de la app.
-  useEffect(() => {
-    // Si es la primera vez, inicializar el motor.
-    if (!engineInitialized) {
-      engineInitialized = true;
-    }
-    processXpEvents(data);
-
-    // También escuchar cambios en localStorage de Pomodoros.
-    const handler = (e: StorageEvent) => {
-      if (e.key === POMODORO_KEY) {
-        processXpEvents(data);
-      }
-    };
-    window.addEventListener("storage", handler);
-    cleanupRef.current = () => window.removeEventListener("storage", handler);
-
-    return () => {
-      window.removeEventListener("storage", handler);
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data.tasks, data.habitCompletions, data.workouts, data.habits]);
-
-  // Poll localStorage para Pomodoros cada 2s (el evento "storage" no se
-  // dispara en la misma pestaña donde se escribe).
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const pomodoros = getPomodoroCompletionsToday();
-      if (pomodoros.length !== prevPomodoroSet.size) {
-        processXpEvents(data);
-      }
-    }, 2000);
-    return () => clearInterval(interval);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [data]);
 
   const dismissNotification = useCallback((id: string) => {
     setStoreState({

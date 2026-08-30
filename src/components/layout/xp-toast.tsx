@@ -65,9 +65,8 @@ function ToastItem({
 }
 
 /**
- * Avisos flotantes de XP. Lee las notificaciones del hook central `useXpSystem`,
- * que detecta en tiempo real cuando una tarea, hábito o Pomodoro se completa y
- * emite la notificación correspondiente (una sola vez por acción y por día).
+ * Avisos flotantes de XP. Lee las notificaciones del store global (actualizado
+ * por <XpEngine />). No procesa eventos, solo los muestra.
  */
 export function XpToast() {
   const { notifications, dismissNotification } = useXpSystem();
