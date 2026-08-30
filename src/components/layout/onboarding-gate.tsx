@@ -38,6 +38,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
   // Marca que ya estamos en el cliente e hidratados. Solo a partir de aquí el
   // valor `done` es fiable (localStorage leído en el navegador).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setReady(true);
   }, []);
 

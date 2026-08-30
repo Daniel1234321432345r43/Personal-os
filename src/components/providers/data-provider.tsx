@@ -306,9 +306,12 @@ async function syncStateToSupabase(state: DataState, userId: string): Promise<bo
 export function DataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DataState>(emptyState);
   // Ref al estado más reciente, para leer el estado actual de forma síncrona
-  // dentro de las acciones (que se crean una sola vez con useMemo).
+  // dentro de las acciones (que se crean una sola vez con useMemo). Se
+  // actualiza en un effect tras cada commit.
   const stateRef = useRef<DataState>(state);
-  stateRef.current = state;
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const [hydrated, setHydrated] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const syncedRef = useRef(false);

@@ -44,6 +44,8 @@ export default function LoginPage() {
   // cuando vienes del flujo de conectar Google Classroom).
   useEffect(() => {
     const n = new URLSearchParams(window.location.search).get("next");
+    // Patrón intencional: leer el parámetro solo en el cliente tras hidratar.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (n && n.startsWith("/")) setNext(n);
   }, []);
 

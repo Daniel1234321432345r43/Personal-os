@@ -524,7 +524,7 @@ export function PomodoroClient() {
                 </p>
               ) : (
                 <p>
-                  Al pulsar "Iniciar" te pediremos permiso. Al terminar cada sesión
+                  Al pulsar &quot;Iniciar&quot; te pediremos permiso. Al terminar cada sesión
                   recibirás una notificación.
                 </p>
               )}

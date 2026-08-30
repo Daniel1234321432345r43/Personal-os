@@ -11,7 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useXpSystem, LEVELS, levelForXp } from "@/lib/xp-system";
+import { useXpSystem, LEVELS } from "@/lib/xp-system";
 import { effectiveXpCap } from "@/lib/xp-cap";
 
 const TREE_API = "/api/tree/progress";
@@ -24,8 +24,6 @@ type Particle = {
   x: number;
   delay: number;
 };
-
-const XP_COLORS = { task: "#16a34a", pomodoro: "#ea580c", habit: "#0ea5e9" } as const;
 
 function FallingLeaves({ reduced }: { reduced: boolean }) {
   const leaves = [
@@ -65,13 +63,11 @@ function TreeScene({
   reduced,
   transitionKey,
   particles,
-  onParticleDone,
 }: {
   level: number;
   reduced: boolean;
   transitionKey: number;
   particles: Particle[];
-  onParticleDone: (id: string) => void;
 }) {
   return (
     <div className="relative isolate h-72 overflow-hidden rounded-2xl bg-[#d8f1e8]">
@@ -113,7 +109,6 @@ function TreeScene({
                   }
             }
             transition={{ duration: 2.6, ease: "easeOut", delay: particle.delay }}
-            onAnimationComplete={() => onParticleDone(particle.id)}
           >
             <span
               className="block -translate-x-1/2 whitespace-nowrap rounded-full bg-white/90 px-2.5 py-1 text-xs font-black shadow-md"
@@ -137,16 +132,52 @@ export function ProgressTree() {
   const [transitionKey, setTransitionKey] = useState(0);
   const [pendingGrowthMessage, setPendingGrowthMessage] = useState(false);
   const [seenLevel, setSeenLevel] = useState(() => tree.level);
-  const [particles, setParticles] = useState<Particle[]>([]);
   const [remoteLoaded, setRemoteLoaded] = useState(false);
   const reduced = useReducedMotion();
+
+  // Posición visual de la barra la última vez que se abrió el panel: al volver
+  // a abrirlo, la barra se desplaza desde ese punto hasta el actual (1.6s).
+  // Se actualiza al cerrar (event handler), no durante el render.
+  const [lastSeenPct, setLastSeenPct] = useState(0);
+
+  const current = LEVELS[tree.level];
+  const next = LEVELS[tree.level + 1];
+  const percentage = next
+    ? ((tree.xp - current.required) / (next.required - current.required)) * 100
+    : 100;
+
+  // Abrir/cerrar el panel. Al abrir detecta si hubo subida de nivel desde la
+  // última visita (muestra la felicitación); al cerrar guarda la posición de la
+  // barra para animar desde ahí en la próxima apertura.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setLastSeenPct(percentage);
+      setPendingGrowthMessage(false);
+      setShowUpgrade(false);
+      return;
+    }
+    if (tree.level > seenLevel) {
+      setShowUpgrade(true);
+      setPendingGrowthMessage(true);
+      setTransitionKey((key) => key + 1);
+      setSeenLevel(tree.level);
+    }
+  };
+
+  // Posición horizontal estable por partícula (derivada de su id).
+  const particleX = (id: string): number => {
+    let h = 0;
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0;
+    return (h % 141) - 70;
+  };
 
   // Cargar el XP remoto de Supabase una sola vez al montar.
   useEffect(() => {
     let cancelled = false;
     fetch(TREE_API)
       .then((response) => (response.ok ? response.json() : null))
-      .then((remote: { xp?: number; level?: number } | null) => {
+      .then(() => {
         if (!cancelled) setRemoteLoaded(true);
       })
       .catch(() => {
@@ -170,47 +201,20 @@ export function ProgressTree() {
     return () => window.clearTimeout(timer);
   }, [tree.xp, tree.level, remoteLoaded]);
 
-  // Detectar subida de nivel cuando se abre el panel.
-  useEffect(() => {
-    if (!open) {
-      setPendingGrowthMessage(false);
-      setShowUpgrade(false);
-      return;
-    }
-    const upgraded = tree.level > seenLevel;
-    if (upgraded) {
-      setShowUpgrade(true);
-      setPendingGrowthMessage(true);
-      setTransitionKey((key) => key + 1);
-      setSeenLevel(tree.level);
-    }
-  }, [open, tree.level, seenLevel]);
+  // Partículas visuales del árbol: se derivan directamente de las
+  // notificaciones activas. Como los toasts se autodescartan (dismiss), las
+  // partículas desaparecen con ellos. Sin estado acumulado ni effects.
+  const particles: Particle[] = open
+    ? notifications.slice(0, 8).map((item, index) => ({
+        id: item.id,
+        value: item.value,
+        color: item.color,
+        limit: item.limit,
+        x: particleX(item.id),
+        delay: index * 0.18,
+      }))
+    : [];
 
-  // Convertir notificaciones nuevas en partículas visuales del árbol (solo si está abierto).
-  useEffect(() => {
-    if (!open || notifications.length === 0) return;
-    const burst = notifications.slice(0, 8).map((item, index) => ({
-      id: `${item.id}:particle:${index}`,
-      value: item.value,
-      color: item.color,
-      limit: item.limit,
-      x: Math.round((Math.random() - 0.5) * 140),
-      delay: index * 0.18,
-    }));
-    setParticles((prev) => [...prev, ...burst]);
-  }, [notifications, open]);
-
-  const lastLevel = levelForXp(tree.xp);
-  const lastCurrent = LEVELS[lastLevel];
-  const lastNext = LEVELS[lastLevel + 1];
-  const lastPercentage = lastNext
-    ? ((tree.xp - lastCurrent.required) / (lastNext.required - lastCurrent.required)) * 100
-    : 100;
-  const current = LEVELS[tree.level];
-  const next = LEVELS[tree.level + 1];
-  const percentage = next
-    ? ((tree.xp - current.required) / (next.required - current.required)) * 100
-    : 100;
   const diagnosis =
     tree.xp === 0
       ? "Empieza completando una tarea, un hábito o un Pomodoro para conseguir XP."
@@ -229,7 +233,7 @@ export function ProgressTree() {
       >
         <Leaf className="h-5 w-5" />
       </Button>
-      <Sheet open={open} onOpenChange={setOpen}>
+      <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent
           side="bottom"
           className="max-h-[94vh] rounded-t-3xl border-0 bg-sky-50 p-0 text-slate-900"
@@ -278,9 +282,6 @@ export function ProgressTree() {
               reduced={Boolean(reduced)}
               transitionKey={transitionKey}
               particles={particles}
-              onParticleDone={(id) =>
-                setParticles((prev) => prev.filter((p) => p.id !== id))
-              }
             />
             <AnimatePresence mode="wait">
               {showUpgrade && (
@@ -318,12 +319,12 @@ export function ProgressTree() {
               <div className="h-2 overflow-hidden rounded-full bg-sky-200">
                 <motion.div
                   className="h-full rounded-full bg-emerald-500"
-                  initial={{ width: `${Math.max(0, Math.min(100, lastPercentage))}%` }}
+                  initial={{ width: `${Math.max(0, Math.min(100, lastSeenPct))}%` }}
                   animate={{ width: `${Math.max(0, Math.min(100, percentage))}%` }}
                   transition={
                     reduced
                       ? { duration: 0 }
-                      : { duration: 1.5, ease: [0.25, 0.1, 0.25, 1] }
+                      : { duration: 1.6, ease: [0.25, 0.1, 0.25, 1] }
                   }
                 />
               </div>

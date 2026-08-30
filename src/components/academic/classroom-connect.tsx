@@ -33,7 +33,9 @@ export function ClassroomConnect() {
     const params = new URLSearchParams(window.location.search);
     const status = params.get("classroom");
     const detail = params.get("detail");
+    // Patrón intencional: leer el parámetro de retorno solo en el cliente.
     if (status === "connected") {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setNotice({
         kind: "success",
         text: "¡Conectado a Google Classroom! Pulsa \"Importar ahora\" para traer tus cursos y entregas.",
@@ -59,6 +61,8 @@ export function ClassroomConnect() {
 
   useEffect(() => {
     if (!configured) {
+      // Estado inicial derivado de la configuración del entorno.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setConnected(false);
       return;
     }

@@ -44,6 +44,15 @@ export type SavedTree = {
 // ─── Almacenamiento ──────────────────────────────────────────────────────────
 
 const TREE_KEY = "nucleo:progress-tree:v8";
+// Claves de versiones anteriores: el XP acumulado no debe perderse al
+// actualizar la app, así que readTree() intenta migrarlo si la clave nueva
+// aún no existe.
+const LEGACY_TREE_KEYS = [
+  "nucleo:progress-tree:v7", // misma forma { xp, level, xpToday, lastDate }
+  "nucleo:progress-tree:v6",
+  "nucleo:progress-tree:v5",
+  "nucleo:progress-tree:v4", // forma antigua { xp, level, lastCalculated, xpByDay }
+];
 const CELEBRATED_KEY = "nucleo:xp-celebrated:v4";
 
 function yesterdayKey(): string {
@@ -61,17 +70,29 @@ export function emptyTree(): SavedTree {
 
 function readTree(): SavedTree {
   if (typeof window === "undefined") return emptyTree();
+
+  // Forma normalizada para cualquier versión guardada.
+  const normalize = (parsed: Partial<SavedTree>): SavedTree => ({
+    xp: typeof parsed.xp === "number" ? parsed.xp : 0,
+    level: typeof parsed.level === "number" ? parsed.level : levelForXp(parsed.xp ?? 0),
+    xpToday: parsed.xpToday ?? 0,
+    lastDate: parsed.lastDate ?? yesterdayKey(),
+  });
+
+  // 1) Clave actual.
   try {
     const parsed = JSON.parse(localStorage.getItem(TREE_KEY) ?? "null") as Partial<SavedTree> | null;
-    if (parsed && typeof parsed.xp === "number") {
-      return {
-        xp: parsed.xp ?? 0,
-        level: parsed.level ?? 0,
-        xpToday: parsed.xpToday ?? 0,
-        lastDate: parsed.lastDate ?? yesterdayKey(),
-      };
-    }
+    if (parsed && typeof parsed.xp === "number") return normalize(parsed);
   } catch { /* Estado inválido. */ }
+
+  // 2) Migración desde versiones anteriores (conserva el XP acumulado).
+  for (const key of LEGACY_TREE_KEYS) {
+    try {
+      const parsed = JSON.parse(localStorage.getItem(key) ?? "null") as Partial<SavedTree> | null;
+      if (parsed && typeof parsed.xp === "number") return normalize(parsed);
+    } catch { /* Siguiente clave. */ }
+  }
+
   return emptyTree();
 }
 
@@ -106,7 +127,7 @@ export function levelForXp(xp: number): number {
 // mismo instante. No hay useEffect que detecte transiciones, no hay polling,
 // no hay motores. Cada acción → una llamada → un toast + XP.
 
-let celebrated: Set<string> = typeof window !== "undefined" ? readCelebrated() : new Set();
+const celebrated: Set<string> = typeof window !== "undefined" ? readCelebrated() : new Set();
 
 // Un único objeto de estado con referencia estable: cada cambio reemplaza el
 // objeto completo, así useSyncExternalStore detecta el cambio sin bucles.
@@ -128,6 +149,18 @@ function subscribe(callback: () => void): () => void {
 
 function getSnapshot() {
   return storeState;
+}
+
+// Estado para SSR e hidratación: debe ser estático y coincidir en servidor y
+// cliente, o React fallará la hidratación. Después de hidratar, React cambia
+// automáticamente a getSnapshot() con los valores reales de localStorage.
+const EMPTY_STORE_STATE: { tree: SavedTree; notifications: XpNotification[] } = {
+  tree: emptyTree(),
+  notifications: [],
+};
+
+function getServerSnapshot() {
+  return EMPTY_STORE_STATE;
 }
 
 // ─── API pública ─────────────────────────────────────────────────────────────
@@ -207,7 +240,7 @@ export function dismissNotification(id: string): void {
  * los suscriptores.
  */
 export function useXpSystem() {
-  const state = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const state = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const dismiss = useCallback((id: string) => dismissNotification(id), []);
 

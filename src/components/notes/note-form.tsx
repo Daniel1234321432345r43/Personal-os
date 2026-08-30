@@ -9,7 +9,6 @@ import type { Note } from "@/lib/types";
 
 const MAX_FILE_BYTES = 2 * 1024 * 1024; // 2 MB para no agotar localStorage.
 const TEXT_TYPES = ["text/plain", "text/markdown", "text/md"];
-const IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp", "image/gif"];
 
 interface Attachment {
   file_name: string;

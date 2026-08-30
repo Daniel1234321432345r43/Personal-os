@@ -10,8 +10,6 @@ const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@localhost";
 
 const TASK_WINDOW_BEFORE_MS = 2 * 60 * 1000;
 const TASK_WINDOW_AFTER_MS = 5 * 60 * 1000;
-const WORKOUT_REMIND_BEFORE_MS = 20 * 60 * 1000;
-const WORKOUT_GRACE_AFTER_MS = 3 * 60 * 1000;
 
 interface ReminderItem {
   entityType: "task" | "workout";

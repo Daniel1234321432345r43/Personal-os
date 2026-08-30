@@ -7,6 +7,15 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, getToolName, isToolUIPart, type UIMessage } from "ai";
 import { useSettings } from "@/components/providers/settings-provider";
 import { useData } from "@/components/providers/data-provider";
+import type {
+  SubjectInput,
+  TaskInput,
+  WorkoutInput,
+  HabitInput,
+  TransactionInput,
+  NoteInput,
+  GradeInput,
+} from "@/components/providers/data-provider";
 import { buildSecretaryContext } from "@/lib/ai/context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -27,6 +36,29 @@ import {
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/lib/use-is-mobile";
 
+/**
+ * Forma de la parte de UI de una herramienta. El SDK expone `input` como
+ * `unknown`, así que lo tipamos con los tipos reales de entrada de la app.
+ */
+type ToolUIPartShape = {
+  toolCallId?: string;
+  input?: {
+    subjects?: SubjectInput[];
+    tasks?: TaskInput[];
+    workouts?: WorkoutInput[];
+    habits?: HabitInput[];
+    transactions?: TransactionInput[];
+    notes?: NoteInput[];
+    grades?: GradeInput[];
+    task_ids?: string[];
+    task_titles?: string[];
+    subject_ids?: string[];
+    subject_names?: string[];
+    grade_ids?: string[];
+    grade_titles?: string[];
+  };
+};
+
 function messageText(message: UIMessage): string {
   return message.parts
     .filter(
@@ -36,10 +68,10 @@ function messageText(message: UIMessage): string {
     .join("");
 }
 
-function ToolPartView({ part }: { part: any }) {
+function ToolPartView({ part }: { part: Parameters<typeof isToolUIPart>[0] }) {
   if (!isToolUIPart(part)) return null;
   const toolName = getToolName(part);
-  const input = part.input as any;
+  const input = (part as ToolUIPartShape).input;
   if (!input) return null;
 
   if (
@@ -58,7 +90,7 @@ function ToolPartView({ part }: { part: any }) {
           </span>
         </div>
         <div className="flex flex-wrap gap-1.5">
-          {input.subjects.map((s: any, i: number) => (
+          {input.subjects.map((s, i) => (
             <span
               key={i}
               className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 font-medium"
@@ -96,7 +128,7 @@ function ToolPartView({ part }: { part: any }) {
           </span>
         </div>
         <ul className="space-y-1">
-          {input.tasks.map((t: any, i: number) => {
+          {input.tasks.map((t, i) => {
             const typeLabel =
               t.type === "exam"
                 ? "Examen"
@@ -137,20 +169,21 @@ function ToolPartView({ part }: { part: any }) {
     Array.isArray(input.workouts) &&
     input.workouts.length > 0
   ) {
+    const workouts = input.workouts;
     return (
       <div className="mb-2 rounded-xl border border-blue-500/20 bg-blue-500/5 p-2.5 text-xs">
         <div className="mb-1 flex items-center gap-1.5 font-medium text-blue-600 dark:text-blue-400">
           <Dumbbell className="h-3.5 w-3.5" />
           <span>
-            Entrenamiento{input.workouts.length > 1 ? "s" : ""} registrado
-            {input.workouts.length > 1 ? "s" : ""}
+            Entrenamiento{workouts.length > 1 ? "s" : ""} registrado
+            {workouts.length > 1 ? "s" : ""}
           </span>
         </div>
         <div className="text-muted-foreground">
-          {input.workouts.map((w: any, i: number) => (
+          {workouts.map((w, i) => (
             <span key={i}>
               {w.activity_type} ({w.duration_minutes} min)
-              {i < input.workouts.length - 1 ? ", " : ""}
+              {i < workouts.length - 1 ? ", " : ""}
             </span>
           ))}
         </div>
@@ -173,7 +206,7 @@ function ToolPartView({ part }: { part: any }) {
           </span>
         </div>
         <div className="flex flex-wrap gap-1">
-          {input.habits.map((h: any, i: number) => (
+          {input.habits.map((h, i) => (
             <span key={i} className="rounded bg-background/60 px-1.5 py-0.5">
               {h.emoji || "✨"} {h.name}
             </span>
@@ -195,7 +228,7 @@ function ToolPartView({ part }: { part: any }) {
           <span>Transacción financiera registrada</span>
         </div>
         <div className="text-muted-foreground">
-          {input.transactions.map((tr: any, i: number) => (
+          {input.transactions.map((tr, i) => (
             <span key={i}>
               {tr.type === "expense" ? "-" : "+"}
               {tr.amount}€ ({tr.category})
@@ -221,7 +254,7 @@ function ToolPartView({ part }: { part: any }) {
           </span>
         </div>
         <div className="text-muted-foreground">
-          {input.notes.map((n: any) => n.title).join(", ")}
+          {input.notes.map((n) => n.title).join(", ")}
         </div>
       </div>
     );
@@ -243,7 +276,7 @@ function ToolPartView({ part }: { part: any }) {
           </span>
         </div>
         <ul className="space-y-1.5">
-          {input.grades.map((g: any, i: number) => {
+          {input.grades.map((g, i) => {
             const scoreNum = Number(g.score);
             const scoreColor =
               scoreNum >= 7
@@ -285,13 +318,6 @@ function ToolPartView({ part }: { part: any }) {
   return null;
 }
 
-const suggestions = [
-  "He sacado un 8 en el examen de Mates que cuenta un 20%",
-  "Tengo examen de Matemáticas el 15 de septiembre y entrega de Historia el viernes",
-  "¿Cuándo tengo cada examen y entrega?",
-  "¿Qué tareas y exámenes tengo pendientes?",
-];
-
 /** En móvil, el chat arranca colapsado; en escritorio, expandido. */
 const SECRETARY_COLLAPSED_KEY = "nucleo:secretary-collapsed";
 
@@ -304,15 +330,18 @@ export function SecretaryChat() {
 
   // Referencia estable para enviar siempre el contexto y ajustes más recientes.
   const latestRef = useRef({ context, settings });
-  latestRef.current = { context, settings };
+  useEffect(() => {
+    latestRef.current = { context, settings };
+  }, [context, settings]);
 
   const transport = useMemo(
     () =>
+      // Lectura diferida: body() se ejecuta al enviar, no durante el render.
+      // eslint-disable-next-line react-hooks/refs
       new DefaultChatTransport({
         api: "/api/chat",
         body: () => latestRef.current,
       }),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
 
@@ -331,11 +360,11 @@ export function SecretaryChat() {
       if (message.role !== "assistant" || !message.parts) continue;
       for (const part of message.parts) {
         if (isToolUIPart(part) && part.state === "output-available") {
-          const toolCallId = (part as any).toolCallId;
+          const toolCallId = (part as ToolUIPartShape).toolCallId;
           if (toolCallId && !processedToolsRef.current.has(toolCallId)) {
             processedToolsRef.current.add(toolCallId);
             const toolName = getToolName(part);
-            const input = (part as any).input;
+            const input = (part as ToolUIPartShape).input;
             if (!input) continue;
 
             if (toolName === "addSubjects" && Array.isArray(input.subjects)) {

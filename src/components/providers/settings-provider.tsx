@@ -37,6 +37,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
 
   // Cargar desde localStorage una sola vez al montar (evita mismatch de hidratación).
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSettingsState(loadSettings());
     setHydrated(true);
   }, []);
