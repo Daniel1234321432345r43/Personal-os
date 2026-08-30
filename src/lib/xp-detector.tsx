@@ -24,7 +24,6 @@ export function XpDetector() {
       // awardXp ya evita repetir (dedup) y marca el evento como celebrado.
       awardXp("task", task.id);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.tasks]);
 
   return null;

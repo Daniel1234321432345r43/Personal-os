@@ -19,6 +19,7 @@ import { Loader2, RotateCw } from "lucide-react";
 import { ProgressTree } from "@/components/layout/progress-tree";
 import { XpToast } from "@/components/layout/xp-toast";
 import { XpDetector } from "@/lib/xp-detector";
+import { XpPenalizer } from "@/lib/xp-penalizer";
 
 import {
   Sparkles,
@@ -321,6 +322,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {bottomBar}
       <XpDetector />
+      <XpPenalizer />
       <XpToast />
     </div>
   );

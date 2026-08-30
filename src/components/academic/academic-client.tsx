@@ -18,7 +18,7 @@ import { AiAssistant } from "./ai-assistant";
 import { SubjectGradesSheet } from "./subject-grades-sheet";
 import { Check, Plus, Trash2, Award, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { TaskPriority, TaskType, Subject } from "@/lib/types";
+import type { TaskPriority, TaskType, Subject, Task } from "@/lib/types";
 
 const typeLabel: Record<TaskType, string> = {
   task: "Tarea",
@@ -33,6 +33,103 @@ const priorityClass: Record<TaskPriority, string> = {
   medium: "border-blue-500/40 bg-blue-500/10 text-blue-600 dark:text-blue-400",
   low: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
+
+/**
+ * Fila de una tarea académica. Se reutiliza tanto en la lista de pendientes
+ * como en el acordeón de tareas ya completadas.
+ */
+function TaskItem({
+  task,
+  subjectById,
+  actions,
+}: {
+  task: Task;
+  subjectById: Map<string, Subject>;
+  actions: {
+    toggleTaskDone: (id: string) => void;
+    deleteTask: (id: string) => void;
+  };
+}) {
+  const subject = task.subject_id ? subjectById.get(task.subject_id) : null;
+  const done = task.status === "done";
+  return (
+    <motion.li
+      layout
+      variants={{
+        hidden: { opacity: 0, x: -22 },
+        visible: {
+          opacity: 1,
+          x: 0,
+          transition: { duration: 0.55, ease: "easeOut" },
+        },
+      }}
+      exit={{
+        opacity: 0,
+        x: 40,
+        transition: { duration: 0.55, ease: "easeInOut" },
+      }}
+      className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
+    >
+      <button
+        type="button"
+        onClick={() => actions.toggleTaskDone(task.id)}
+        className={cn(
+          "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors md:h-5 md:w-5",
+          done
+            ? "border-primary bg-primary text-primary-foreground"
+            : "border-input hover:border-primary",
+        )}
+        aria-pressed={done}
+        aria-label={`Completar ${task.title}`}
+      >
+        {done && (
+          <motion.span
+            initial={{ scale: 0, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: "spring", stiffness: 500, damping: 26 }}
+            className="flex"
+          >
+            <Check className="h-3.5 w-3.5" />
+          </motion.span>
+        )}
+      </button>
+
+      <span
+        className="h-6 w-1.5 shrink-0 rounded-full"
+        style={{ backgroundColor: subject?.color ?? "#888" }}
+      />
+
+      <div className="min-w-0 flex-1">
+        <p
+          className={cn(
+            "truncate text-sm font-medium",
+            done && "text-muted-foreground line-through",
+          )}
+        >
+          {task.title}
+        </p>
+        <p className="truncate text-xs text-muted-foreground">
+          {subject?.name ?? "General"}
+          {task.due_date ? ` · ${formatDate(task.due_date)}` : ""}
+        </p>
+      </div>
+
+      <Badge variant="outline" className={priorityClass[task.priority]}>
+        {typeLabel[task.type]}
+      </Badge>
+
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-8 md:w-8"
+        onClick={() => actions.deleteTask(task.id)}
+        title="Eliminar"
+      >
+        <Trash2 className="h-4 w-4" />
+      </Button>
+    </motion.li>
+  );
+}
 
 function LoadingState() {
   return (
@@ -53,6 +150,7 @@ export function AcademicClient() {
   const [showTask, setShowTask] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [subjectsOpen, setSubjectsOpen] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const isMobile = useIsMobile();
 
   if (!hydrated) return <LoadingState />;
@@ -64,6 +162,9 @@ export function AcademicClient() {
   const academicTasks = data.tasks
     .filter((t) => t.subject_id || t.category === "academic")
     .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+  // Pendientes siempre visibles; completadas ocultas detrás del acordeón.
+  const pendingTasks = academicTasks.filter((t) => t.status !== "done");
+  const completedTasks = academicTasks.filter((t) => t.status === "done");
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -283,96 +384,73 @@ export function AcademicClient() {
               variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
             >
               <AnimatePresence initial={academicTasks.length === 0}>
-              {academicTasks.map((task) => {
-                const subject = task.subject_id
-                  ? subjectById.get(task.subject_id)
-                  : null;
-                const done = task.status === "done";
-                return (
-                  <motion.li
+                {pendingTasks.map((task) => (
+                  <TaskItem
                     key={task.id}
-                    layout
-                    variants={{
-                      hidden: { opacity: 0, x: -22 },
-                      visible: {
-                        opacity: 1,
-                        x: 0,
-                        transition: { duration: 0.55, ease: "easeOut" },
-                      },
-                    }}
-                    exit={{
-                      opacity: 0,
-                      x: 40,
-                      transition: { duration: 0.55, ease: "easeInOut" },
-                    }}
-                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <button
-                      type="button"
-                      onClick={() => actions.toggleTaskDone(task.id)}
-                      className={cn(
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors md:h-5 md:w-5",
-                        done
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-input hover:border-primary",
-                      )}
-                      aria-pressed={done}
-                      aria-label={`Completar ${task.title}`}
-                    >
-                      {done && (
-                        <motion.span
-                          initial={{ scale: 0, opacity: 0 }}
-                          animate={{ scale: 1, opacity: 1 }}
-                          transition={{ type: "spring", stiffness: 500, damping: 26 }}
-                          className="flex"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                        </motion.span>
-                      )}
-                    </button>
-
-                    <span
-                      className="h-6 w-1.5 shrink-0 rounded-full"
-                      style={{ backgroundColor: subject?.color ?? "#888" }}
-                    />
-
-                    <div className="min-w-0 flex-1">
-                      <p
-                        className={cn(
-                          "truncate text-sm font-medium",
-                          done && "text-muted-foreground line-through",
-                        )}
-                      >
-                        {task.title}
-                      </p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {subject?.name ?? "General"}
-                        {task.due_date ? ` · ${formatDate(task.due_date)}` : ""}
-                      </p>
-                    </div>
-
-                    <Badge variant="outline" className={priorityClass[task.priority]}>
-                      {typeLabel[task.type]}
-                    </Badge>
-
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-8 md:w-8"
-                      onClick={() => actions.deleteTask(task.id)}
-                      title="Eliminar"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </motion.li>
-                );
-              })}
+                    task={task}
+                    subjectById={subjectById}
+                    actions={actions}
+                  />
+                ))}
               </AnimatePresence>
             </motion.ul>
             {academicTasks.length === 0 && (
               <p className="text-sm text-muted-foreground">
                 No hay tareas académicas todavía.
               </p>
+            )}
+
+            {completedTasks.length > 0 && (
+              <div className="mt-2 border-t pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCompleted((v) => !v)}
+                  aria-expanded={showCompleted}
+                  className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60"
+                >
+                  <span className="flex items-center gap-2">
+                    <Check className="h-4 w-4" />
+                    Completadas ({completedTasks.length})
+                  </span>
+                  <motion.span
+                    animate={{ rotate: showCompleted ? 180 : 0 }}
+                    transition={{ duration: 0.3, ease: "easeInOut" }}
+                  >
+                    <ChevronDown className="h-4 w-4" />
+                  </motion.span>
+                </button>
+
+                <AnimatePresence initial={false}>
+                  {showCompleted && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: "auto", opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      transition={{
+                        height: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] },
+                        opacity: { duration: 0.25 },
+                      }}
+                      className="overflow-hidden"
+                    >
+                      <motion.ul
+                        className="divide-y"
+                        initial="hidden"
+                        animate="visible"
+                        variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+                      >
+                        {completedTasks.map((task) => (
+                          <TaskItem
+                            key={task.id}
+                            task={task}
+                            subjectById={subjectById}
+                            actions={actions}
+                          />
+                        ))}
+                      </motion.ul>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
           </>
         </CardContent>

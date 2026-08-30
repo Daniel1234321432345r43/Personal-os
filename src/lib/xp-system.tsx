@@ -3,10 +3,15 @@
 import { useCallback, useSyncExternalStore } from "react";
 import { effectiveXpCap } from "@/lib/xp-cap";
 import { todayKey } from "@/lib/format";
+import type { Habit, HabitCompletion } from "@/lib/types";
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
 export const XP_REWARDS = { task: 20, pomodoro: 25, habit: 5 } as const;
+
+/** XP que se resta por cada hábito no completado el día anterior. */
+export const HABIT_PENALTY = 15;
+
 export const XP_COLORS = { task: "#16a34a", pomodoro: "#ea580c", habit: "#0ea5e9" } as const;
 export const XP_LABELS = {
   task: "Tarea completada",
@@ -32,6 +37,8 @@ export type XpNotification = {
   color: string;
   label: string;
   limit: boolean;
+  /** true cuando el XP se resta (penalización por hábito no completado). */
+  penalty?: boolean;
 };
 
 export type SavedTree = {
@@ -55,6 +62,11 @@ const LEGACY_TREE_KEYS = [
 ];
 const CELEBRATED_KEY = "nucleo:xp-celebrated:v4";
 
+// Penalización diaria: cada día, por cada hábito que no se completó el día
+// anterior se restan 15 XP. Se guarda la fecha del último día ya revisado para
+// no volver a penalizar el mismo día en cada recarga.
+const HABIT_PENALTY_KEY = "nucleo:xp-habit-penalty:v1";
+
 function yesterdayKey(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -62,6 +74,14 @@ function yesterdayKey(): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
+}
+
+/** Suma/resta días a una clave de fecha (YYYY-MM-DD). */
+function addDays(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(y, m - 1, d);
+  dt.setDate(dt.getDate() + n);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
 }
 
 export function emptyTree(): SavedTree {
@@ -112,6 +132,17 @@ function readCelebrated(): Set<string> {
 function writeCelebrated(set: Set<string>): void {
   if (typeof window === "undefined") return;
   try { localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...set].slice(-300))); } catch { /* noop */ }
+}
+
+/** Último día (yesterday) cuya penalización de hábitos ya se aplicó. */
+function readPenaltyDate(): string | null {
+  if (typeof window === "undefined") return null;
+  try { return localStorage.getItem(HABIT_PENALTY_KEY); } catch { return null; }
+}
+
+function writePenaltyDate(dateStr: string): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(HABIT_PENALTY_KEY, dateStr); } catch { /* noop */ }
 }
 
 // ─── Nivel ───────────────────────────────────────────────────────────────────
@@ -230,6 +261,77 @@ export function dismissNotification(id: string): void {
   storeState = {
     ...storeState,
     notifications: storeState.notifications.filter((n) => n.id !== id),
+  };
+  emit();
+}
+
+/**
+ * Penalización diaria por hábitos no completados. Se llama cuando la app se
+ * abre (o cambia el día) con los hábitos y sus completados. Por cada hábito
+ * que no se completó el día anterior se restan HABIT_PENALTY de XP. Se graba
+ * la fecha del último día revisado para que cada día se penalice una sola vez
+ * y no se pierda XP en cada recarga.
+ *
+ * La penalización no baja de 0 XP y el resto de recompensas siguen intactas:
+ * es una resta puntual, no toca el límite diario de premios.
+ */
+export function applyHabitPenalty(habits: Habit[], completions: HabitCompletion[]): void {
+  if (typeof window === "undefined") return;
+  if (habits.length === 0) return;
+
+  const today = todayKey();
+  const yesterday = addDays(today, -1);
+  const last = readPenaltyDate();
+
+  // Ya está todo al día (no hay días pendientes de revisar).
+  if (last !== null && last >= yesterday) return;
+
+  // Primera vez: solo se penaliza ayer, no todo el histórico acumulado.
+  const startDay = last === null ? yesterday : addDays(last, 1);
+
+  // Contar hábitos no completados día a día hasta ayer inclusive.
+  const missedIds = new Set<string>();
+  let totalPenalty = 0;
+  let cursor = startDay;
+  while (cursor <= yesterday) {
+    const doneToday = new Set(
+      completions.filter((c) => c.completed_on === cursor).map((c) => c.habit_id),
+    );
+    for (const habit of habits) {
+      if (!doneToday.has(habit.id)) {
+        missedIds.add(habit.id);
+        totalPenalty += HABIT_PENALTY;
+      }
+    }
+    cursor = addDays(cursor, 1);
+  }
+
+  // Marcar el día como revisado aunque no haya penalización, para no repetir.
+  writePenaltyDate(yesterday);
+
+  if (totalPenalty <= 0) return;
+
+  const current = storeState.tree;
+  const newXp = Math.max(0, current.xp - totalPenalty);
+  const base = { ...current, xp: newXp, level: levelForXp(newXp) };
+  writeTree(base);
+
+  const notification: XpNotification = {
+    id: `penalty:${yesterday}:${Date.now()}`,
+    kind: "habit",
+    value: totalPenalty,
+    color: "#dc2626",
+    label:
+      missedIds.size === 1
+        ? "Hábito no completado"
+        : `${missedIds.size} hábitos no completados`,
+    limit: false,
+    penalty: true,
+  };
+
+  storeState = {
+    tree: base,
+    notifications: [...storeState.notifications, notification].slice(-6),
   };
   emit();
 }

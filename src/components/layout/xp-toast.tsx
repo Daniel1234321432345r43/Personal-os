@@ -10,7 +10,7 @@ function ToastItem({
   reduced,
   onDone,
 }: {
-  toast: { id: string; value: number; color: string; label: string; limit?: boolean };
+  toast: { id: string; value: number; color: string; label: string; limit?: boolean; penalty?: boolean };
   reduced: boolean;
   onDone: (id: string) => void;
 }) {
@@ -55,7 +55,7 @@ function ToastItem({
       ) : (
         <span className="flex items-center gap-2">
           <span className="text-sm font-black" style={{ color: toast.color }}>
-            +{toast.value} XP
+            {toast.penalty ? "-" : "+"}{toast.value} XP
           </span>
           <span className="text-xs font-medium text-slate-600">{toast.label}</span>
         </span>
