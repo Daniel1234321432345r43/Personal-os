@@ -885,8 +885,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           };
         });
 
-        // Solo las tareas normales (no sesiones de estudio) dan XP al completarse.
-        if (completing && currentTask && currentTask.type !== "study_session") {
+        // Toda tarea completada da +20 XP (incluidas las sesiones de estudio).
+        // El Pomodoro da +25 por separado al terminar la sesión del temporizador:
+        // son dos eventos independientes, nunca se cuenta dos veces la misma acción.
+        if (completing && currentTask) {
           awardXp("task", id);
         }
       },
