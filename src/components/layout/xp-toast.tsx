@@ -65,8 +65,9 @@ function ToastItem({
 }
 
 /**
- * Avisos flotantes de XP. Lee las notificaciones del store global (actualizado
- * por <XpEngine />). No procesa eventos, solo los muestra.
+ * Avisos flotantes de XP (mensajitos dentro de la app). Lee las notificaciones
+ * del store global, que se generan directamente al completar una tarea, un
+ * hábito o un Pomodoro (awardXp). Solo los muestra; no detecta nada.
  */
 export function XpToast() {
   const { notifications, dismissNotification } = useXpSystem();

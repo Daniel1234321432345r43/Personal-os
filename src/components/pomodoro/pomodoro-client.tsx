@@ -6,6 +6,7 @@ import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
 import { registerServiceWorker } from "@/lib/push";
 import { todayKey } from "@/lib/format";
+import { awardXp } from "@/lib/xp-system";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -152,6 +153,7 @@ export function PomodoroClient() {
 
     playChime();
     if (wasWork) {
+      let pomodoroId: string;
       try {
         const key = "nucleo:pomodoro-completions:v1";
         const current = JSON.parse(localStorage.getItem(key) ?? "[]") as unknown;
@@ -161,7 +163,13 @@ export function PomodoroClient() {
           : `${Date.now()}-${Math.random()}`;
         completions.push(`pomodoro:${todayKey()}:${id}`);
         localStorage.setItem(key, JSON.stringify(completions.slice(-500)));
-      } catch { /* El temporizador sigue funcionando aunque falle el almacenamiento. */ }
+        pomodoroId = id;
+      } catch {
+        /* El temporizador sigue funcionando aunque falle el almacenamiento. */
+        pomodoroId = `${Date.now()}-${Math.random()}`;
+      }
+      // Otorgar XP y avisar inmediatamente al completar la sesión de trabajo.
+      awardXp("pomodoro", pomodoroId);
       void showCompletionNotification(
         "Pomodoro completado 🍅",
         `¡Buen trabajo! Descansa ${breakMinutes} min.${taskLabel}`,

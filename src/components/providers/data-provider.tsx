@@ -25,6 +25,7 @@ import type {
 } from "@/lib/types";
 import { computeFinance, type DashboardData } from "@/lib/data";
 import { todayKey } from "@/lib/format";
+import { awardXp } from "@/lib/xp-system";
 
 const STORAGE_KEY = "nucleo:data:v1";
 const STORAGE_VERSION = 1;
@@ -304,6 +305,10 @@ async function syncStateToSupabase(state: DataState, userId: string): Promise<bo
 
 export function DataProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DataState>(emptyState);
+  // Ref al estado más reciente, para leer el estado actual de forma síncrona
+  // dentro de las acciones (que se crean una sola vez con useMemo).
+  const stateRef = useRef<DataState>(state);
+  stateRef.current = state;
   const [hydrated, setHydrated] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const syncedRef = useRef(false);
@@ -859,6 +864,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       toggleTaskDone: (id) => {
+        // Leer el estado actual de forma síncrona para saber si la tarea se
+        // está completando (no descompletando) y otorgar XP en ese momento.
+        const currentTask = stateRef.current.tasks.find((t) => t.id === id);
+        const completing = currentTask ? currentTask.status !== "done" : false;
+
         setState((prev) => {
           const task = prev.tasks.find((t) => t.id === id);
           if (!task) return prev;
@@ -871,6 +881,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ),
           };
         });
+
+        // Solo las tareas normales (no sesiones de estudio) dan XP al completarse.
+        if (completing && currentTask && currentTask.type !== "study_session") {
+          awardXp("task", id);
+        }
       },
 
       addNote: (input) => {
@@ -987,6 +1002,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       toggleHabit: (habitId) => {
+        // ¿Ya estaba completado hoy? Si no, se está completando ahora → XP.
+        const alreadyDoneToday = stateRef.current.habitCompletions.some(
+          (c) => c.habit_id === habitId && c.completed_on === todayKey(),
+        );
+        const completing = !alreadyDoneToday;
+
         setState((prev) => {
           const today = todayKey();
           const userId = uid();
@@ -1012,6 +1033,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
             };
           }
         });
+
+        if (completing) {
+          awardXp("habit", habitId);
+        }
       },
 
       addTransaction: (input) => {
