@@ -78,11 +78,11 @@ export function SubjectGradesSheet({
         side={isMobile ? "bottom" : "right"}
         className={
           isMobile
-            ? "max-h-[92dvh] rounded-t-2xl border-t p-4 sm:p-6"
-            : "w-full sm:max-w-md md:max-w-lg overflow-y-auto p-4 sm:p-6"
+            ? "h-[92dvh] max-h-[92dvh] rounded-t-2xl border-t p-0 sm:p-6"
+            : "h-full w-full overflow-y-auto p-4 sm:max-w-md md:max-w-lg sm:p-6"
         }
       >
-        <SheetHeader className="pb-2 border-b">
+        <SheetHeader className="shrink-0 border-b px-4 pb-2 pt-4 sm:px-0 sm:pt-0">
           <div className="flex items-center gap-3">
             <span
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-base font-bold shadow-xs"
@@ -105,7 +105,8 @@ export function SubjectGradesSheet({
           </div>
         </SheetHeader>
 
-        <div className="mt-5 space-y-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-8 pt-5 sm:px-0">
+          <div className="space-y-6">
           {/* Tarjeta Resumen de Notas y Ponderaciones */}
           <div className="rounded-xl border bg-muted/30 p-4 space-y-3">
             <div className="flex items-center justify-between">
@@ -492,6 +493,7 @@ export function SubjectGradesSheet({
                 })}
               </div>
             )}
+          </div>
           </div>
         </div>
       </SheetContent>

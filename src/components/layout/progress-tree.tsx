@@ -149,7 +149,7 @@ function TreeScene({
         />
       </AnimatePresence>
       <WindStreaks reduced={reduced} />
-      <FallingLeaves reduced={reduced} />
+      {sceneTime === "day" && <FallingLeaves reduced={reduced} />}
       <div className="pointer-events-none absolute inset-0 z-30 overflow-hidden" aria-hidden="true">
         {particles.map((particle) => (
           <motion.span
