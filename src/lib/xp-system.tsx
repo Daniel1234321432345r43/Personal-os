@@ -193,6 +193,12 @@ export function XpProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const today = todayKey();
     const newNotifications: XpNotification[] = [];
+    console.log("[XP-DEBUG] useEffect disparado", {
+      tasks: data.tasks.length,
+      habits: data.habitCompletions.length,
+      prevTasks: prevTaskStatus.current.size,
+      prevHabits: prevHabitKeys.current.size,
+    });
 
     // ── 1. Detectar tareas que pasaron a "done" ──────────────────────
     const currentStatus = new Map<string, string>();
@@ -204,6 +210,7 @@ export function XpProvider({ children }: { children: ReactNode }) {
       const isToday = localDayKey(task.updated_at) === today;
 
       if (isDoneNow && wasNotDone && isToday && task.type !== "study_session") {
+        console.log("[XP-DEBUG] ✅ Tarea completada detectada", { id: task.id, title: task.title });
         const eventId = `task:${today}:${task.id}`;
         if (!celebrated.current.has(eventId)) {
           celebrated.current.add(eventId);
@@ -246,6 +253,7 @@ export function XpProvider({ children }: { children: ReactNode }) {
       nextHabitKeys.add(key);
 
       if (completion.completed_on === today && !prevHabitKeys.current.has(key)) {
+        console.log("[XP-DEBUG] ✅ Hábito completado detectado", { id: completion.habit_id });
         const eventId = `habit:${today}:${completion.habit_id}`;
         if (!celebrated.current.has(eventId)) {
           celebrated.current.add(eventId);
@@ -264,8 +272,11 @@ export function XpProvider({ children }: { children: ReactNode }) {
 
     // ── 4. Guardar y emitir ───────────────────────────────────────────
     if (newNotifications.length > 0) {
+      console.log("[XP-DEBUG] Emitiendo notificaciones", newNotifications.length, newNotifications);
       writeCelebratedToday(celebrated.current);
       setNotifications((prev) => [...prev, ...newNotifications.slice(0, 5)]);
+    } else {
+      console.log("[XP-DEBUG] No hay notificaciones nuevas");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.tasks, data.habitCompletions, data.workouts, data.habits]);
