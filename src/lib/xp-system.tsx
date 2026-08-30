@@ -266,6 +266,26 @@ export function dismissNotification(id: string): void {
 }
 
 /**
+ * Reinicia el progreso del árbol: elimina el XP, el nivel, el contador
+ * diario, las penalizaciones y las celebraciones guardadas (solo en este
+ * dispositivo, igual que el resto del sistema de XP) y notifica a los
+ * suscriptores para que el árbol vuelva a la fase inicial al instante.
+ */
+export function resetTree(): void {
+  if (typeof window !== "undefined") {
+    try { localStorage.removeItem(TREE_KEY); } catch { /* noop */ }
+    for (const key of LEGACY_TREE_KEYS) {
+      try { localStorage.removeItem(key); } catch { /* noop */ }
+    }
+    try { localStorage.removeItem(CELEBRATED_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(HABIT_PENALTY_KEY); } catch { /* noop */ }
+  }
+  celebrated.clear();
+  storeState = { tree: emptyTree(), notifications: [] };
+  emit();
+}
+
+/**
  * Penalización diaria por hábitos no completados. Se llama cuando la app se
  * abre (o cambia el día) con los hábitos y sus completados. Por cada hábito
  * que no se completó el día anterior se restan HABIT_PENALTY de XP. Se graba

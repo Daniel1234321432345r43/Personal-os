@@ -76,7 +76,8 @@ function TreeScene({
           key={`${level}-${transitionKey}`}
           src={`/tree-assets/escena-nivel-${level}.svg`}
           alt={`Ilustración de ${LEVELS[level].name}`}
-          className="absolute inset-0 z-0 block h-full w-full object-contain"
+          className="absolute inset-0 z-0 block h-full w-full object-cover"
+          style={{ objectPosition: "50% 12%" }}
           initial={{ opacity: 0, scale: 1.06 }}
           animate={reduced ? { opacity: 1, scale: 1 } : { opacity: 1, scale: [1.06, 1.02, 1] }}
           exit={{ opacity: 0, scale: 0.985 }}

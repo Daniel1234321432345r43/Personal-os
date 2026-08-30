@@ -12,8 +12,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown, Leaf } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown, Leaf, RotateCcw } from "lucide-react";
 import { isXpCapDisabled, setXpCapDisabled } from "@/lib/xp-cap";
+import { resetTree } from "@/lib/xp-system";
 
 function LoadingState() {
   return (
@@ -46,6 +47,7 @@ export function SettingsClient() {
   const [resetting, setResetting] = useState(false);
   const [xpCapDisabled, setXpCapDisabledState] = useState(() => isXpCapDisabled());
   const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [confirmingTreeReset, setConfirmingTreeReset] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const provider = getProvider(settings.provider);
   const aiContent = (
@@ -116,6 +118,17 @@ export function SettingsClient() {
     } finally {
       setTesting(false);
     }
+  }
+
+  function handleResetTree() {
+    // Primer clic: pedir confirmación. Segundo clic: reiniciar.
+    if (!confirmingTreeReset) {
+      setConfirmingTreeReset(true);
+      window.setTimeout(() => setConfirmingTreeReset(false), 6000);
+      return;
+    }
+    setConfirmingTreeReset(false);
+    resetTree();
   }
 
   async function handleResetAll() {
@@ -316,6 +329,21 @@ export function SettingsClient() {
                   por día.
                 </p>
               )}
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={handleResetTree}
+              >
+                <RotateCcw className="h-4 w-4" />
+                {confirmingTreeReset
+                  ? "¿Seguro? Se pierde todo el XP…"
+                  : "Reiniciar progreso del árbol"}
+              </Button>
+              <p className="text-xs text-muted-foreground">
+                Borra todo el XP, el nivel y las penalizaciones del árbol en este
+                dispositivo, y vuelve a empezar desde el brote.
+              </p>
             </CardContent>
           </Card>
 
