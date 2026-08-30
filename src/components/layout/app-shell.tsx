@@ -18,7 +18,7 @@ import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Loader2, RotateCw } from "lucide-react";
 import { ProgressTree } from "@/components/layout/progress-tree";
 import { XpToast } from "@/components/layout/xp-toast";
-import { XpEngine } from "@/lib/xp-system";
+import { XpProvider } from "@/lib/xp-system";
 import {
   Sparkles,
   LayoutDashboard,
@@ -233,6 +233,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       };
 
   return (
+    <XpProvider>
     <div className="flex min-h-screen bg-background">
       {/* Sidebar de escritorio */}
       <aside className="hidden w-64 shrink-0 flex-col gap-6 border-r bg-sidebar p-4 lg:flex">
@@ -319,8 +320,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {bottomBar}
-      <XpEngine />
       <XpToast />
     </div>
+    </XpProvider>
   );
 }
