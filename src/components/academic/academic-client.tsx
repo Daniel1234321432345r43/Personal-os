@@ -175,8 +175,8 @@ export function AcademicClient() {
         </p>
       </header>
 
-      {/* Asignaturas (en móvil va debajo de Tareas y colapsada) */}
-      <Card className="order-2 lg:order-1">
+      {/* Asignaturas (van debajo de Tareas, en todos los tamaños) */}
+      <Card className="order-2">
         <CardHeader className="pb-3">
           <div className="hidden lg:block">
             <CardTitle className="text-base">Asignaturas</CardTitle>
@@ -359,8 +359,8 @@ export function AcademicClient() {
       />
 
 
-      {/* Tareas y entregas (en móvil va primero) */}
-      <Card className="order-1 lg:order-2">
+      {/* Tareas y entregas (van primero, en todos los tamaños) */}
+      <Card className="order-1">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">Tareas y entregas</CardTitle>
           <Button size="sm" onClick={() => setShowTask((v) => !v)}>
