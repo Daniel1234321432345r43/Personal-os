@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSettings } from "@/components/providers/settings-provider";
 import { useData } from "@/components/providers/data-provider";
@@ -12,7 +13,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown, Leaf, RotateCcw } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown, Leaf, RotateCcw, LogOut, UserX } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
+import { isSupabaseConfigured } from "@/lib/env";
 import { isXpCapDisabled, setXpCapDisabled } from "@/lib/xp-cap";
 import { resetTree } from "@/lib/xp-system";
 
@@ -49,6 +52,12 @@ export function SettingsClient() {
   const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [confirmingTreeReset, setConfirmingTreeReset] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const router = useRouter();
+  const accountEnabled = isSupabaseConfigured();
+  const [signingOut, setSigningOut] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteResult, setDeleteResult] = useState<{ ok: boolean; message: string } | null>(null);
   const provider = getProvider(settings.provider);
   const aiContent = (
     <CardContent className="space-y-5">
@@ -165,6 +174,56 @@ export function SettingsClient() {
       });
     } finally {
       setResetting(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setSigningOut(true);
+    try {
+      await createClient().auth.signOut();
+    } finally {
+      router.push("/login");
+      router.refresh();
+    }
+  }
+
+  async function handleDeleteAccount() {
+    // Primer clic: pedir confirmacion. Segundo clic: ejecutar.
+    if (!confirmingDelete) {
+      setConfirmingDelete(true);
+      setDeleteResult(null);
+      window.setTimeout(() => setConfirmingDelete(false), 6000);
+      return;
+    }
+    setConfirmingDelete(false);
+    setDeleting(true);
+    setDeleteResult(null);
+    try {
+      // 1. Borrar todos los datos del usuario en las tablas (local + nube).
+      await actions.resetAll();
+      // 2. Eliminar el usuario de Supabase Auth (endpoint de servidor).
+      const res = await fetch("/api/account/delete", { method: "POST" });
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.ok) {
+        setDeleteResult({
+          ok: false,
+          message:
+            data?.error ||
+            "Se borraron los datos, pero no se pudo eliminar la cuenta de usuario. Vuelve a intentarlo.",
+        });
+        return;
+      }
+      // 3. Cerrar sesion y redirigir.
+      await createClient().auth.signOut();
+      router.push("/login");
+      router.refresh();
+    } catch (e) {
+      setDeleteResult({
+        ok: false,
+        message: e instanceof Error ? e.message : "No se pudo borrar la cuenta.",
+      });
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -365,6 +424,85 @@ export function SettingsClient() {
           </Card>
         </div>
       </div>
+
+      {/* Gestion de cuenta: cerrar sesion y borrar cuenta (movil + escritorio) */}
+      {accountEnabled && (
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-1.5">
+              <UserX className="h-4 w-4 text-primary" />
+              Cuenta
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Cerrar sesion</p>
+                <p className="text-xs text-muted-foreground">
+                  Sale de tu cuenta en este dispositivo.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleSignOut}
+                disabled={signingOut || deleting}
+                className="shrink-0"
+              >
+                {signingOut ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <LogOut className="h-4 w-4" />
+                )}
+                Cerrar sesion
+              </Button>
+            </div>
+
+            <div className="border-t pt-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-destructive">
+                    Borrar cuenta
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Elimina <strong>permanentemente</strong> tu cuenta y todos
+                    tus datos en la nube. Esta accion no se puede deshacer.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDeleteAccount}
+                  disabled={deleting || signingOut}
+                  className="shrink-0"
+                >
+                  {deleting ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <UserX className="h-4 w-4" />
+                  )}
+                  {confirmingDelete
+                    ? "¿Seguro? Se borrara todo..."
+                    : deleting
+                      ? "Borrando..."
+                      : "Borrar cuenta"}
+                </Button>
+              </div>
+              {deleteResult && (
+                <p
+                  className={`mt-2 rounded-lg border p-3 text-sm ${
+                    deleteResult.ok
+                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                      : "border-destructive/30 bg-destructive/10 text-destructive"
+                  }`}
+                >
+                  {deleteResult.message}
+                </p>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Zona de peligro: restablecer de fábrica (conserva la API key) */}
       <Card className="border-destructive/30">
