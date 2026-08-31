@@ -311,10 +311,10 @@ export function ProgressTree() {
       <Sheet open={open} onOpenChange={handleOpenChange}>
         <SheetContent
           side="bottom"
-          className="max-h-[94vh] rounded-t-3xl border-0 bg-sky-50 p-0 text-slate-900"
+          className="max-h-[94vh] rounded-t-3xl border-0 bg-[#eef3e8] p-0 text-foreground dark:bg-[#222a23]"
         >
-          <SheetHeader className="border-b border-sky-200 px-6 pb-3 pt-5">
-            <SheetTitle className="flex items-center gap-2 text-slate-900">
+          <SheetHeader className="border-b border-[#dce7d5] px-6 pb-3 pt-5 dark:border-white/10">
+            <SheetTitle className="flex items-center gap-2 text-foreground">
               <Leaf className="h-5 w-5 text-emerald-600" /> Mi árbol de progreso
             </SheetTitle>
           </SheetHeader>
@@ -378,23 +378,23 @@ export function ProgressTree() {
                 <p className="text-lg font-semibold">
                   {current.emoji} {current.name}
                 </p>
-                <p className="text-sm text-slate-600">{current.subtitle}</p>
+                <p className="text-sm text-muted-foreground">{current.subtitle}</p>
               </div>
-              <p className="text-xs text-slate-500">
+              <p className="text-xs text-muted-foreground">
                 {next
                   ? `${Math.max(0, next.required - tree.xp)} XP para el siguiente nivel`
                   : "Nivel máximo"}
               </p>
             </div>
             <div className="mt-3 space-y-2">
-              <div className="flex justify-between text-xs text-slate-500">
+              <div className="flex justify-between text-xs text-muted-foreground">
                 <span>Progreso de fase</span>
                 <span>
                   {Math.round(Math.max(0, tree.xp - current.required))} /{" "}
                   {next ? next.required - current.required : 1}
                 </span>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-sky-200">
+              <div className="h-2 overflow-hidden rounded-full bg-emerald-200/70">
                 <motion.div
                   className="h-full rounded-full bg-emerald-500"
                   initial={{ width: `${Math.max(0, Math.min(100, lastSeenPct))}%` }}
@@ -407,10 +407,10 @@ export function ProgressTree() {
                 />
               </div>
             </div>
-            <p className="mt-5 rounded-xl bg-white/75 p-4 text-sm leading-relaxed text-slate-700 shadow-sm">
+            <p className="mt-5 rounded-xl bg-white/75 p-4 text-sm leading-relaxed text-muted-foreground shadow-sm dark:bg-white/10">
               {diagnosis}
             </p>
-            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-2 text-center text-xs text-slate-500">
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-2 text-center text-xs text-muted-foreground">
               <Target className="h-4 w-4" /> +20 tareas · +5 hábitos ·
               -15 hábitos incumplidos · -10 día sin entrenar · tope {effectiveXpCap()}
               /día
@@ -418,7 +418,7 @@ export function ProgressTree() {
             <SheetClose asChild>
               <Button
                 variant="outline"
-                className="mt-5 w-full border-sky-300 bg-white/60 text-slate-700 hover:bg-white"
+                className="mt-5 w-full border-[#cfe0c9] bg-white/60 text-muted-foreground hover:bg-white dark:border-white/10 dark:bg-white/10 dark:text-foreground dark:hover:bg-white/15"
               >
                 <X className="h-4 w-4" /> Cerrar
               </Button>
