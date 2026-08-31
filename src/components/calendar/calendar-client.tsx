@@ -335,7 +335,7 @@ export function CalendarClient() {
     .filter(Boolean) as { cell: DayCell; events: typeof selectedDayEvents }[];
 
   return (
-    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
+    <div className="flex flex-col gap-5 p-4 md:p-6 lg:gap-4 lg:p-6">
       {/* Cabecera */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -584,7 +584,7 @@ export function CalendarClient() {
                         type="button"
                         onClick={() => setSelectedDate(cell.key)}
                         className={cn(
-                          "group relative flex min-h-[56px] flex-col rounded-lg border p-1 text-left transition-all md:min-h-[90px] md:p-1.5 lg:min-h-[105px]",
+                          "group relative flex min-h-[56px] flex-col rounded-lg border p-1 text-left transition-all md:min-h-[84px] md:p-1.5 lg:min-h-[66px]",
                           cell.isCurrentMonth
                             ? "bg-card hover:bg-muted/40"
                             : "bg-muted/20 text-muted-foreground/60 opacity-60",
