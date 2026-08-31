@@ -61,7 +61,7 @@ function Brand() {
   return (
     <Link href="/dashboard" className="flex items-center gap-2.5">
       <img
-        src="/icono-app.svg"
+        src="/icono-nucleo.svg"
         alt="Núcleo"
         className="h-8 w-8 shrink-0 object-contain"
       />

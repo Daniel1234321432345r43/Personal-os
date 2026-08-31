@@ -112,7 +112,7 @@ export default function LoginPage() {
         <div className="hidden lg:block">
           <div className="mb-8 flex items-center gap-3">
             <img
-              src="/icono-app.svg"
+              src="/icono-nucleo.svg"
               alt="Núcleo"
               className="h-11 w-11 shrink-0 object-contain"
             />
@@ -146,7 +146,7 @@ export default function LoginPage() {
         <Card className="w-full">
           <CardHeader>
             <img
-              src="/icono-app.svg"
+              src="/icono-nucleo.svg"
               alt="Núcleo"
               className="mb-2 h-11 w-11 object-contain lg:hidden"
             />
