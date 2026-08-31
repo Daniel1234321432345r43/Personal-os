@@ -111,9 +111,11 @@ export default function LoginPage() {
         {/* Columna de branding */}
         <div className="hidden lg:block">
           <div className="mb-8 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Sparkles className="h-5 w-5" />
-            </div>
+            <img
+              src="/icono-app.svg"
+              alt="Núcleo"
+              className="h-11 w-11 shrink-0 object-contain"
+            />
             <div>
               <p className="text-lg font-semibold tracking-tight">Núcleo</p>
               <p className="text-sm text-muted-foreground">
@@ -143,9 +145,11 @@ export default function LoginPage() {
         {/* Tarjeta de login */}
         <Card className="w-full">
           <CardHeader>
-            <div className="mb-2 flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground lg:hidden">
-              <Sparkles className="h-5 w-5" />
-            </div>
+            <img
+              src="/icono-app.svg"
+              alt="Núcleo"
+              className="mb-2 h-11 w-11 object-contain lg:hidden"
+            />
             <CardTitle className="text-xl">Inicia sesión</CardTitle>
             <CardDescription>
               Conéctate con tu cuenta de Google para continuar.

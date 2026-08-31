@@ -22,7 +22,6 @@ import { XpDetector } from "@/lib/xp-detector";
 import { XpPenalizer } from "@/lib/xp-penalizer";
 
 import {
-  Sparkles,
   LayoutDashboard,
   Calendar,
   GraduationCap,
@@ -61,9 +60,11 @@ const pillSpring = { type: "spring", stiffness: 500, damping: 35, mass: 0.9 } as
 function Brand() {
   return (
     <Link href="/dashboard" className="flex items-center gap-2.5">
-      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-        <Sparkles className="h-4 w-4" />
-      </div>
+      <img
+        src="/icono-app.svg"
+        alt="Núcleo"
+        className="h-8 w-8 shrink-0 object-contain"
+      />
       <span className="text-base font-semibold tracking-tight">Núcleo</span>
     </Link>
   );
