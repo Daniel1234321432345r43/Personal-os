@@ -14,7 +14,6 @@ import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { Loader2, RotateCw } from "lucide-react";
 import { ProgressTree } from "@/components/layout/progress-tree";
 import { XpToast } from "@/components/layout/xp-toast";
@@ -30,7 +29,6 @@ import {
   Wallet,
   StickyNote,
   Settings,
-  Menu,
   LogOut,
 } from "lucide-react";
 import type { ReactNode } from "react";
@@ -244,27 +242,12 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="mt-auto">{footer}</div>
       </aside>
 
-      {/* Layout móvil con Sheet + bottom bar */}
+      {/* Layout móvil sin cabecera: la hoja del árbol flota en la esquina */}
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b bg-background/80 px-4 backdrop-blur lg:hidden">
-          <Sheet>
-            <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-9 w-9">
-                <Menu className="h-5 w-5" />
-                <span className="sr-only">Abrir menú</span>
-              </Button>
-            </SheetTrigger>
-            <SheetContent side="left" className="flex w-64 flex-col gap-6 p-4">
-              <Brand />
-              {nav("sheet-pill")}
-              <div className="mt-auto">{footer}</div>
-            </SheetContent>
-          </Sheet>
-          <Brand />
-          <div className="ml-auto">
-            <ProgressTree />
-          </div>
-        </header>
+        {/* Hoja del árbol de progreso, visible en todas las pestañas en móvil */}
+        <div className="fixed right-4 top-4 z-40 rounded-full border bg-background/90 p-0.5 shadow-sm backdrop-blur lg:hidden">
+          <ProgressTree />
+        </div>
 
         {/* Pull-to-refresh indicator */}
         {(pullRefresh.pulling || pullRefresh.refreshing) && (
