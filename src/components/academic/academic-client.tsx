@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { formatDate } from "@/lib/format";
-import { useIsMobile } from "@/lib/use-is-mobile";
+import { useIsDesktop } from "@/lib/use-is-mobile";
 import { SubjectForm } from "@/components/forms/subject-form";
 import { TaskForm } from "@/components/forms/task-form";
 import { ClassroomConnect } from "./classroom-connect";
@@ -151,7 +151,7 @@ export function AcademicClient() {
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [subjectsOpen, setSubjectsOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
-  const isMobile = useIsMobile();
+  const isDesktop = useIsDesktop();
 
   if (!hydrated) return <LoadingState />;
 
@@ -178,22 +178,28 @@ export function AcademicClient() {
       {/* Asignaturas (en móvil va debajo de Tareas y colapsada) */}
       <Card className="order-2 lg:order-1">
         <CardHeader className="pb-3">
+          <div className="hidden lg:block">
+            <CardTitle className="text-base">Asignaturas</CardTitle>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Haz clic en cualquier asignatura para ver sus notas, exámenes y ponderaciones
+            </p>
+          </div>
           <button
             type="button"
-            onClick={() => isMobile && setSubjectsOpen((v) => !v)}
+            onClick={() => setSubjectsOpen((v) => !v)}
             aria-expanded={subjectsOpen}
-            className="flex w-full min-w-0 items-center gap-2 text-left"
+            className="flex w-full min-w-0 items-center gap-2 text-left lg:hidden"
           >
             <div className="min-w-0 flex-1">
               <CardTitle className="text-base">Asignaturas</CardTitle>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="mt-0.5 text-xs text-muted-foreground">
                 Haz clic en cualquier asignatura para ver sus notas, exámenes y ponderaciones
               </p>
             </div>
             <motion.span
               animate={{ rotate: subjectsOpen ? 180 : 0 }}
               transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="shrink-0 text-muted-foreground lg:hidden"
+              className="shrink-0 text-muted-foreground"
             >
               <ChevronDown className="h-4 w-4" />
             </motion.span>
@@ -202,7 +208,7 @@ export function AcademicClient() {
 
         <CardContent>
           <AnimatePresence initial={false}>
-            {(!isMobile || subjectsOpen) && (
+            {(isDesktop || subjectsOpen) && (
               <motion.div
                 initial={{ height: 0, opacity: 0 }}
                 animate={{ height: "auto", opacity: 1 }}
@@ -405,8 +411,8 @@ export function AcademicClient() {
                 <button
                   type="button"
                   onClick={() => setShowCompleted((v) => !v)}
-                  aria-expanded={showCompleted}
-                  className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60"
+                  aria-expanded={isDesktop || showCompleted}
+                  className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 lg:hidden"
                 >
                   <span className="flex items-center gap-2">
                     <Check className="h-4 w-4" />
@@ -421,7 +427,7 @@ export function AcademicClient() {
                 </button>
 
                 <AnimatePresence initial={false}>
-                  {showCompleted && (
+                  {(isDesktop || showCompleted) && (
                     <motion.div
                       initial={{ height: 0, opacity: 0 }}
                       animate={{ height: "auto", opacity: 1 }}

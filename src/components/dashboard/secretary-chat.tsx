@@ -34,7 +34,7 @@ import {
   ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useIsMobile } from "@/lib/use-is-mobile";
+import { useIsDesktop, useIsMobile } from "@/lib/use-is-mobile";
 
 /**
  * Forma de la parte de UI de una herramienta. El SDK expone `input` como
@@ -407,6 +407,7 @@ export function SecretaryChat() {
   }, [messages, actions]);
 
   const isMobile = useIsMobile();
+  const isDesktop = useIsDesktop();
   const [collapsed, setCollapsed] = useState(() => {
     if (typeof window === "undefined") return false;
     const stored = localStorage.getItem(SECRETARY_COLLAPSED_KEY);
@@ -441,7 +442,7 @@ export function SecretaryChat() {
   // Si el usuario sube para releer el historial, no volver a anclar abajo.
   // Se re-engancha al expandir el chat y muestra el último mensaje.
   useEffect(() => {
-    if (collapsed) return;
+    if (collapsed && !isDesktop) return;
     const el = scrollAreaRef.current;
     if (!el) return;
     const onScroll = () => {
@@ -452,7 +453,7 @@ export function SecretaryChat() {
     // Al expandir, anclar al final (último mensaje visible).
     el.scrollTop = el.scrollHeight;
     return () => el.removeEventListener("scroll", onScroll);
-  }, [collapsed]);
+  }, [collapsed, isDesktop]);
 
   function toggleCollapsed() {
     // Al expandir, el chat debe mostrar el último mensaje.
@@ -506,39 +507,49 @@ export function SecretaryChat() {
     <Card className="bg-muted/40 lg:col-span-2">
       {/* Cabecera SIEMPRE visible: el botón de colapsar nunca cambia de sitio */}
       <CardHeader className="pb-3">
-        <button
-          type="button"
-          onClick={toggleCollapsed}
-          aria-expanded={!collapsed}
-          className="flex w-full items-center justify-between gap-3 text-left"
-        >
-          <span className="flex min-w-0 items-center gap-2.5">
-            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
-              <Sparkles className="h-4 w-4" />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-base font-medium leading-snug">
-                Secretario {assistantName}
-              </span>
-              {collapsed && (
-                <span className="block truncate text-xs text-muted-foreground">
-                  Toca para hablar con tu asistente…
-                </span>
-              )}
-            </span>
-          </span>
-          <motion.span
-            animate={{ rotate: collapsed ? 0 : 180 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground active:scale-95"
+        <div className="lg:hidden">
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            aria-expanded={!collapsed}
+            className="flex w-full items-center justify-between gap-3 text-left"
           >
-            <ChevronDown className="h-4 w-4" />
-          </motion.span>
-        </button>
+            <span className="flex min-w-0 items-center gap-2.5">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-base font-medium leading-snug">
+                  Secretario {assistantName}
+                </span>
+                {collapsed && (
+                  <span className="block truncate text-xs text-muted-foreground">
+                    Toca para hablar con tu asistente…
+                  </span>
+                )}
+              </span>
+            </span>
+            <motion.span
+              animate={{ rotate: collapsed ? 0 : 180 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted/70 hover:text-foreground active:scale-95"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </motion.span>
+          </button>
+        </div>
+        <div className="hidden items-center gap-2.5 lg:flex">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground">
+            <Sparkles className="h-4 w-4" />
+          </span>
+          <span className="text-base font-medium leading-snug">
+            Secretario {assistantName}
+          </span>
+        </div>
       </CardHeader>
 
       <AnimatePresence initial={false}>
-      {!collapsed && (
+      {(isDesktop || !collapsed) && (
         <motion.div
           initial={{ height: 0, opacity: 0, y: -4 }}
           animate={{ height: "auto", opacity: 1, y: 0 }}

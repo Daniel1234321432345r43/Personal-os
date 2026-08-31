@@ -192,14 +192,17 @@ export function SettingsClient() {
       <div className="grid gap-6 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader className="pb-3">
+            <div className="hidden lg:block">
+              <CardTitle className="text-base">Personalización e IA</CardTitle>
+            </div>
             <button
               type="button"
               onClick={() => setAiOpen((value) => !value)}
               aria-expanded={aiOpen}
-              className="flex w-full items-center justify-between gap-3 text-left lg:pointer-events-none"
+              className="flex w-full items-center justify-between gap-3 text-left lg:hidden"
             >
               <CardTitle className="text-base">Personalización e IA</CardTitle>
-              <span className="shrink-0 text-muted-foreground lg:hidden">
+              <span className="shrink-0 text-muted-foreground">
                 <motion.span
                   animate={{ rotate: aiOpen ? 180 : 0 }}
                   transition={{ duration: 0.2 }}
