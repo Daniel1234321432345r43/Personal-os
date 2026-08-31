@@ -8,8 +8,11 @@ const vapidPublicKey = Deno.env.get("VAPID_PUBLIC_KEY") ?? "";
 const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@localhost";
 
+// El cron debería ejecutarse cada minuto, pero Supabase puede arrancar una
+// ejecución con retraso. Permitimos recuperar avisos atrasados sin enviarlos
+// con demasiada antelación.
 const TASK_WINDOW_BEFORE_MS = 2 * 60 * 1000;
-const TASK_WINDOW_AFTER_MS = 5 * 60 * 1000;
+const TASK_WINDOW_AFTER_MS = 30 * 60 * 1000;
 
 interface ReminderItem {
   entityType: "task" | "workout";
@@ -136,7 +139,15 @@ Deno.serve(async () => {
         subscriptions: userSubs.length,
       });
 
-      if (!inWindow) continue;
+      if (!inWindow) {
+        console.log("[send-reminders] tarea fuera de ventana", {
+          entityId: item.entityId,
+          scheduled: item.scheduled.toISOString(),
+          target: new Date(target).toISOString(),
+          diffMs: diff,
+        });
+        continue;
+      }
 
       const minutes = Math.max(1, Math.round((item.scheduled.getTime() - nowMs) / 60000));
       const payload = JSON.stringify({
@@ -161,10 +172,13 @@ Deno.serve(async () => {
       }
 
       if (sent) {
-        await supabase
+        const { error: markError } = await supabase
           .from("tasks")
           .update({ reminder_sent: true })
           .eq("id", item.entityId);
+        if (markError) {
+          console.error("[send-reminders] no se pudo marcar reminder_sent:", markError.message);
+        }
 
         sentCount += 1;
         console.log(`[send-reminders] ¡Notificación enviada con éxito para la tarea ${item.entityId}!`);

@@ -876,11 +876,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
           const task = prev.tasks.find((t) => t.id === id);
           if (!task) return prev;
           const newStatus: Task["status"] = task.status === "done" ? "pending" : "done";
-          const updated_at = nowIso();          void syncSupabase(_supabase.from("tasks").update({ status: newStatus, updated_at }).eq("id", id), "actualizar tarea");
+          const updated_at = nowIso();          void syncSupabase(_supabase.from("tasks").update({ status: newStatus, updated_at, reminder_sent: false }).eq("id", id), "actualizar tarea");
           return {
             ...prev,
             tasks: prev.tasks.map((t) =>
-              t.id === id ? { ...t, status: newStatus, updated_at } : t,
+              t.id === id ? { ...t, status: newStatus, updated_at, reminder_sent: false } : t,
             ),
           };
         });
