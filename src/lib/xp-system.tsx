@@ -21,11 +21,11 @@ export const XP_LABELS = {
 } as const;
 
 export const LEVELS = [
-  { name: "Brote", subtitle: "0 - 100 XP", required: 0, emoji: "🌱" },
-  { name: "Planta joven", subtitle: "101 - 300 XP", required: 101, emoji: "🌿" },
-  { name: "Árbol mediano", subtitle: "301 - 650 XP", required: 301, emoji: "🌳" },
-  { name: "Árbol grande", subtitle: "651 - 1200 XP", required: 651, emoji: "🌲" },
-  { name: "Secuoya final", subtitle: "1201+ XP", required: 1201, emoji: "🌲" },
+  { name: "Brote", article: "un", subtitle: "0 - 100 XP", required: 0, emoji: "🌱" },
+  { name: "Planta joven", article: "una", subtitle: "101 - 300 XP", required: 101, emoji: "🌿" },
+  { name: "Árbol mediano", article: "un", subtitle: "301 - 650 XP", required: 301, emoji: "🌳" },
+  { name: "Árbol grande", article: "un", subtitle: "651 - 1200 XP", required: 651, emoji: "🌲" },
+  { name: "Secuoya final", article: "una", subtitle: "1201+ XP", required: 1201, emoji: "🌲" },
 ] as const;
 
 // ─── Tipos ───────────────────────────────────────────────────────────────────
@@ -61,6 +61,11 @@ const LEGACY_TREE_KEYS = [
   "nucleo:progress-tree:v4", // forma antigua { xp, level, lastCalculated, xpByDay }
 ];
 const CELEBRATED_KEY = "nucleo:xp-celebrated:v4";
+
+// Última fase cuyo aviso de crecimiento ya se mostró al abrir el árbol. Se
+// guarda por separado del XP para que el aviso salga solo la primera vez que
+// se abre el panel en cada fase nueva, aunque la app se haya recargado.
+const SEEN_LEVEL_KEY = "nucleo:tree-seen-level:v1";
 
 // Penalización diaria: cada día, por cada hábito que no se completó el día
 // anterior se restan 15 XP. Se guarda la fecha del último día ya revisado para
@@ -132,6 +137,20 @@ function readCelebrated(): Set<string> {
 function writeCelebrated(set: Set<string>): void {
   if (typeof window === "undefined") return;
   try { localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...set].slice(-300))); } catch { /* noop */ }
+}
+
+/** Última fase cuyo aviso de crecimiento ya se mostró (0 si nunca). */
+export function readSeenLevel(): number {
+  if (typeof window === "undefined") return 0;
+  try {
+    const parsed = Number(localStorage.getItem(SEEN_LEVEL_KEY));
+    return Number.isFinite(parsed) && parsed >= 0 ? Math.floor(parsed) : 0;
+  } catch { return 0; }
+}
+
+export function writeSeenLevel(level: number): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(SEEN_LEVEL_KEY, String(level)); } catch { /* noop */ }
 }
 
 /** Último día (yesterday) cuya penalización de hábitos ya se aplicó. */
@@ -279,6 +298,7 @@ export function resetTree(): void {
     }
     try { localStorage.removeItem(CELEBRATED_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(HABIT_PENALTY_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(SEEN_LEVEL_KEY); } catch { /* noop */ }
   }
   celebrated.clear();
   storeState = { tree: emptyTree(), notifications: [] };

@@ -11,7 +11,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { useXpSystem, LEVELS } from "@/lib/xp-system";
+import { useXpSystem, LEVELS, readSeenLevel, writeSeenLevel } from "@/lib/xp-system";
 import { effectiveXpCap } from "@/lib/xp-cap";
 
 const TREE_API = "/api/tree/progress";
@@ -187,10 +187,8 @@ function TreeScene({
 export function ProgressTree() {
   const { tree, notifications } = useXpSystem();
   const [open, setOpen] = useState(false);
-  const [showUpgrade, setShowUpgrade] = useState(false);
   const [transitionKey, setTransitionKey] = useState(0);
   const [pendingGrowthMessage, setPendingGrowthMessage] = useState(false);
-  const [seenLevel, setSeenLevel] = useState(() => tree.level);
   const [remoteLoaded, setRemoteLoaded] = useState(false);
   const reduced = useReducedMotion();
   const [now, setNow] = useState(() => new Date());
@@ -220,14 +218,16 @@ export function ProgressTree() {
     if (!next) {
       setLastSeenPct(percentage);
       setPendingGrowthMessage(false);
-      setShowUpgrade(false);
       return;
     }
-    if (tree.level > seenLevel) {
-      setShowUpgrade(true);
+    // El aviso de crecimiento sale solo la primera vez que se abre el panel en
+    // una fase nueva: el nivel visto se guarda en localStorage, así que la
+    // subida se recuerda aunque la app se haya recargado.
+    const seen = readSeenLevel();
+    if (tree.level > seen) {
       setPendingGrowthMessage(true);
       setTransitionKey((key) => key + 1);
-      setSeenLevel(tree.level);
+      writeSeenLevel(tree.level);
     }
   };
 
@@ -311,27 +311,41 @@ export function ProgressTree() {
           </SheetHeader>
           {pendingGrowthMessage && (
             <motion.div
-              initial={{ opacity: 0, y: -10, scale: 0.96 }}
+              initial={{ opacity: 0, y: 16, scale: 0.96 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ type: "spring", stiffness: 260, damping: 18 }}
-              className="mx-5 mt-4 flex flex-col items-center gap-1.5 rounded-2xl border border-lime-300 bg-gradient-to-b from-lime-100 to-emerald-50 p-4 text-center"
+              className="relative mx-4 mt-4 flex min-h-[56vh] flex-col items-center justify-center gap-2.5 overflow-hidden rounded-3xl border border-lime-300 bg-gradient-to-b from-lime-100 to-emerald-50 px-6 py-6 text-center"
             >
-              <Sparkles className="h-6 w-6 text-lime-600" />
-              <p className="text-lg font-black text-green-950">
+              <button
+                type="button"
+                onClick={() => setPendingGrowthMessage(false)}
+                aria-label="Cerrar aviso de crecimiento"
+                className="absolute right-3 top-3 flex h-8 w-8 items-center justify-center rounded-full bg-white/70 text-green-900 transition-colors hover:bg-white"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <Sparkles className="h-8 w-8 text-lime-600" />
+              <p className="text-2xl font-black text-green-950">
                 ¡Tu árbol ha crecido! 🎉
               </p>
               <img
                 src={sceneAsset(tree.level, sceneTime)}
                 alt={`Fase ${LEVELS[tree.level].name}`}
-                className="h-24 w-40 rounded-lg object-cover object-bottom"
+                className="h-20 w-36 rounded-xl object-cover object-bottom shadow-md sm:h-28 sm:w-52"
               />
-              <p className="text-base font-bold text-green-900">
-                Has desbloqueado la fase {LEVELS[tree.level].emoji}{" "}
+              <p className="text-lg font-bold text-green-900">
+                Ahora es {LEVELS[tree.level].article} {LEVELS[tree.level].emoji}{" "}
                 {LEVELS[tree.level].name}
               </p>
               <p className="text-xs font-medium text-green-700">
                 Sigue cuidándolo para que siga creciendo.
               </p>
+              <Button
+                onClick={() => setPendingGrowthMessage(false)}
+                className="mt-1 bg-lime-500 text-green-950 hover:bg-lime-400"
+              >
+                ¡Genial!
+              </Button>
             </motion.div>
           )}
           <div className="overflow-y-auto px-5 pb-8 pt-4">
@@ -350,18 +364,6 @@ export function ProgressTree() {
               particles={particles}
               sceneTime={sceneTime}
             />
-            <AnimatePresence mode="wait">
-              {showUpgrade && (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="mt-3 rounded-xl bg-lime-400 p-3 text-center text-sm font-bold text-green-950"
-                >
-                  <Sparkles className="mx-auto mb-1 h-5 w-5" /> ¡Fase actualizada! Tu
-                  árbol ha crecido.
-                </motion.div>
-              )}
-            </AnimatePresence>
             <div className="mt-4 flex items-end justify-between">
               <div>
                 <p className="text-lg font-semibold">
