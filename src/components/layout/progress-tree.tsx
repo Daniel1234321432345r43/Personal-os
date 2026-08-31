@@ -210,25 +210,34 @@ export function ProgressTree() {
     ? ((tree.xp - current.required) / (next.required - current.required)) * 100
     : 100;
 
-  // Abrir/cerrar el panel. Al abrir detecta si hubo subida de nivel desde la
-  // última visita (muestra la felicitación); al cerrar guarda la posición de la
-  // barra para animar desde ahí en la próxima apertura.
-  const handleOpenChange = (next: boolean) => {
-    setOpen(next);
-    if (!next) {
-      setLastSeenPct(percentage);
-      setPendingGrowthMessage(false);
-      return;
-    }
-    // El aviso de crecimiento sale solo la primera vez que se abre el panel en
-    // una fase nueva: el nivel visto se guarda en localStorage, así que la
-    // subida se recuerda aunque la app se haya recargado.
+  // El aviso de crecimiento sale solo la primera vez que se abre el panel en
+  // una fase nueva: el nivel visto se guarda en localStorage, así que la
+  // subida se recuerda aunque la app se haya recargado.
+  const maybeShowGrowthMessage = () => {
     const seen = readSeenLevel();
     if (tree.level > seen) {
       setPendingGrowthMessage(true);
       setTransitionKey((key) => key + 1);
       writeSeenLevel(tree.level);
     }
+  };
+
+  // Abrir/cerrar el panel. El botón de la hoja abre con setOpen(true) y Radix
+  // no emite onOpenChange para cambios controlados programáticos, así que la
+  // detección de subida de fase va en el onClick (openTree) y aquí solo se
+  // cierra: guarda la posición de la barra para animar desde ahí en la próxima
+  // apertura.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setLastSeenPct(percentage);
+      setPendingGrowthMessage(false);
+    }
+  };
+
+  const openTree = () => {
+    maybeShowGrowthMessage();
+    setOpen(true);
   };
 
   // Posición horizontal estable por partícula (derivada de su id).
@@ -294,7 +303,7 @@ export function ProgressTree() {
         variant="ghost"
         size="icon"
         className="h-9 w-9 text-emerald-600 dark:text-emerald-400"
-        onClick={() => setOpen(true)}
+        onClick={openTree}
         aria-label="Abrir árbol de progreso"
       >
         <Leaf className="h-5 w-5" />
