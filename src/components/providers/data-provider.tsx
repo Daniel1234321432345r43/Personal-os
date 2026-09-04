@@ -22,6 +22,7 @@ import type {
   Transaction,
   Note,
   Grade,
+  PlannedExpense,
 } from "@/lib/types";
 import { computeFinance, type DashboardData } from "@/lib/data";
 import { todayKey } from "@/lib/format";
@@ -44,6 +45,7 @@ export interface DataState {
   transactions: Transaction[];
   grades: Grade[];
   budget: number | null;
+  plannedExpenses: PlannedExpense[];
 }
 
 export type SubjectInput = { name: string; color?: string };
@@ -79,6 +81,12 @@ export type TransactionInput = {
   category: string;
   date?: string;
   description?: string | null;
+};
+export type PlannedExpenseInput = {
+  amount: number | string;
+  category: string;
+  description?: string | null;
+  date?: string | null;
 };
 export type NoteInput = {
   title: string;
@@ -125,6 +133,10 @@ export interface DataActions {
   addTransactions: (inputs: TransactionInput[]) => void;
   deleteTransaction: (id: string) => void;
   setBudget: (amount: number | null) => void;
+  addPlannedExpense: (input: PlannedExpenseInput) => void;
+  addPlannedExpenses: (inputs: PlannedExpenseInput[]) => void;
+  deletePlannedExpense: (id: string) => void;
+  convertPlannedExpenseToTransaction: (id: string, date?: string) => void;
   addGrade: (input: GradeInput) => void;
   addGrades: (inputs: GradeInput[]) => void;
   updateGrade: (id: string, input: Partial<GradeInput>) => void;
@@ -156,6 +168,7 @@ function emptyState(): DataState {
     transactions: [],
     grades: [],
     budget: null,
+    plannedExpenses: [],
   };
 }
 
@@ -177,7 +190,12 @@ function loadState(storageKey = STORAGE_KEY): DataState {
     if (!raw) return emptyState();
     const parsed = JSON.parse(raw);
     if (parsed?.version !== STORAGE_VERSION || !parsed?.data) return emptyState();
-    return { ...emptyState(), ...parsed.data, grades: parsed.data.grades || [] };
+    return {
+      ...emptyState(),
+      ...parsed.data,
+      grades: parsed.data.grades || [],
+      plannedExpenses: parsed.data.plannedExpenses || [],
+    };
   } catch {
     return emptyState();
   }
@@ -213,6 +231,7 @@ function mergeRemote(local: DataState, remote: DataState): DataState {
     transactions: merge(local.transactions, remote.transactions),
     grades: merge(local.grades, remote.grades),
     budget: remote.budget ?? local.budget,
+    plannedExpenses: merge(local.plannedExpenses, remote.plannedExpenses),
   };
 }
 
@@ -260,6 +279,7 @@ function localOnly(state: DataState): DataState {
     transactions: filter(state.transactions),
     grades: filter(state.grades),
     budget: state.budget,
+    plannedExpenses: filter(state.plannedExpenses),
   };
 }
 
@@ -273,6 +293,7 @@ function hasRecords(state: DataState): boolean {
     state.habitCompletions,
     state.transactions,
     state.grades,
+    state.plannedExpenses,
   ].some((items) => items.length > 0);
 }
 
@@ -288,6 +309,7 @@ async function syncStateToSupabase(state: DataState, userId: string): Promise<bo
     ["habit_completions", state.habitCompletions.map(({ id, habit_id, completed_on }) => ({ id, user_id: userId, habit_id, completed_on }))],
     ["grades", state.grades.map(({ id, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }) => ({ id, user_id: userId, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }))],
     ["budgets", state.budget == null ? [] : [{ user_id: userId, month: `${todayKey().slice(0, 7)}-01`, amount: state.budget }]],
+    ["planned_expenses", state.plannedExpenses.map(({ id, amount, category, description, date, is_completed, created_at }) => ({ id, user_id: userId, amount: Number(amount), category, description: description ?? null, date: date ?? null, is_completed: Boolean(is_completed), created_at }))],
   ];
 
   let allSucceeded = true;
@@ -365,57 +387,64 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const pendingSynced = !hasRecords(pending) || await syncStateToSupabase(pending, userId);
 
         const results = await Promise.all([
-        _supabase.from("subjects").select("*").eq("user_id", userId),
-        _supabase.from("tasks").select("*").eq("user_id", userId),
-        _supabase.from("notes").select("*").eq("user_id", userId),
-        _supabase.from("workouts").select("*").eq("user_id", userId),
-        _supabase.from("habits").select("*").eq("user_id", userId),
-        _supabase.from("habit_completions").select("*").eq("user_id", userId),
-        _supabase.from("transactions").select("*").eq("user_id", userId),
-        _supabase.from("grades").select("*").eq("user_id", userId),
-        _supabase.from("budgets").select("amount").eq("user_id", userId).eq("month", `${todayKey().slice(0, 7)}-01`).maybeSingle(),
-      ]);
+          _supabase.from("subjects").select("*").eq("user_id", userId),
+          _supabase.from("tasks").select("*").eq("user_id", userId),
+          _supabase.from("notes").select("*").eq("user_id", userId),
+          _supabase.from("workouts").select("*").eq("user_id", userId),
+          _supabase.from("habits").select("*").eq("user_id", userId),
+          _supabase.from("habit_completions").select("*").eq("user_id", userId),
+          _supabase.from("transactions").select("*").eq("user_id", userId),
+          _supabase.from("grades").select("*").eq("user_id", userId),
+          _supabase.from("budgets").select("amount").eq("user_id", userId).eq("month", `${todayKey().slice(0, 7)}-01`).maybeSingle(),
+          _supabase.from("planned_expenses").select("*").eq("user_id", userId),
+        ]);
 
-      const labels = ["subjects", "tasks", "notes", "workouts", "habits", "habit_completions", "transactions", "grades", "budgets"];
-      results.forEach((result, index) => {
-        if (result.error) {
-          console.error(`[Supabase] cargar ${labels[index]}: ${result.error.message}`);
-        }
-      });
+        const labels = ["subjects", "tasks", "notes", "workouts", "habits", "habit_completions", "transactions", "grades", "budgets", "planned_expenses"];
+        results.forEach((result, index) => {
+          if (result.error) {
+            console.error(`[Supabase] cargar ${labels[index]}: ${result.error.message}`);
+          }
+        });
 
-      const [subjects, tasks, notes, workouts, habits, habitCompletions, transactions, grades, budgetRow] = results.map(
-        (result) => result.data || [],
-      );
-      const normDate = (v: unknown): string | null =>
-        typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null;
-      const remote: DataState = {
-        subjects: subjects as Subject[],
-        tasks: (tasks as Record<string, unknown>[]).map((t) => ({
-          ...t,
-          due_date: normDate(t.due_date),
-          start_time: typeof t.start_time === "string" && t.start_time.length >= 5
-            ? t.start_time.slice(0, 5)
+        const [subjects, tasks, notes, workouts, habits, habitCompletions, transactions, grades, budgetRow, plannedExpensesRows] = results.map(
+          (result) => result.data || [],
+        );
+        const normDate = (v: unknown): string | null =>
+          typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null;
+        const remote: DataState = {
+          subjects: subjects as Subject[],
+          tasks: (tasks as Record<string, unknown>[]).map((t) => ({
+            ...t,
+            due_date: normDate(t.due_date),
+            start_time: typeof t.start_time === "string" && t.start_time.length >= 5
+              ? t.start_time.slice(0, 5)
+              : null,
+            session_index: t.session_index ?? null,
+            total_sessions: t.total_sessions ?? null,
+            parent_task_id: t.parent_task_id ?? null,
+          } as unknown as Task)),
+          notes: notes as Note[],
+          workouts: (workouts as Record<string, unknown>[]).map((w) => ({
+            ...w,
+            date: normDate(w.date),
+            start_time: typeof w.start_time === "string" && w.start_time.length >= 5
+              ? w.start_time.slice(0, 5)
+              : null,
+          } as unknown as Workout)),
+          habits: habits as Habit[],
+          habitCompletions: (habitCompletions as Record<string, unknown>[]).map((h) => ({ ...h, completed_on: normDate(h.completed_on) } as unknown as HabitCompletion)),
+          transactions: (transactions as Record<string, unknown>[]).map((t) => ({ ...t, date: normDate(t.date) } as unknown as Transaction)),
+          grades: grades as Grade[],
+          budget: budgetRow && !Array.isArray(budgetRow)
+            ? Number((budgetRow as { amount: number }).amount)
             : null,
-          session_index: t.session_index ?? null,
-          total_sessions: t.total_sessions ?? null,
-          parent_task_id: t.parent_task_id ?? null,
-        } as unknown as Task)),
-        notes: notes as Note[],
-        workouts: (workouts as Record<string, unknown>[]).map((w) => ({
-          ...w,
-          date: normDate(w.date),
-          start_time: typeof w.start_time === "string" && w.start_time.length >= 5
-            ? w.start_time.slice(0, 5)
-            : null,
-        } as unknown as Workout)),
-        habits: habits as Habit[],
-        habitCompletions: (habitCompletions as Record<string, unknown>[]).map((h) => ({ ...h, completed_on: normDate(h.completed_on) } as unknown as HabitCompletion)),
-        transactions: (transactions as Record<string, unknown>[]).map((t) => ({ ...t, date: normDate(t.date) } as unknown as Transaction)),
-        grades: grades as Grade[],
-        budget: budgetRow && !Array.isArray(budgetRow)
-          ? Number((budgetRow as { amount: number }).amount)
-          : null,
-      };
+          plannedExpenses: (plannedExpensesRows as Record<string, unknown>[]).map((p) => ({
+            ...p,
+            amount: Number(p.amount),
+            date: normDate(p.date),
+            is_completed: Boolean(p.is_completed),
+          } as unknown as PlannedExpense)),
+        };
 
         const nextState = mergeRemote(savedUserState, mergeRemote(pending, remote));
         setState(nextState);
@@ -1089,6 +1118,105 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       },
 
+      addPlannedExpense: (input) => {
+        const id = newId();
+        const iso = nowIso();
+        const userId = uid();
+        const newPlanned: PlannedExpense = {
+          id,
+          user_id: userId,
+          amount: Number(input.amount),
+          category: input.category.trim(),
+          description: input.description?.trim() || null,
+          date: input.date ?? null,
+          is_completed: false,
+          created_at: iso,
+        };
+        setState((prev) => ({
+          ...prev,
+          plannedExpenses: [...prev.plannedExpenses, newPlanned],
+        }));
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase.from("planned_expenses").insert(newPlanned),
+            "guardar gasto planificado",
+          );
+        }
+      },
+
+      addPlannedExpenses: (inputs) => {
+        const iso = nowIso();
+        const userId = uid();
+        const newPlannedList: PlannedExpense[] = inputs.map((input) => ({
+          id: newId(),
+          user_id: userId,
+          amount: Number(input.amount),
+          category: input.category.trim(),
+          description: input.description?.trim() || null,
+          date: input.date ?? null,
+          is_completed: false,
+          created_at: iso,
+        }));
+        setState((prev) => ({
+          ...prev,
+          plannedExpenses: [...prev.plannedExpenses, ...newPlannedList],
+        }));
+        if (userId !== "local" && newPlannedList.length > 0) {
+          void syncSupabase(
+            _supabase.from("planned_expenses").insert(newPlannedList),
+            "guardar gastos planificados",
+          );
+        }
+      },
+
+      deletePlannedExpense: (id) => {
+        setState((prev) => ({
+          ...prev,
+          plannedExpenses: prev.plannedExpenses.filter((p) => p.id !== id),
+        }));
+        const userId = uid();
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase.from("planned_expenses").delete().eq("id", id),
+            "borrar gasto planificado",
+          );
+        }
+      },
+
+      convertPlannedExpenseToTransaction: (id, date) => {
+        const target = stateRef.current.plannedExpenses.find((p) => p.id === id);
+        if (!target) return;
+        const txDate = date || target.date || todayKey();
+        const txId = newId();
+        const iso = nowIso();
+        const userId = uid();
+        const newTx: Transaction = {
+          id: txId,
+          user_id: userId,
+          type: "expense",
+          amount: target.amount,
+          category: target.category,
+          description: target.description,
+          date: txDate,
+          created_at: iso,
+        };
+        setState((prev) => ({
+          ...prev,
+          plannedExpenses: prev.plannedExpenses.filter((p) => p.id !== id),
+          transactions: [...prev.transactions, newTx],
+        }));
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase.from("transactions").insert(newTx),
+            "guardar transacción",
+          );
+          void syncSupabase(
+            _supabase.from("planned_expenses").delete().eq("id", id),
+            "borrar gasto planificado",
+          );
+        }
+      },
+
       addGrade: (input) => {
         const iso = nowIso();
         const userId = uid();
@@ -1384,6 +1512,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           "transactions",
           "grades",
           "budgets",
+          "planned_expenses",
           "tree_progress",
           "tree_xp_events",
         ] as const;
@@ -1402,7 +1531,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<DataContextValue>(() => {
-    const finance = computeFinance(state.transactions, state.budget);
+    const finance = computeFinance(
+      state.transactions,
+      state.budget,
+      state.plannedExpenses,
+    );
     return {
       data: { ...state, finance },
       hydrated,

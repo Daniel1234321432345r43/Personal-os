@@ -13,6 +13,7 @@ import type {
   WorkoutInput,
   HabitInput,
   TransactionInput,
+  PlannedExpenseInput,
   NoteInput,
   GradeInput,
 } from "@/components/providers/data-provider";
@@ -29,6 +30,7 @@ import {
   Dumbbell,
   Flame,
   Wallet,
+  Clock,
   FileText,
   Award,
   ChevronDown,
@@ -48,6 +50,7 @@ type ToolUIPartShape = {
     workouts?: WorkoutInput[];
     habits?: HabitInput[];
     transactions?: TransactionInput[];
+    plannedExpenses?: PlannedExpenseInput[];
     notes?: NoteInput[];
     grades?: GradeInput[];
     task_ids?: string[];
@@ -240,6 +243,28 @@ function ToolPartView({ part }: { part: Parameters<typeof isToolUIPart>[0] }) {
   }
 
   if (
+    toolName === "addPlannedExpenses" &&
+    Array.isArray(input.plannedExpenses) &&
+    input.plannedExpenses.length > 0
+  ) {
+    return (
+      <div className="mb-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-2.5 text-xs">
+        <div className="mb-1 flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+          <Clock className="h-3.5 w-3.5" />
+          <span>Gasto previsto planificado</span>
+        </div>
+        <div className="text-muted-foreground">
+          {input.plannedExpenses.map((pe, i) => (
+            <span key={i}>
+              ~{pe.amount}€ {pe.description ? `(${pe.description})` : `(${pe.category})`}
+            </span>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (
     toolName === "addNotes" &&
     Array.isArray(input.notes) &&
     input.notes.length > 0
@@ -390,6 +415,11 @@ export function SecretaryChat() {
               Array.isArray(input.transactions)
             ) {
               actions.addTransactions(input.transactions);
+            } else if (
+              toolName === "addPlannedExpenses" &&
+              Array.isArray(input.plannedExpenses)
+            ) {
+              actions.addPlannedExpenses(input.plannedExpenses);
             } else if (toolName === "addNotes" && Array.isArray(input.notes)) {
               actions.addNotes(input.notes);
             } else if (

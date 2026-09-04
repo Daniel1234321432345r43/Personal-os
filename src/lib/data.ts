@@ -7,6 +7,7 @@ import type {
   Subject,
   Note,
   Grade,
+  PlannedExpense,
 } from "@/lib/types";
 
 export interface FinanceSummary {
@@ -14,6 +15,14 @@ export interface FinanceSummary {
   expenses: number;
   balance: number;
   budget: number | null;
+  /** Total de gastos futuros planificados aún no ejecutados */
+  plannedExpenses: number;
+  /** Total comprometido: gastos reales + gastos planificados */
+  committedExpenses: number;
+  /** Presupuesto restante respecto al gasto real actual */
+  remainingBudget: number | null;
+  /** Presupuesto restante proyectado una vez se realicen los gastos planificados */
+  projectedRemaining: number | null;
 }
 
 export interface DashboardData {
@@ -26,13 +35,15 @@ export interface DashboardData {
   transactions: Transaction[];
   grades: Grade[];
   budget: number | null;
+  plannedExpenses: PlannedExpense[];
   finance: FinanceSummary;
 }
 
-/** Calcula el resumen financiero a partir de las transacciones y el presupuesto. */
+/** Calcula el resumen financiero a partir de las transacciones, el presupuesto y los gastos previstos. */
 export function computeFinance(
   transactions: Transaction[],
   budget: number | null,
+  plannedExpenses: PlannedExpense[] = [],
 ): FinanceSummary {
   let income = 0;
   let expenses = 0;
@@ -41,7 +52,26 @@ export function computeFinance(
     if (t.type === "income") income += amount;
     else expenses += amount;
   }
-  return { income, expenses, balance: income - expenses, budget };
+
+  let planned = 0;
+  for (const p of plannedExpenses) {
+    if (!p.is_completed) {
+      planned += Number(p.amount);
+    }
+  }
+
+  const committed = expenses + planned;
+
+  return {
+    income,
+    expenses,
+    balance: income - expenses,
+    budget,
+    plannedExpenses: planned,
+    committedExpenses: committed,
+    remainingBudget: budget != null ? Math.max(0, budget - expenses) : null,
+    projectedRemaining: budget != null ? Math.max(0, budget - committed) : null,
+  };
 }
 
 export interface SubjectGradeStats {

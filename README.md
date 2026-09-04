@@ -68,11 +68,13 @@ Ejecuta las migraciones desde **Supabase Dashboard → SQL Editor**, en este ord
 6. `supabase/migrations/00006_reminders.sql`
 7. `supabase/migrations/00007_remind_before_minutes.sql`
 8. `supabase/migrations/00008_reminder_sent.sql`
+...
+15. `supabase/migrations/00015_planned_expenses.sql`
 
 El esquema incluye:
 
 - Perfil público en `public.users`, enlazado con `auth.users`.
-- Tablas de asignaturas, tareas, entrenamientos, hábitos, finanzas, presupuestos, notas y calificaciones.
+- Tablas de asignaturas, tareas, entrenamientos, hábitos, finanzas, presupuestos, gastos planificados, notas y calificaciones.
 - Trigger para crear automáticamente el perfil público al registrarse.
 - Políticas RLS para que cada usuario solo acceda a sus propios datos.
 - Columnas de sesiones multi-día para tareas.

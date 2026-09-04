@@ -259,6 +259,38 @@ export const secretaryTools = {
     },
   }),
 
+  addPlannedExpenses: tool({
+    description:
+      "Añade gastos futuros previstos o planificados al presupuesto mensual (compras futuras, recibos, etc.).",
+    inputSchema: z.object({
+      plannedExpenses: z.array(
+        z.object({
+          amount: z.number().describe("Importe previsto en euros"),
+          category: z
+            .string()
+            .describe("Categoría (ej. Alimentación, Ocio, Vivienda, Transporte)"),
+          description: z
+            .string()
+            .optional()
+            .nullable()
+            .describe("Concepto o motivo del gasto planificado"),
+          date: z
+            .string()
+            .optional()
+            .describe("Fecha prevista aproximada en formato YYYY-MM-DD"),
+        }),
+      ),
+    }),
+    execute: async ({ plannedExpenses }) => {
+      return {
+        success: true,
+        action: "addPlannedExpenses",
+        count: plannedExpenses.length,
+        plannedExpenses,
+      };
+    },
+  }),
+
   addNotes: tool({
     description: "Añade una o más notas o apuntes.",
     inputSchema: z.object({

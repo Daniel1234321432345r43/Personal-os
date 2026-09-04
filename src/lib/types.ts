@@ -111,6 +111,21 @@ export interface Budget {
 }
 
 /**
+ * Gasto futuro planificado/previsto pero aún no realizado.
+ * Permite proyectar el presupuesto mensual antes de desembolsar el dinero.
+ */
+export interface PlannedExpense {
+  id: string;
+  user_id: string;
+  amount: number;
+  category: string;
+  description: string | null;
+  date: string | null; // YYYY-MM-DD (fecha prevista u objetivo)
+  is_completed: boolean;
+  created_at: string;
+}
+
+/**
  * Nota/apunte del usuario. El contenido principal es texto (markdown). Además
  * puede llevar un adjunto opcional: imagen (data URL) o un archivo binario en
  * base64 (`file_data`) con su nombre y tipo MIME.

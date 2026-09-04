@@ -91,6 +91,9 @@ export function buildPlanPrompt(context: SecretaryContext): string {
     `\nSituación financiera del mes: ingresos=${context.finance.income}, gastos=${context.finance.expenses}, balance=${context.finance.balance}` +
       (context.finance.budget != null
         ? `, presupuesto=${context.finance.budget}`
+        : "") +
+      (context.finance.plannedExpenses > 0
+        ? `, gastos_previstos_pendientes=${context.finance.plannedExpenses}, restante_proyectado=${context.finance.projectedRemaining}`
         : ""),
   );
 

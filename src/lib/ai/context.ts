@@ -127,7 +127,10 @@ export function buildContextText(ctx: SecretaryContext): string {
   const { finance } = ctx;
   lines.push(
     `\nFinanzas del mes: ingresos=${finance.income}, gastos=${finance.expenses}, balance=${finance.balance}` +
-      (finance.budget != null ? `, presupuesto=${finance.budget}` : ""),
+      (finance.budget != null ? `, presupuesto=${finance.budget}` : "") +
+      (finance.plannedExpenses > 0
+        ? `, gastos_previstos_pendientes=${finance.plannedExpenses}, restante_proyectado=${finance.projectedRemaining}`
+        : ""),
   );
 
   return lines.join("\n");

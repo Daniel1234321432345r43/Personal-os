@@ -34,6 +34,8 @@ export interface SecretaryContext {
     expenses: number;
     balance: number;
     budget: number | null;
+    plannedExpenses: number;
+    projectedRemaining: number | null;
   };
 }
 
