@@ -14,6 +14,8 @@ export interface FinanceSummary {
   income: number;
   expenses: number;
   balance: number;
+  /** Saldo total acumulado: ingresos históricos menos gastos históricos. */
+  totalBalance: number;
   budget: number | null;
   /** Total de gastos futuros planificados aún no ejecutados */
   plannedExpenses: number;
@@ -66,6 +68,7 @@ export function computeFinance(
     income,
     expenses,
     balance: income - expenses,
+    totalBalance: income - expenses,
     budget,
     plannedExpenses: planned,
     committedExpenses: committed,

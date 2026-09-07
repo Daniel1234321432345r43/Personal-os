@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,8 +19,163 @@ import {
   Clock,
   Plus,
   Trash2,
+  TrendingDown,
+  TrendingUp,
   Wallet,
 } from "lucide-react";
+
+type BalanceHistoryPoint = {
+  date: string | null;
+  balance: number;
+  net: number;
+};
+
+function formatChartDate(date: string | null): string {
+  if (!date) return "Inicio";
+  const [year, month, day] = date.split("-").map(Number);
+  return new Intl.DateTimeFormat("es-ES", {
+    day: "numeric",
+    month: "short",
+  }).format(new Date(year, month - 1, day));
+}
+
+function BalanceHistoryChart({ points }: { points: BalanceHistoryPoint[] }) {
+  if (points.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed p-8 text-center">
+        <TrendingUp className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
+        <p className="text-sm text-muted-foreground">
+          Añade movimientos para ver cómo evoluciona tu saldo con el tiempo.
+        </p>
+      </div>
+    );
+  }
+
+  const width = 800;
+  const height = 320;
+  const padding = { top: 24, right: 24, bottom: 52, left: 78 };
+  const plotWidth = width - padding.left - padding.right;
+  const plotHeight = height - padding.top - padding.bottom;
+  const values = points.map((point) => point.balance);
+  const rawMin = Math.min(...values);
+  const rawMax = Math.max(...values);
+  const rawRange = rawMax - rawMin;
+  const chartPadding = rawRange === 0 ? Math.max(Math.abs(rawMax) * 0.15, 10) : rawRange * 0.12;
+  const minValue = rawMin - chartPadding;
+  const maxValue = rawMax + chartPadding;
+  const valueRange = maxValue - minValue || 1;
+  const x = (index: number) =>
+    padding.left + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
+  const y = (value: number) =>
+    padding.top + ((maxValue - value) / valueRange) * plotHeight;
+  const linePoints = points.map((point, index) => `${x(index)},${y(point.balance)}`).join(" ");
+  const areaPoints = `${padding.left},${padding.top + plotHeight} ${linePoints} ${padding.left + plotWidth},${padding.top + plotHeight}`;
+  const tickCount = 4;
+  const ticks = Array.from({ length: tickCount + 1 }, (_, index) => {
+    const value = maxValue - (index / tickCount) * valueRange;
+    return { value, y: y(value) };
+  });
+  const labelIndexes = Array.from(
+    new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]),
+  );
+  const latest = points[points.length - 1];
+  const trendIsPositive = latest.balance >= 0;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>Saldo acumulado después de cada día con movimientos</span>
+        <span
+          className={trendIsPositive ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-red-600 dark:text-red-400"}
+        >
+          {latest.balance >= 0 ? "Saldo positivo" : "Saldo negativo"}: {formatCurrency(latest.balance)}
+        </span>
+      </div>
+      <div className="overflow-x-auto rounded-lg border bg-muted/10 p-2 sm:p-4">
+        <svg
+          viewBox={`0 0 ${width} ${height}`}
+          className="h-auto min-w-[560px] w-full"
+          role="img"
+          aria-label="Evolución del saldo acumulado a lo largo del tiempo"
+        >
+          <defs>
+            <linearGradient id="balance-area-gradient" x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
+              <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
+            </linearGradient>
+          </defs>
+
+          {ticks.map((tick) => (
+            <g key={tick.y}>
+              <line
+                x1={padding.left}
+                x2={padding.left + plotWidth}
+                y1={tick.y}
+                y2={tick.y}
+                className="stroke-border"
+                strokeDasharray="3 5"
+              />
+              <text
+                x={padding.left - 10}
+                y={tick.y + 4}
+                textAnchor="end"
+                className="fill-muted-foreground"
+                fontSize="12"
+              >
+                {formatCurrency(tick.value)}
+              </text>
+            </g>
+          ))}
+
+          <polygon
+            points={areaPoints}
+            fill="url(#balance-area-gradient)"
+            className="text-primary"
+          />
+          <polyline
+            points={linePoints}
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="4"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="text-primary"
+          />
+
+          {points.map((point, index) => (
+            <g key={`${point.date ?? "start"}-${index}`}>
+              <circle
+                cx={x(index)}
+                cy={y(point.balance)}
+                r="5"
+                className="fill-card stroke-primary"
+                strokeWidth="3"
+              >
+                <title>
+                  {formatChartDate(point.date)}: {formatCurrency(point.balance)}
+                  {point.net !== 0 ? ` (${point.net > 0 ? "+" : "−"}${formatCurrency(Math.abs(point.net))} ese día)` : ""}
+                </title>
+              </circle>
+            </g>
+          ))}
+
+          {labelIndexes.map((index) => (
+            <text
+              key={index}
+              x={x(index)}
+              y={height - 17}
+              textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
+              className="fill-muted-foreground"
+              fontSize="12"
+            >
+              {formatChartDate(points[index].date)}
+            </text>
+          ))}
+        </svg>
+      </div>
+    </div>
+  );
+}
 
 function LoadingState() {
   return (
@@ -42,12 +197,11 @@ export function FinanceClient() {
   const [showBudget, setShowBudget] = useState(false);
   const [showPlanned, setShowPlanned] = useState(false);
 
-  if (!hydrated) return <LoadingState />;
-
   const {
     income,
     expenses,
     balance,
+    totalBalance,
     budget,
     plannedExpenses,
     committedExpenses,
@@ -77,14 +231,55 @@ export function FinanceClient() {
     b.date.localeCompare(a.date),
   );
 
+  const balanceHistory = useMemo<BalanceHistoryPoint[]>(() => {
+    if (data.transactions.length === 0) return [];
+
+    const netByDate = new Map<string, number>();
+    for (const transaction of data.transactions) {
+      const amount = Number(transaction.amount);
+      const signedAmount = transaction.type === "income" ? amount : -amount;
+      netByDate.set(transaction.date, (netByDate.get(transaction.date) ?? 0) + signedAmount);
+    }
+
+    let runningBalance = 0;
+    const points: BalanceHistoryPoint[] = [
+      { date: null, balance: 0, net: 0 },
+    ];
+    for (const date of [...netByDate.keys()].sort()) {
+      const net = netByDate.get(date) ?? 0;
+      runningBalance += net;
+      points.push({ date, balance: runningBalance, net });
+    }
+    return points;
+  }, [data.transactions]);
+
   const summary = [
     { label: "Ingresos", value: income, positive: true },
     { label: "Gastos", value: expenses, positive: false },
-    { label: "Balance", value: balance, positive: balance >= 0 },
+    { label: "Resultado neto", value: balance, positive: balance >= 0 },
   ];
+
+  if (!hydrated) return <LoadingState />;
 
   return (
     <div className="space-y-6 p-4 md:p-6 lg:p-8">
+      <Card className="border-primary/25 bg-primary/10 shadow-sm">
+        <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+              <Wallet className="h-5 w-5" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-muted-foreground">Saldo total</p>
+              <p className="text-xs text-muted-foreground">Ingresos acumulados menos gastos acumulados</p>
+            </div>
+          </div>
+          <p className={`text-3xl font-bold tracking-tight ${totalBalance >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-600 dark:text-red-400"}`}>
+            {formatCurrency(totalBalance)}
+          </p>
+        </CardContent>
+      </Card>
+
       <header>
         <h1 className="text-2xl font-semibold tracking-tight">Finanzas</h1>
         <p className="text-sm text-muted-foreground">
@@ -451,6 +646,28 @@ export function FinanceClient() {
                 No hay movimientos. Añade tu primer ingreso o gasto.
               </p>
             )}
+        </CardContent>
+      </Card>
+
+      {/* Evolución del saldo */}
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+          <div>
+            <CardTitle className="text-base">Evolución del saldo</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              Cómo ha ido cambiando el dinero acumulado según tus movimientos.
+            </p>
+          </div>
+          {balanceHistory.length > 1 && (
+            totalBalance >= 0 ? (
+              <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />
+            )
+          )}
+        </CardHeader>
+        <CardContent>
+          <BalanceHistoryChart points={balanceHistory} />
         </CardContent>
       </Card>
     </div>
