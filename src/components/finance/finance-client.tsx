@@ -263,6 +263,13 @@ export function FinanceClient() {
 
   return (
     <div className="space-y-6 p-4 md:p-6 lg:p-8">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight">Finanzas</h1>
+        <p className="text-sm text-muted-foreground">
+          Registra tus ingresos y gastos y controla tu balance mensual.
+        </p>
+      </header>
+
       <Card className="border-primary/25 bg-primary/10 shadow-sm">
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
           <div className="flex items-center gap-3">
@@ -279,13 +286,6 @@ export function FinanceClient() {
           </p>
         </CardContent>
       </Card>
-
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Finanzas</h1>
-        <p className="text-sm text-muted-foreground">
-          Registra tus ingresos y gastos y controla tu balance mensual.
-        </p>
-      </header>
 
       {/* Resumen: escritorio en cuadrícula (como antes) */}
       <div className="hidden grid-cols-3 gap-3 sm:grid">
