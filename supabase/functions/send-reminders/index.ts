@@ -9,9 +9,12 @@ const vapidPrivateKey = Deno.env.get("VAPID_PRIVATE_KEY") ?? "";
 const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@localhost";
 
 // El cron debería ejecutarse cada minuto, pero Supabase puede arrancar una
-// ejecución con retraso. Permitimos recuperar avisos atrasados sin enviarlos
-// con demasiada antelación.
-const TASK_WINDOW_BEFORE_MS = 2 * 60 * 1000;
+// ejecución con retraso. Permitimos recuperar avisos atrasados (ventana
+// posterior) SIN adelantarlos: la ventana anterior debe ser 0, porque el cron
+// se ejecuta en el primer tick dentro de la ventana y cualquier margen previo
+// hace que la notificación llegue siempre X minutos antes de lo pedido
+// (p. ej. 12 min antes con 10 configurados, 17 con 15).
+const TASK_WINDOW_BEFORE_MS = 0;
 const TASK_WINDOW_AFTER_MS = 30 * 60 * 1000;
 
 interface ReminderItem {

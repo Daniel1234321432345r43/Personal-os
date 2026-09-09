@@ -84,6 +84,15 @@ export function ClassroomConnect() {
           msg += ` Algunos elementos fallaron: ${data.errors.join(" | ")}`;
         }
         setResult(msg);
+      } else if (data.reconnect) {
+        // El refresh token caducó o fue revocado: la conexión ya se eliminó
+        // en el servidor, así que mostramos el botón para reconectar.
+        setConnected(false);
+        setResult(null);
+        setNotice({
+          kind: "error",
+          text: "Tu conexión con Google Classroom ha caducado o fue revocada. Pulsa \"Conectar Google Classroom\" para volver a autorizarla.",
+        });
       } else {
         setResult(data.error ?? "Error al importar.");
       }

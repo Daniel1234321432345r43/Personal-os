@@ -81,6 +81,14 @@ export async function exchangeCode(
   return res.json();
 }
 
+/**
+ * True si el error de Google indica que el refresh token ya no es válido
+ * (caducado o revocado). En ese caso la única salida es reconectar.
+ */
+export function isInvalidGrant(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("invalid_grant");
+}
+
 /** Refresca el access token usando el refresh token. */
 export async function refreshAccessToken(
   refreshToken: string,

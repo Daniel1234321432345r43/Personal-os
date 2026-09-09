@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import {
   listCourses,
   refreshAccessToken,
+  isInvalidGrant,
   type ClassroomCourse,
 } from "@/lib/classroom/client";
 
@@ -38,20 +39,37 @@ export async function POST() {
     }
 
     let accessToken = tokenRow.access_token;
-    if (
-      tokenRow.expires_at &&
-      new Date(tokenRow.expires_at).getTime() < Date.now() &&
-      tokenRow.refresh_token
-    ) {
-      const refreshed = await refreshAccessToken(tokenRow.refresh_token);
-      accessToken = refreshed.access_token;
-      await supabase
-        .from("google_tokens")
-        .update({
-          access_token: refreshed.access_token,
-          expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
-        })
-        .eq("user_id", user.id);
+    const needsRefresh =
+      tokenRow.refresh_token &&
+      (!tokenRow.expires_at ||
+        new Date(tokenRow.expires_at).getTime() < Date.now());
+    if (needsRefresh) {
+      try {
+        const refreshed = await refreshAccessToken(tokenRow.refresh_token);
+        accessToken = refreshed.access_token;
+        await supabase
+          .from("google_tokens")
+          .update({
+            access_token: refreshed.access_token,
+            expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+          })
+          .eq("user_id", user.id);
+      } catch (err) {
+        if (isInvalidGrant(err)) {
+          // Token caducado o revocado por Google: la conexión está muerta.
+          // Se elimina para que el usuario pueda volver a conectar desde cero.
+          await supabase.from("google_tokens").delete().eq("user_id", user.id);
+          return NextResponse.json(
+            {
+              error:
+                "Tu conexión con Google Classroom ha caducado o fue revocada. Vuelve a conectar para seguir sincronizando.",
+              reconnect: true,
+            },
+            { status: 401 },
+          );
+        }
+        throw err;
+      }
     }
 
     // 2) Importar SOLO asignaturas (cursos activos). Las tareas no se

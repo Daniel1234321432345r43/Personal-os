@@ -82,9 +82,17 @@ async function refreshAccessToken(refreshToken: string) {
     }),
   });
   if (!res.ok) {
-    throw new Error("No se pudo refrescar el token de Google Classroom.");
+    const body = await res.text();
+    throw new Error(
+      `Google OAuth refresh (${res.status}): ${body.slice(0, 300)}`,
+    );
   }
   return res.json() as Promise<{ access_token: string; expires_in: number }>;
+}
+
+/** True si Google indica que el refresh token caducó o fue revocado. */
+function isInvalidGrant(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("invalid_grant");
 }
 
 /** Devuelve un access_token válido (refrescándolo si expiró). */
@@ -101,17 +109,29 @@ async function getAccessToken(
   if (!row?.access_token) return null;
 
   const expired =
-    row.expires_at && new Date(row.expires_at).getTime() < Date.now();
+    !row.expires_at || new Date(row.expires_at).getTime() < Date.now();
   if (expired && row.refresh_token) {
-    const refreshed = await refreshAccessToken(row.refresh_token);
-    await supabase
-      .from("google_tokens")
-      .update({
-        access_token: refreshed.access_token,
-        expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
-      })
-      .eq("user_id", userId);
-    return refreshed.access_token;
+    try {
+      const refreshed = await refreshAccessToken(row.refresh_token);
+      await supabase
+        .from("google_tokens")
+        .update({
+          access_token: refreshed.access_token,
+          expires_at: new Date(Date.now() + refreshed.expires_in * 1000).toISOString(),
+        })
+        .eq("user_id", userId);
+      return refreshed.access_token;
+    } catch (err) {
+      if (isInvalidGrant(err)) {
+        // Token muerto: eliminar la conexión para no reintentar cada 15 min.
+        console.error(
+          `[check-classroom] token inválido para ${userId}, se elimina la conexión.`,
+        );
+        await supabase.from("google_tokens").delete().eq("user_id", userId);
+        return null;
+      }
+      throw err;
+    }
   }
   return row.access_token;
 }
