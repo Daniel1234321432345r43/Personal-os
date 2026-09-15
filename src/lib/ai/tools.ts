@@ -1,5 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
+import { checkTaskInputs } from "@/lib/ai/validation";
 
 export const secretaryTools = {
   addSubjects: tool({
@@ -36,7 +37,8 @@ export const secretaryTools = {
 
   addTasks: tool({
     description:
-      "Añade una o más tareas, entregas (trabajos/prácticas/deberes), exámenes o sesiones de estudio al sistema.",
+      "Añade una o más tareas, entregas (trabajos/prácticas/deberes), exámenes o sesiones de estudio al sistema. " +
+      "Requiere fecha (due_date o session_dates) y, para sesiones de estudio, asignatura (subject_name): si el usuario no los ha dado, la herramienta se bloquea y devuelve las preguntas a hacer.",
     inputSchema: z.object({
       tasks: z
         .array(
@@ -87,6 +89,12 @@ export const secretaryTools = {
               .describe(
                 "Si la sesión de estudio o trabajo se extiende durante varios días o sesiones (ej. 'estudiar geografía en 2 días: hoy y mañana', '3 días de estudio'), proporciona la lista de fechas en formato ISO YYYY-MM-DD para cada sesión. El sistema creará automáticamente las tareas divididas en partes '1/2', '2/2', etc.",
               ),
+            date_unspecified: z
+              .boolean()
+              .optional()
+              .describe(
+                "Ponlo a true SOLO si el usuario ha dicho EXPLÍCITAMENTE que el elemento no tiene fecha ('no tiene fecha', 'cuando pueda', 'algún día'). Nunca lo pongas para justificar una fecha que no te ha dado: si no sabes cuándo es, deja due_date vacío y NO pongas este campo.",
+              ),
             estimated_minutes: z
               .number()
               .nullable()
@@ -109,6 +117,20 @@ export const secretaryTools = {
         .describe("Lista de tareas, entregas o exámenes a añadir"),
     }),
     execute: async ({ tasks }) => {
+      // Guardarraíl: sin fecha (o sin asignatura en sesiones de estudio) no se
+      // guarda nada. El modelo recibe las preguntas exactas que debe hacer.
+      const guard = checkTaskInputs(tasks);
+      if (!guard.ok) {
+        return {
+          success: false,
+          blocked: true,
+          action: "addTasks",
+          error: guard.error,
+          questions: guard.questions,
+          missing: guard.violations,
+        };
+      }
+
       return {
         success: true,
         action: "addTasks",

@@ -14,7 +14,6 @@ import { useIsDesktop } from "@/lib/use-is-mobile";
 import { SubjectForm } from "@/components/forms/subject-form";
 import { TaskForm } from "@/components/forms/task-form";
 import { ClassroomConnect } from "./classroom-connect";
-import { AiAssistant } from "./ai-assistant";
 import { SubjectGradesSheet } from "./subject-grades-sheet";
 import { Check, Plus, Trash2, Award, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -462,18 +461,8 @@ export function AcademicClient() {
         </CardContent>
       </Card>
 
-      {/* Asistente académico con IA */}
-      <Card className="order-3">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Recomendaciones IA</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <AiAssistant />
-        </CardContent>
-      </Card>
-
       {/* Sincronización con Classroom */}
-      <Card className="order-4">
+      <Card className="order-3">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Google Classroom</CardTitle>
         </CardHeader>

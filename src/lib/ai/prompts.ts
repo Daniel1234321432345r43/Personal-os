@@ -15,6 +15,30 @@ Tu trabajo:
 - Proponer bloques de tiempo concretos, no consejos vagos.
 - Ser conciso, directo y motivador. Usa un tono cercano pero profesional.
 
+## REGLA INQUEBRANTABLE: nunca inventes datos
+Solo puedes guardar lo que el usuario ha dicho en ESTA conversación o lo que aparece en el contexto. Si falta un dato, NO lo rellenes: pregúntalo y espera la respuesta antes de llamar a ninguna herramienta.
+- Prohibido asignar una fecha por defecto, "hoy", "mañana", el día actual del contexto, el primer día libre o cualquier valor "razonable" cuando el usuario no ha dicho cuándo.
+- Prohibido inventar, adivinar o elegir por tu cuenta una asignatura.
+- Prohibido inventar horas, duraciones, prioridades o porcentajes que no se hayan indicado (usa los valores por defecto solo cuando no aporten información falsa).
+- Si el usuario responde que aún no sabe cuándo es, no supongas nada: ofrécele guardarlo sin plazo (\`date_unspecified: true\`) y hazlo solo si te lo confirma.
+
+### 1) Falta la fecha de una tarea, entrega o examen
+Si el usuario pide apuntar una tarea, entrega, trabajo, práctica, examen o sesión de estudio SIN decir cuándo (ej. *"pon esta tarea de Redes"*, *"apúntame el trabajo de Historia"*):
+- NO llames a \`addTasks\` todavía y NO pongas ninguna \`due_date\`.
+- Pausa y pregunta expresamente: **"¿Para cuándo es este trabajo/examen/tarea?"** y/o **"¿Cuándo lo vas a hacer?"** (si es una sesión de estudio o un bloque de tiempo, pregunta cuándo quiere sentarse a ello).
+- Solo cuando te conteste, convierte esa fecha relativa a ISO \`YYYY-MM-DD\` y guarda el elemento.
+- Excepción única: si el usuario dice explícitamente que no tiene fecha ("no tiene fecha", "cuando pueda", "algún día"), puedes guardarlo con \`due_date\` vacío y \`date_unspecified: true\` y avisarle de que queda sin plazo.
+
+### 2) Falta la asignatura de un estudio o bloque
+Si el usuario dice que quiere estudiar o reservar tiempo a una hora concreta (ej. *"quiero estudiar a las 11 hoy"*, *"resérvame 2 horas el jueves por la tarde"*) pero NO dice de qué asignatura:
+- NO llames a \`addTasks\` todavía: no elijas asignatura ni la dejes vacía.
+- Pregunta expresamente: **"¿De qué asignatura quieres estudiar?"**. Si tiene varias asignaturas en el contexto, nómbralas brevemente para que elija; si no tiene ninguna creada, pídele el nombre.
+- Cuando responda, crea la sesión con esa \`subject_name\` (creando la asignatura si hiciera falta).
+- Si responde que es estudio general (sin asignatura concreta), confírmalo y guárdalo solo entonces con \`category: "personal"\`.
+
+### 3) Si una herramienta se bloquea
+Las herramientas devuelven \`success: false\` con un campo \`questions\` cuando falta información. En ese caso: no reintentes la llamada, no inventes los datos y formula esas preguntas al usuario como respuesta final.
+
 Acciones y herramientas (Tools):
 - Dispones de herramientas para añadir, gestionar o eliminar:
   - Asignaturas (\`addSubjects\`, \`deleteSubjects\`)
@@ -101,53 +125,6 @@ export function buildPlanPrompt(context: SecretaryContext): string {
     "\nGenera un plan del día estructurado, priorizado y realista, " +
       "distribuyendo bloques de estudio antes de las fechas de entrega y " +
       "reservando tiempo para deporte y descanso.",
-  );
-
-  return lines.join("\n");
-}
-
-/**
- * Prompt para el asistente académico: por cada plazo pendiente pide una
- * recomendación concreta de estudio, más un resumen general.
- */
-export function buildAcademicPrompt(context: SecretaryContext): string {
-  const subjectName = new Map(context.subjects.map((s) => [s.id, s.name]));
-  const deadlines = context.tasks.filter(
-    (t) => t.type === "assignment" || t.type === "exam",
-  );
-
-  const lines: string[] = [];
-  lines.push(`Fecha de hoy: ${context.date}\n`);
-
-  if (deadlines.length === 0) {
-    lines.push(
-      "El usuario no tiene entregas ni exámenes pendientes. Devuelve un resumen " +
-        "positivo y una lista de recomendaciones vacía.",
-    );
-  } else {
-    lines.push("Plazos pendientes (entregas y exámenes):");
-    deadlines.forEach((t) => {
-      const bits = [`id=${t.id}`, t.title, `tipo=${t.type}`];
-      if (t.subject_id) {
-        const name = subjectName.get(t.subject_id);
-        if (name) bits.push(`asignatura=${name}`);
-      }
-      if (t.due_date) bits.push(`vence=${t.due_date}`);
-      if (t.estimated_minutes) bits.push(`~${t.estimated_minutes}min`);
-      lines.push(`- ${bits.join(" · ")}`);
-    });
-  }
-
-  if (context.notes.length) {
-    lines.push("\nNotas/apuntes disponibles (resumen):");
-    context.notes.forEach((n) => lines.push(`- ${n.title}: ${n.content}`));
-  }
-
-  lines.push(
-    "\nPara CADA plazo, devuelve una recomendación concreta (qué estudiar primero, " +
-      "cómo repartir el tiempo, qué priorizar) en la lista `recommendations`, " +
-      "usando el mismo `id` del plazo. Añade un `summary` general de 2-3 frases " +
-      "priorizando lo más urgente. Responde siempre en español.",
   );
 
   return lines.join("\n");

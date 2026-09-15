@@ -34,6 +34,7 @@ import {
   FileText,
   Award,
   ChevronDown,
+  CircleAlert,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useIsDesktop, useIsMobile } from "@/lib/use-is-mobile";
@@ -44,6 +45,13 @@ import { useIsDesktop, useIsMobile } from "@/lib/use-is-mobile";
  */
 type ToolUIPartShape = {
   toolCallId?: string;
+  /** Salida de la herramienta: puede venir bloqueada por los guardarraíles. */
+  output?: {
+    success?: boolean;
+    blocked?: boolean;
+    error?: string;
+    questions?: string[];
+  };
   input?: {
     subjects?: SubjectInput[];
     tasks?: TaskInput[];
@@ -74,6 +82,33 @@ function messageText(message: UIMessage): string {
 function ToolPartView({ part }: { part: Parameters<typeof isToolUIPart>[0] }) {
   if (!isToolUIPart(part)) return null;
   const toolName = getToolName(part);
+  const output = (part as ToolUIPartShape).output;
+
+  // Herramienta bloqueada por los guardarraíles (faltan fecha o asignatura):
+  // nunca mostramos la tarjeta de "añadido", porque no se ha guardado nada.
+  if (output?.success === false) {
+    const questions = output.questions?.filter(Boolean) ?? [];
+    return (
+      <div className="mb-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-2.5 text-xs">
+        <div className="mb-1 flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-300">
+          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+          <span>No se ha guardado nada: falta información</span>
+        </div>
+        {questions.length > 0 ? (
+          <ul className="space-y-0.5 text-muted-foreground">
+            {questions.map((question) => (
+              <li key={question}>• {question}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-muted-foreground">
+            {output.error ?? "Necesito algún dato más antes de crearlo."}
+          </p>
+        )}
+      </div>
+    );
+  }
+
   const input = (part as ToolUIPartShape).input;
   if (!input) return null;
 
@@ -389,8 +424,12 @@ export function SecretaryChat() {
           if (toolCallId && !processedToolsRef.current.has(toolCallId)) {
             processedToolsRef.current.add(toolCallId);
             const toolName = getToolName(part);
-            const input = (part as ToolUIPartShape).input;
+            const partShape = part as ToolUIPartShape;
+            const input = partShape.input;
             if (!input) continue;
+            // HERRAMIENTA BLOQUEADA: los guardarraíles han rechazado la llamada
+            // (sin fecha o sin asignatura). No se aplica nada al estado local.
+            if (partShape.output?.success === false) continue;
 
             if (toolName === "addSubjects" && Array.isArray(input.subjects)) {
               actions.addSubjects(input.subjects);

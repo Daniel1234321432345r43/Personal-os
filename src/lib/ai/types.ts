@@ -51,14 +51,3 @@ export interface DayPlan {
   summary: string;
   blocks: PlanBlock[];
 }
-
-/** Recomendación del asistente académico para un plazo concreto (por id de tarea). */
-export interface DeadlineRecommendation {
-  id: string;
-  advice: string;
-}
-
-export interface AcademicAdvice {
-  summary: string;
-  recommendations: DeadlineRecommendation[];
-}
