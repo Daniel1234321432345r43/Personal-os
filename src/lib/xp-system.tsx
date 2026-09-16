@@ -62,6 +62,17 @@ const LEGACY_TREE_KEYS = [
 ];
 const CELEBRATED_KEY = "nucleo:xp-celebrated:v4";
 
+// Las tareas se premian UNA sola vez en la vida del dispositivo (no una vez al
+// día). Antes se deduplicaban por día y además había un detector que miraba
+// `updated_at` para "recuperar" tareas completadas: como el trigger
+// `tasks_set_updated_at` de Supabase reescribe esa fecha en cada
+// sincronización, al abrir la app todas las tareas ya hechas volvían a parecer
+// completadas hoy y regalaban su XP otra vez. El registro de tareas va aparte
+// y nunca se recorta por día.
+const TASK_CREDITS_KEY = "nucleo:xp-task-credits:v1";
+/** Tope del registro de tareas premiadas (FIFO: se descartan las más antiguas). */
+const TASK_CREDITS_LIMIT = 2000;
+
 // Última fase cuyo aviso de crecimiento ya se mostró al abrir el árbol. Se
 // guarda por separado del XP para que el aviso salga solo la primera vez que
 // se abre el panel en cada fase nueva, aunque la app se haya recargado.
@@ -139,6 +150,24 @@ function writeCelebrated(set: Set<string>): void {
   try { localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...set].slice(-300))); } catch { /* noop */ }
 }
 
+/** Tareas cuyo XP ya se otorgó (una sola vez, para siempre). */
+function readTaskCredits(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const parsed = JSON.parse(localStorage.getItem(TASK_CREDITS_KEY) ?? "[]") as unknown;
+    return new Set(
+      Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === "string") : [],
+    );
+  } catch { return new Set(); }
+}
+
+function writeTaskCredits(set: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(TASK_CREDITS_KEY, JSON.stringify([...set].slice(-TASK_CREDITS_LIMIT)));
+  } catch { /* noop */ }
+}
+
 /** Última fase cuyo aviso de crecimiento ya se mostró (0 si nunca). */
 export function readSeenLevel(): number {
   if (typeof window === "undefined") return 0;
@@ -178,6 +207,7 @@ export function levelForXp(xp: number): number {
 // no hay motores. Cada acción → una llamada → un toast + XP.
 
 const celebrated: Set<string> = typeof window !== "undefined" ? readCelebrated() : new Set();
+const taskCredits: Set<string> = typeof window !== "undefined" ? readTaskCredits() : new Set();
 
 // Un único objeto de estado con referencia estable: cada cambio reemplaza el
 // objeto completo, así useSyncExternalStore detecta el cambio sin bucles.
@@ -219,17 +249,29 @@ export type XpKind = keyof typeof XP_REWARDS;
 
 /**
  * Otorga XP y emite un toast. Se llama DIRECTAMENTE desde el manejador de la
- * acción (toggleTaskDone, toggleHabit, Pomodoro). Cada evento solo se premia
- * una vez por día (deduplicación por id en localStorage).
+ * acción (toggleTaskDone, addGrade(s), toggleHabit) y desde el Pomodoro.
+ *
+ * Deduplicación por acción:
+ * - Tareas: una única vez por tarea, para siempre. Aunque algo vuelva a pedir
+ *   XP por la misma tarea (recarga, sincronización, otro dispositivo), aquí no
+ *   se otorga ni se muestra aviso.
+ * - Hábitos y Pomodoro: una vez por evento y día (el mismo hábito cuenta cada
+ *   día, pero no dos veces el mismo día).
  */
 export function awardXp(kind: XpKind, eventId: string): void {
   const today = todayKey();
-  const dedupId = `${kind}:${today}:${eventId}`;
 
-  // Ya premiado hoy: no duplicar ni avisar.
-  if (celebrated.has(dedupId)) return;
-  celebrated.add(dedupId);
-  writeCelebrated(celebrated);
+  if (kind === "task") {
+    if (taskCredits.has(eventId)) return;
+    taskCredits.add(eventId);
+    writeTaskCredits(taskCredits);
+  } else {
+    const dedupId = `${kind}:${today}:${eventId}`;
+    // Ya premiado hoy: no duplicar ni avisar.
+    if (celebrated.has(dedupId)) return;
+    celebrated.add(dedupId);
+    writeCelebrated(celebrated);
+  }
 
   const current = storeState.tree;
 
@@ -260,7 +302,7 @@ export function awardXp(kind: XpKind, eventId: string): void {
   }
 
   const notification: XpNotification = {
-    id: `${dedupId}:${Date.now()}`,
+    id: `${kind}:${today}:${eventId}:${Date.now()}`,
     kind,
     value,
     color: XP_COLORS[kind],
@@ -297,10 +339,14 @@ export function resetTree(): void {
       try { localStorage.removeItem(key); } catch { /* noop */ }
     }
     try { localStorage.removeItem(CELEBRATED_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(TASK_CREDITS_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(HABIT_PENALTY_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(SEEN_LEVEL_KEY); } catch { /* noop */ }
   }
   celebrated.clear();
+  // Se vacía también el registro de tareas para que, tras reiniciar el
+  // progreso, volver a completarlas vuelva a dar XP desde cero.
+  taskCredits.clear();
   storeState = { tree: emptyTree(), notifications: [] };
   emit();
 }

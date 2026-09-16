@@ -49,7 +49,7 @@ export function DashboardClient() {
         <p className="text-sm text-muted-foreground">
           {formatDateLong(new Date().toISOString())}
         </p>
-        <h1 className="text-2xl font-semibold tracking-tight">
+        <h1 className="break-words text-2xl font-semibold tracking-tight">
           {greeting()}
           {userName && <span className="text-primary">, {userName}</span>}
         </h1>
@@ -57,12 +57,12 @@ export function DashboardClient() {
 
       <StatCards data={data} />
 
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
         {/* Secretario IA (chat) — una sola tarjeta limpia, sin cajas anidadas */}
         <SecretaryChat />
 
         {/* Columna derecha */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card className="bg-muted/40">
             <CardContent className="pt-4">
               <TodayRoutines />

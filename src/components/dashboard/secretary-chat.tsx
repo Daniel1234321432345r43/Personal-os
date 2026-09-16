@@ -573,7 +573,7 @@ export function SecretaryChat() {
   const assistantName = settings.assistantName?.trim() || "Núcleo";
 
   return (
-    <Card className="bg-muted/40 lg:col-span-2">
+    <Card className="min-w-0 bg-muted/40 lg:col-span-2">
       {/* Cabecera SIEMPRE visible: el botón de colapsar nunca cambia de sitio */}
       <CardHeader className="pb-3">
         <div className="lg:hidden">

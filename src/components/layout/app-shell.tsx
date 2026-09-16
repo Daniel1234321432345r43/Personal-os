@@ -17,7 +17,6 @@ import { Badge } from "@/components/ui/badge";
 import { Loader2, RotateCw } from "lucide-react";
 import { ProgressTree } from "@/components/layout/progress-tree";
 import { XpToast } from "@/components/layout/xp-toast";
-import { XpDetector } from "@/lib/xp-detector";
 import { XpPenalizer } from "@/lib/xp-penalizer";
 
 import {
@@ -233,8 +232,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number],
       };
 
+  /* `overflow-x-clip` en la raíz: el gesto de swipe desplaza la superficie de
+     página con un transform y, sin recorte, ese desplazamiento ensancha el
+     documento (la interfaz se ve cortada y desajustada en móvil). */
   return (
-    <div className="flex min-h-screen bg-background">
+    <div className="flex min-h-screen overflow-x-clip bg-background">
       {/* Sidebar de escritorio */}
       <aside className="hidden w-64 shrink-0 flex-col gap-6 border-r bg-sidebar p-4 lg:flex">
         <Brand />
@@ -243,7 +245,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Layout móvil sin cabecera: la hoja del árbol flota en la esquina */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 max-w-full flex-1 flex-col">
         {/* Hoja del árbol de progreso, visible en todas las pestañas en móvil */}
         <div className="fixed right-4 top-4 z-40 rounded-full border bg-background/90 p-0.5 shadow-sm backdrop-blur lg:hidden">
           <ProgressTree />
@@ -271,7 +273,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         {/* Padding inferior en móvil para que el contenido no quede tapado por la bottom bar */}
         <main
-          className="flex-1 pb-20 lg:pb-0"
+          className="min-w-0 max-w-full flex-1 pb-20 lg:pb-0"
           {...(isMobile
             ? {
                 onTouchStart: pullRefresh.onTouchStart,
@@ -284,7 +286,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <motion.div
             style={swipeEnabled ? style : undefined}
             className={cn(
-              "min-h-full",
+              "min-h-full w-full min-w-0 max-w-full",
               isMobile && "touch-pan-y overscroll-x-none",
               dragging && "cursor-grabbing select-none",
             )}
@@ -296,7 +298,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               initial={entranceInitial}
               animate={{ opacity: 1, x: 0, y: 0 }}
               transition={entranceTransition}
-              className="min-h-full"
+              className="min-h-full w-full min-w-0 max-w-full"
             >
               {children}
             </motion.div>
@@ -305,7 +307,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       </div>
 
       {bottomBar}
-      <XpDetector />
       <XpPenalizer />
       <XpToast />
     </div>

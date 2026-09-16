@@ -38,7 +38,8 @@ export const secretaryTools = {
   addTasks: tool({
     description:
       "Añade una o más tareas, entregas (trabajos/prácticas/deberes), exámenes o sesiones de estudio al sistema. " +
-      "Requiere fecha (due_date o session_dates) y, para sesiones de estudio, asignatura (subject_name): si el usuario no los ha dado, la herramienta se bloquea y devuelve las preguntas a hacer.",
+      "Requiere fecha (due_date o session_dates) y, para sesiones de estudio, asignatura (subject_name): si el usuario no los ha dado, la herramienta se bloquea y devuelve las preguntas a hacer. " +
+      "La hora de inicio (start_time) es OPCIONAL: nunca preguntes por ella ni dejes de guardar por no tenerla.",
     inputSchema: z.object({
       tasks: z
         .array(
@@ -75,13 +76,13 @@ export const secretaryTools = {
               .nullable()
               .optional()
               .describe(
-                "Hora de inicio en formato HH:MM (ej. 17:30). Úsala cuando el usuario diga a qué hora empieza o cuándo tiene algo, para poder avisarle antes.",
+                "OPCIONAL. Hora de inicio en formato HH:MM (ej. 17:30). Rellénala SOLO si el usuario ha mencionado una hora explícitamente. Nunca la pidas, nunca la inventes y no retrases el guardado por no tenerla: con la fecha ya se puede guardar sin hora.",
               ),
             remind_before_minutes: z
               .union([z.literal(5), z.literal(10), z.literal(15)])
               .optional()
               .describe(
-                "Minutos de antelación de la notificación antes de la hora de inicio (5, 10 o 15). Usa 10 si el usuario no dice cuánto antes quiere que le avisen.",
+                "OPCIONAL. Minutos de antelación de la notificación (5, 10 o 15). Solo tiene sentido si hay start_time: si el usuario no ha dado hora, no lo envíes. Si hay hora y no dice cuánto antes, déjalo vacío (el aviso sale 10 min antes por defecto).",
               ),
             session_dates: z
               .array(z.string())
@@ -203,7 +204,7 @@ export const secretaryTools = {
             .nullable()
             .optional()
             .describe(
-              "Hora de inicio en formato HH:MM (ej. 18:00). Úsala cuando el usuario diga a qué hora entrena.",
+              "OPCIONAL. Hora de inicio en formato HH:MM (ej. 18:00). Rellénala SOLO si el usuario ha dicho a qué hora entrena; nunca la pidas ni la inventes.",
             ),
           title: z.string().optional().nullable().describe("Título opcional"),
           notes: z.string().optional().nullable().describe("Notas opcionales"),

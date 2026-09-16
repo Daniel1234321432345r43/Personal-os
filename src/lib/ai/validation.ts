@@ -6,6 +6,10 @@
  * información, la herramienta se bloquea y devuelve las preguntas exactas que
  * el modelo debe formular antes de volver a intentarlo.
  *
+ * Lo que NUNCA se exige aquí: la hora de inicio (`start_time`) es opcional, igual
+ * que la duración, la prioridad o la descripción. Solo se bloquea por la fecha
+ * de un elemento académico y por la asignatura de una sesión de estudio.
+ *
  * Estas comprobaciones viven aquí (sin dependencias de cliente ni de servidor)
  * para que las apliquen los DOS lados:
  *  1. `src/lib/ai/tools.ts` → la herramienta no devuelve éxito y el modelo ve

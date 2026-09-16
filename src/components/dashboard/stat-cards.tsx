@@ -89,8 +89,11 @@ export function StatCards({ data }: { data: DashboardData }) {
 
   // Press / hover con física suave; la entrada a la pestaña la anima AppShell.
   const cardSpring = { type: "spring", stiffness: 500, damping: 32 } as const;
+  // `min-w-0` es imprescindible: las tarjetas son ítems de un grid y, sin esa
+  // restricción, su ancho mínimo lo marca el contenido (títulos de tarea largos
+  // con `truncate`, que no pueden partirse) y la cuadrícula desborda la pantalla.
   const cardClass =
-    "flex flex-col rounded-xl border bg-muted/40 p-3.5 transition-shadow duration-200 ease-out motion-safe:hover:shadow-md";
+    "flex min-w-0 flex-col overflow-hidden rounded-xl border bg-muted/40 p-3.5 transition-shadow duration-200 ease-out motion-safe:hover:shadow-md";
 
   return (
     <>
@@ -117,7 +120,7 @@ export function StatCards({ data }: { data: DashboardData }) {
               : "Sin entrenar aún hoy"}
           </p>
           {sportToday.length > 0 && (
-            <ul className="space-y-1 text-xs text-muted-foreground">
+            <ul className="min-w-0 space-y-1 text-xs text-muted-foreground">
               {sportToday.slice(0, 2).map((w) => (
                 <li key={w.id} className="truncate">
                   <span className="mr-1.5 text-emerald-600 dark:text-emerald-400">
@@ -177,7 +180,7 @@ export function StatCards({ data }: { data: DashboardData }) {
               : `${pending} tarea${pending === 1 ? "" : "s"} pendiente${pending === 1 ? "" : "s"}`}
           </p>
           {pendingTasks.length > 0 && (
-            <ul className="space-y-1 text-xs text-muted-foreground">
+            <ul className="min-w-0 space-y-1 text-xs text-muted-foreground">
               {pendingTasks.slice(0, 5).map((t) => (
                 <li key={t.id} className="truncate">
                   <span className="mr-1.5 text-primary">•</span>

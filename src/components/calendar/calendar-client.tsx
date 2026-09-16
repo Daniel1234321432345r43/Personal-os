@@ -395,17 +395,17 @@ export function CalendarClient() {
             Hoy
           </Button>
 
-          <div className="flex items-center gap-1">
+          <div className="flex min-w-0 flex-1 items-center justify-center gap-1">
             <Button
               variant="ghost"
               size="icon"
-              className="h-11 w-11 md:h-8 md:w-8"
+              className="h-11 w-11 shrink-0 md:h-8 md:w-8"
               onClick={handlePrevMonth}
             >
               <ChevronLeft className="h-4 w-4" />
               <span className="sr-only">Mes anterior</span>
             </Button>
-            <span className="min-w-[130px] text-center text-sm font-semibold">
+            <span className="min-w-0 flex-1 truncate text-center text-sm font-semibold">
               {MONTH_NAMES[currentDate.month]} {currentDate.year}
             </span>
             <Button
@@ -424,11 +424,11 @@ export function CalendarClient() {
       {/* Métricas del mes (resumen arriba, justo bajo la cabecera) */}
       <div className="order-1 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="p-3">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
               <GraduationCap className="h-4 w-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Exámenes / Entregas</p>
               <p className="text-base font-semibold">
                 {monthStats.exams + monthStats.assignments}
@@ -438,11 +438,11 @@ export function CalendarClient() {
         </Card>
 
         <Card className="p-3">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
               <ArrowUpRight className="h-4 w-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Ingresos del mes</p>
               <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400">
                 +{formatCurrency(monthStats.income)}
@@ -452,11 +452,11 @@ export function CalendarClient() {
         </Card>
 
         <Card className="p-3">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400">
               <ArrowDownRight className="h-4 w-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Gastos del mes</p>
               <p className="text-base font-semibold text-rose-600 dark:text-rose-400">
                 -{formatCurrency(monthStats.expenses)}
@@ -466,11 +466,11 @@ export function CalendarClient() {
         </Card>
 
         <Card className="p-3">
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
               <Dumbbell className="h-4 w-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Entrenamientos</p>
               <p className="text-base font-semibold">{monthStats.workouts} ses.</p>
             </div>
@@ -745,7 +745,7 @@ export function CalendarClient() {
                       {ev ? (
                         <div className="mt-2 space-y-1">
                           {ev.exams.map((t) => (
-                            <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                            <div key={t.id} className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
                               <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
                               <span className="font-medium">Examen:</span> {t.title}
                               {t.subject_id && (
@@ -756,7 +756,7 @@ export function CalendarClient() {
                             </div>
                           ))}
                           {ev.assignments.map((t) => (
-                            <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                            <div key={t.id} className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                               <span className="font-medium">Entrega:</span> {t.title}
                               {t.subject_id && (
@@ -767,7 +767,7 @@ export function CalendarClient() {
                             </div>
                           ))}
                           {ev.studySessions.map((t) => (
-                            <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                            <div key={t.id} className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
                               <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
                               <span className="font-medium">Estudio:</span> {t.title}
                               {t.subject_id && (
@@ -778,27 +778,27 @@ export function CalendarClient() {
                             </div>
                           ))}
                           {ev.tasks.map((t) => (
-                            <div key={t.id} className="flex items-center gap-1.5 text-xs">
+                            <div key={t.id} className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
                               <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
                               <span className="font-medium">Tarea:</span> {t.title}
                             </div>
                           ))}
                           {ev.incomes.map((tx) => (
-                            <div key={tx.id} className="flex items-center gap-1.5 text-xs">
+                            <div key={tx.id} className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
                               <ArrowUpRight className="h-3 w-3 text-emerald-500" />
                               <span className="font-medium">+{formatCurrency(Number(tx.amount))}</span>
                               <span className="text-muted-foreground">{tx.category}</span>
                             </div>
                           ))}
                           {ev.expenses.map((tx) => (
-                            <div key={tx.id} className="flex items-center gap-1.5 text-xs">
+                            <div key={tx.id} className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
                               <ArrowDownRight className="h-3 w-3 text-red-500" />
                               <span className="font-medium">-{formatCurrency(Number(tx.amount))}</span>
                               <span className="text-muted-foreground">{tx.category}</span>
                             </div>
                           ))}
                           {ev.workouts.map((w) => (
-                            <div key={w.id} className="flex items-center gap-1.5 text-xs">
+                            <div key={w.id} className="flex min-w-0 flex-wrap items-center gap-1.5 text-xs">
                               <Dumbbell className="h-3 w-3 text-blue-500" />
                               <span className="font-medium">{w.activity_type}</span>
                               {w.duration_minutes && (
@@ -862,11 +862,11 @@ export function CalendarClient() {
                             const sub = t.subject_id ? subjectById.get(t.subject_id) : null;
                             const isDone = t.status === "done";
                             return (
-                              <div
-                                key={t.id}
-                                className="flex items-center justify-between rounded-md bg-muted/40 p-2 text-xs"
-                              >
-                                <div className="flex items-center gap-2">
+                            <div
+                              key={t.id}
+                              className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-muted/40 p-2 text-xs"
+                            >
+                                <div className="flex min-w-0 items-center gap-2">
                                   <button
                                     type="button"
                                     onClick={() => actions.toggleTaskDone(t.id)}
@@ -886,12 +886,12 @@ export function CalendarClient() {
                                       </motion.span>
                                     )}
                                   </button>
-                                  <span className={cn(isDone && "line-through text-muted-foreground font-normal", "font-medium")}>
+                                  <span className={cn("min-w-0", isDone && "line-through text-muted-foreground font-normal", "font-medium")}>
                                     {t.title}
                                   </span>
                                   {sub && (
                                     <span
-                                      className="rounded px-1.5 py-0.2 text-[10px]"
+                                      className="shrink-0 rounded px-1.5 py-0.2 text-[10px]"
                                       style={{ backgroundColor: `${sub.color}22`, color: sub.color }}
                                     >
                                       {sub.name}
@@ -910,14 +910,14 @@ export function CalendarClient() {
                         {[...events.incomes, ...events.expenses].map((tx) => (
                           <div
                             key={tx.id}
-                            className="flex items-center justify-between rounded-md bg-muted/40 p-2 text-xs"
+                            className="flex min-w-0 items-center justify-between gap-2 rounded-md bg-muted/40 p-2 text-xs"
                           >
-                            <span className="font-medium">
+                            <span className="min-w-0 font-medium">
                               {tx.category} {tx.description ? `· ${tx.description}` : ""}
                             </span>
                             <span
                               className={cn(
-                                "font-semibold",
+                                "shrink-0 font-semibold",
                                 tx.type === "income" ? "text-emerald-600" : "text-rose-600",
                               )}
                             >
@@ -1237,7 +1237,7 @@ export function CalendarClient() {
                                 <p className="text-[11px] text-muted-foreground">{tx.description}</p>
                               )}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
                               <span
                                 className={cn(
                                   "font-semibold",
@@ -1298,7 +1298,7 @@ export function CalendarClient() {
                               </p>
                               {w.notes && <p className="text-[11px] opacity-80">{w.notes}</p>}
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex min-w-0 items-center gap-2">
                               <span className="font-semibold">{w.duration_minutes} min</span>
                               <Button
                                 variant="ghost"

@@ -128,4 +128,16 @@
   html {
     @apply font-sans;
   }
+  /*
+   * Ninguna vista puede arrastrar la página a lo ancho: el gesto de swipe mueve
+   * la página con un transform y algunas tarjetas con texto largo pueden pedir
+   * más ancho que el viewport. `clip` recorta el desbordamiento horizontal SIN
+   * crear un contenedor de scroll (a diferencia de `hidden`), así no afecta al
+   * scroll vertical ni a `position: sticky`.
+   */
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
 }
