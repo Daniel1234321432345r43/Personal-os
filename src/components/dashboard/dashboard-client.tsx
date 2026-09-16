@@ -6,6 +6,7 @@ import { formatDateLong } from "@/lib/format";
 import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
 import { StatCards } from "./stat-cards";
+import { SleepCard } from "./sleep-card";
 import { SecretaryChat } from "./secretary-chat";
 import { UpcomingTasks } from "./upcoming-tasks";
 import { TodayRoutines } from "./today-routines";
@@ -63,6 +64,9 @@ export function DashboardClient() {
 
         {/* Columna derecha */}
         <div className="min-w-0 space-y-6">
+          {/* Sueño: entre el Secretario y las rutinas de hoy */}
+          <SleepCard data={data} />
+
           <Card className="bg-muted/40">
             <CardContent className="pt-4">
               <TodayRoutines />

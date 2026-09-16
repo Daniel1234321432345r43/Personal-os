@@ -17,6 +17,9 @@ const vapidSubject = Deno.env.get("VAPID_SUBJECT") ?? "mailto:admin@localhost";
 const TASK_WINDOW_BEFORE_MS = 0;
 const TASK_WINDOW_AFTER_MS = 30 * 60 * 1000;
 
+/** Minutos de antelación del aviso "hora de dormir" (módulo de Sueño). */
+const SLEEP_REMINDER_MINUTES = 15;
+
 interface ReminderItem {
   entityType: "task" | "workout";
   entityId: string;
@@ -80,6 +83,30 @@ async function collectUpcoming(
   }
 
   return items;
+}
+
+/**
+ * Candidatos de aviso de sueño: la hora objetivo de acostarse convertida al
+ * instante UTC exacto del usuario. Se miran hoy y mañana en su zona horaria
+ * porque una hora de dormir después de medianoche (00:30) pertenece al día
+ * siguiente.
+ */
+function collectSleepCandidates(
+  settings: { bedtime: string | null; target_hours: number | null; reminder_enabled: boolean | null } | null,
+  tz: string,
+  now: Date,
+): Array<{ dateKey: string; scheduled: Date }> {
+  if (!settings?.reminder_enabled || !settings.bedtime) return [];
+  const timeStr = normalizeTime(settings.bedtime);
+  if (!timeStr) return [];
+
+  const candidates: Array<{ dateKey: string; scheduled: Date }> = [];
+  for (const offsetDays of [0, 1]) {
+    const dateKey = dateKeyInTz(new Date(now.getTime() + offsetDays * 86400000), tz);
+    const scheduled = zonedDateTime(dateKey, timeStr, tz);
+    if (scheduled) candidates.push({ dateKey, scheduled });
+  }
+  return candidates;
 }
 
 Deno.serve(async () => {
@@ -185,6 +212,88 @@ Deno.serve(async () => {
 
         sentCount += 1;
         console.log(`[send-reminders] ¡Notificación enviada con éxito para la tarea ${item.entityId}!`);
+      }
+    }
+
+    // ── Módulo de Sueño: aviso 15 min antes de la hora de acostarse ────────
+    const { data: sleepSettings, error: sleepError } = await supabase
+      .from("sleep_settings")
+      .select("bedtime, target_hours, reminder_enabled")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (sleepError) {
+      console.error(`[send-reminders] error leyendo sleep_settings de ${userId}:`, sleepError.message);
+    }
+
+    if (sleepSettings?.reminder_enabled && sleepSettings.bedtime) {
+      const targetHours = sleepSettings.target_hours ?? 8;
+      const candidates = collectSleepCandidates(sleepSettings, tz, now);
+
+      for (const candidate of candidates) {
+        const remindAt = candidate.scheduled.getTime() - SLEEP_REMINDER_MINUTES * 60000;
+        const diff = now.getTime() - remindAt;
+        const inWindow = diff >= -TASK_WINDOW_BEFORE_MS && diff <= TASK_WINDOW_AFTER_MS;
+        if (!inWindow) continue;
+
+        // sleep_settings no tiene columna reminder_sent: se deduplica con
+        // reminder_log (una fila por usuario, noche y momento programado).
+        const remindAtIso = new Date(remindAt).toISOString();
+        const scheduledIso = candidate.scheduled.toISOString();
+        const { data: alreadySent, error: logError } = await supabase
+          .from("reminder_log")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("entity_type", "sleep")
+          .eq("entity_id", candidate.dateKey)
+          .eq("remind_at", scheduledIso)
+          .maybeSingle();
+
+        if (logError) {
+          console.error(`[send-reminders] error consultando reminder_log (sueño):`, logError.message);
+          continue;
+        }
+        if (alreadySent) continue;
+
+        const minutes = Math.round((candidate.scheduled.getTime() - now.getTime()) / 60000);
+        const body = minutes > 0
+          ? `En ${minutes} min tienes que dormirte para cumplir tu hábito de sueño (objetivo ${targetHours} h).`
+          : `Es la hora de dormirte si quieres cumplir tus ${targetHours} h de sueño.`;
+        const payload = JSON.stringify({
+          title: "Núcleo 💤",
+          body,
+          url: "/sueno",
+          tag: `sleep-reminder-${candidate.dateKey}`,
+        });
+
+        let sleepSent = false;
+        for (const sub of userSubs) {
+          try {
+            await sendWebPush(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+              payload,
+              { subject: vapidSubject, publicKey: vapidPublicKey, privateKey: vapidPrivateKey },
+            );
+            sleepSent = true;
+          } catch (err) {
+            console.error(`[send-reminders] error web push (sueño):`, err);
+          }
+        }
+
+        if (!sleepSent) continue;
+
+        const { error: insertError } = await supabase.from("reminder_log").insert({
+          user_id: userId,
+          entity_type: "sleep",
+          entity_id: candidate.dateKey,
+          remind_at: scheduledIso,
+        });
+        if (insertError) {
+          console.error("[send-reminders] no se pudo registrar el aviso de sueño:", insertError.message);
+        }
+
+        sentCount += 1;
+        console.log(`[send-reminders] Aviso de sueño enviado (${candidate.dateKey}, ${remindAtIso}).`);
       }
     }
   }

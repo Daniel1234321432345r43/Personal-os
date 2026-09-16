@@ -2,21 +2,36 @@
 
 import { useCallback, useSyncExternalStore } from "react";
 import { effectiveXpCap } from "@/lib/xp-cap";
-import { todayKey } from "@/lib/format";
+import { formatDuration, todayKey } from "@/lib/format";
+import { SLEEP_LEVEL_LABEL, sleepLevel, type SleepLevel } from "@/lib/sleep";
 import type { Habit, HabitCompletion } from "@/lib/types";
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
-export const XP_REWARDS = { task: 20, pomodoro: 25, habit: 5 } as const;
+export const XP_REWARDS = { task: 20, pomodoro: 25, habit: 5, sleep: 15 } as const;
+
+/**
+ * XP del módulo de Sueño según el cumplimiento del objetivo de horas
+ * (mismos niveles que usan las gráficas, para que color y XP coincidan):
+ *   perfect (verde)  → +15    partial (amarillo) → +5
+ *   low     (naranja) → 0     bad     (rojo)     → −5
+ */
+export const SLEEP_XP: Record<SleepLevel, number> = {
+  perfect: 15,
+  partial: 5,
+  low: 0,
+  bad: -5,
+};
 
 /** XP que se resta por cada hábito no completado el día anterior. */
 export const HABIT_PENALTY = 15;
 
-export const XP_COLORS = { task: "#16a34a", pomodoro: "#ea580c", habit: "#0ea5e9" } as const;
+export const XP_COLORS = { task: "#16a34a", pomodoro: "#ea580c", habit: "#0ea5e9", sleep: "#7c3aed" } as const;
 export const XP_LABELS = {
   task: "Tarea completada",
   pomodoro: "Pomodoro completado",
   habit: "Hábito completado",
+  sleep: "Noche registrada",
   limit: "Límite diario alcanzado",
 } as const;
 
@@ -32,7 +47,7 @@ export const LEVELS = [
 
 export type XpNotification = {
   id: string;
-  kind: "task" | "habit" | "pomodoro";
+  kind: "task" | "habit" | "pomodoro" | "sleep";
   value: number;
   color: string;
   label: string;
@@ -62,15 +77,17 @@ const LEGACY_TREE_KEYS = [
 ];
 const CELEBRATED_KEY = "nucleo:xp-celebrated:v4";
 
-// Las tareas se premian UNA sola vez en la vida del dispositivo (no una vez al
-// día). Antes se deduplicaban por día y además había un detector que miraba
-// `updated_at` para "recuperar" tareas completadas: como el trigger
-// `tasks_set_updated_at` de Supabase reescribe esa fecha en cada
-// sincronización, al abrir la app todas las tareas ya hechas volvían a parecer
-// completadas hoy y regalaban su XP otra vez. El registro de tareas va aparte
-// y nunca se recorta por día.
+// Los eventos irrepetibles (tareas completadas y noches de sueño) se premian
+// UNA sola vez en la vida del dispositivo, no una vez al día. Antes las tareas
+// se deduplicaban por día y además había un detector que miraba `updated_at`
+// para "recuperar" tareas completadas: como el trigger `tasks_set_updated_at`
+// de Supabase reescribe esa fecha en cada sincronización, al abrir la app todas
+// las tareas ya hechas volvían a parecer completadas hoy y regalaban su XP otra
+// vez. Este registro va aparte y nunca se recorta por día.
+// (La clave de almacenamiento conserva el nombre original para no perder el
+// registro ya guardado en los dispositivos que usan la app.)
 const TASK_CREDITS_KEY = "nucleo:xp-task-credits:v1";
-/** Tope del registro de tareas premiadas (FIFO: se descartan las más antiguas). */
+/** Tope del registro de eventos irrepetibles (FIFO: se descartan los más viejos). */
 const TASK_CREDITS_LIMIT = 2000;
 
 // Última fase cuyo aviso de crecimiento ya se mostró al abrir el árbol. Se
@@ -150,7 +167,7 @@ function writeCelebrated(set: Set<string>): void {
   try { localStorage.setItem(CELEBRATED_KEY, JSON.stringify([...set].slice(-300))); } catch { /* noop */ }
 }
 
-/** Tareas cuyo XP ya se otorgó (una sola vez, para siempre). */
+/** Eventos (tareas y noches) cuyo XP ya se otorgó una sola vez. */
 function readTaskCredits(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
@@ -247,23 +264,40 @@ function getServerSnapshot() {
 
 export type XpKind = keyof typeof XP_REWARDS;
 
+/** Opciones de un premio puntual (sueño con valor variable o penalización). */
+export interface AwardXpOptions {
+  /** XP a otorgar (o a restar, si `penalty` es true). Por defecto XP_REWARDS[kind]. */
+  value?: number;
+  /** true para RESTAR XP (noche muy por debajo del objetivo). */
+  penalty?: boolean;
+  /** Texto del aviso, para explicar el valor obtenido. */
+  label?: string;
+}
+
 /**
  * Otorga XP y emite un toast. Se llama DIRECTAMENTE desde el manejador de la
- * acción (toggleTaskDone, addGrade(s), toggleHabit) y desde el Pomodoro.
+ * acción (toggleTaskDone, addGrade(s), toggleHabit, saveSleepLog).
  *
  * Deduplicación por acción:
- * - Tareas: una única vez por tarea, para siempre. Aunque algo vuelva a pedir
- *   XP por la misma tarea (recarga, sincronización, otro dispositivo), aquí no
- *   se otorga ni se muestra aviso.
+ * - Tareas y noches de sueño: una única vez por evento, para siempre (registro
+ *   permanente). Aunque algo vuelva a pedirlo (recarga, sincronización, otro
+ *   dispositivo), aquí no se otorga ni se muestra aviso.
  * - Hábitos y Pomodoro: una vez por evento y día (el mismo hábito cuenta cada
  *   día, pero no dos veces el mismo día).
  */
-export function awardXp(kind: XpKind, eventId: string): void {
+export function awardXp(
+  kind: XpKind,
+  eventId: string,
+  options: AwardXpOptions = {},
+): void {
   const today = todayKey();
+  const penalized = options.penalty === true;
 
-  if (kind === "task") {
-    if (taskCredits.has(eventId)) return;
-    taskCredits.add(eventId);
+  if (kind === "task" || kind === "sleep") {
+    // Eventos irrepetibles: el id del evento ya identifica la noche o la tarea.
+    const onceId = `${kind}:${eventId}`;
+    if (taskCredits.has(onceId)) return;
+    taskCredits.add(onceId);
     writeTaskCredits(taskCredits);
   } else {
     const dedupId = `${kind}:${today}:${eventId}`;
@@ -281,11 +315,18 @@ export function awardXp(kind: XpKind, eventId: string): void {
     base = { ...base, xpToday: 0, lastDate: today };
   }
 
-  const value = XP_REWARDS[kind];
-  let gained = 0;
+  const value = options.value ?? XP_REWARDS[kind];
+  let gained = value;
   let overLimit = false;
 
-  if (base.xpToday < effectiveXpCap()) {
+  if (penalized) {
+    // Las penalizaciones restan XP, no consumen el tope diario y nunca dejan
+    // el árbol por debajo de 0.
+    const newXp = Math.max(0, base.xp - value);
+    gained = base.xp - newXp;
+    base = { ...base, xp: newXp, level: levelForXp(newXp) };
+    writeTree(base);
+  } else if (base.xpToday < effectiveXpCap()) {
     gained = Math.min(value, effectiveXpCap() - base.xpToday);
     overLimit = gained < value;
     const newXp = base.xp + gained;
@@ -304,10 +345,12 @@ export function awardXp(kind: XpKind, eventId: string): void {
   const notification: XpNotification = {
     id: `${kind}:${today}:${eventId}:${Date.now()}`,
     kind,
-    value,
-    color: XP_COLORS[kind],
-    label: overLimit ? XP_LABELS.limit : XP_LABELS[kind],
+    value: penalized ? gained : value,
+    color: penalized ? "#dc2626" : XP_COLORS[kind],
+    label:
+      options.label ?? (overLimit ? XP_LABELS.limit : XP_LABELS[kind]),
     limit: overLimit,
+    penalty: penalized || undefined,
   };
 
   storeState = {
@@ -316,6 +359,25 @@ export function awardXp(kind: XpKind, eventId: string): void {
   };
 
   emit();
+}
+
+/**
+ * Premia (o penaliza) una noche de sueño según el objetivo de horas del
+ * usuario. Se llama al guardar el registro de esa noche; la deduplicación por
+ * fecha garantiza que una misma noche solo puntúa una vez.
+ */
+export function evaluateSleepXp(
+  dateKeyStr: string,
+  hours: number,
+  targetHours: number,
+): void {
+  const level = sleepLevel(hours, targetHours);
+  const xp = SLEEP_XP[level];
+  awardXp("sleep", dateKeyStr, {
+    value: Math.abs(xp),
+    penalty: xp < 0,
+    label: `${SLEEP_LEVEL_LABEL[level]} · ${formatDuration(Math.round(hours * 60))} de ${targetHours} h`,
+  });
 }
 
 export function dismissNotification(id: string): void {

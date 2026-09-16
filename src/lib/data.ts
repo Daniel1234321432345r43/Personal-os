@@ -8,6 +8,8 @@ import type {
   Note,
   Grade,
   PlannedExpense,
+  SleepLog,
+  SleepSettings,
 } from "@/lib/types";
 
 export interface FinanceSummary {
@@ -38,6 +40,8 @@ export interface DashboardData {
   grades: Grade[];
   budget: number | null;
   plannedExpenses: PlannedExpense[];
+  sleepLogs: SleepLog[];
+  sleepSettings: SleepSettings | null;
   finance: FinanceSummary;
 }
 

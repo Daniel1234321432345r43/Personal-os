@@ -11,6 +11,7 @@ PWA (Progressive Web App) que funciona como un **Sistema Operativo Personal** co
 | **Estudios** | Asignaturas, tareas, sesiones de estudio y conexión opcional con Google Classroom. |
 | **Pomodoro** | Temporizador de la técnica Pomodoro con selector de tarea, notificación persistente en pantalla de bloqueo (tipo Symetry) y aviso sonoro al completar cada sesión (tiempos configurables en Ajustes). |
 | **Deporte** | Registro de entrenamientos y seguimiento de hábitos diarios. |
+| **Sueño** | Horas dormidas por noche, objetivo (hora de dormir/despertar y horas), gráfica semanal, mapa de calor anual y aviso push 15 min antes de dormir. Puntúa cada noche con XP: +15 si cumple el objetivo, +5 si se queda cerca, 0 si es insuficiente y −5 si es muy corta. |
 | **Finanzas** | Ingresos, gastos, categorías y presupuesto mensual. |
 | **Notas** | Apuntes con contenido de texto y archivos adjuntos opcionales. |
 
@@ -70,6 +71,7 @@ Ejecuta las migraciones desde **Supabase Dashboard → SQL Editor**, en este ord
 8. `supabase/migrations/00008_reminder_sent.sql`
 ...
 15. `supabase/migrations/00015_planned_expenses.sql`
+16. `supabase/migrations/00016_sleep.sql`
 
 El esquema incluye:
 
@@ -81,6 +83,7 @@ El esquema incluye:
 - Columna `start_time` (hora de inicio) en tareas y entrenamientos.
 - Tabla `push_subscriptions` para las suscripciones de notificaciones push.
 - Tabla `reminder_log` y columna `reminder_sent` en tareas para no repetir recordatorios.
+- Tablas `sleep_logs` y `sleep_settings` del módulo de Sueño (una noche por usuario y fecha; `reminder_log` admite el tipo `sleep`).
 - Reparación de perfiles de usuarios creados antes de instalar el trigger.
 
 La migración `00005_backfill_user_profiles.sql` es importante si el usuario aparece en **Authentication → Users**, pero no existe en `public.users`. Las tablas de la aplicación tienen una clave extranjera hacia `public.users`.
@@ -246,7 +249,9 @@ supabase functions deploy send-reminders --no-verify-jwt
 >
 > La CLI actual ya no acepta `--schedule` en `functions deploy`, y **redesplegar sin la sección `[functions.send-reminders]` en `config.toml` elimina la programación** — el cron deja de ejecutarse. Si cambias el `schedule`, vuelve a desplegar para aplicarlo.
 
-La función consulta las tareas con `start_time` y envía la notificación. En el formulario de tareas puedes elegir que la alarma avise **5, 10 o 15 minutos antes** (por defecto 10). Tras un envío exitoso, la función marca `reminder_sent = true` en la tarea (migración `00008`) para no repetirla en el siguiente tick del cron. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm); `scripts/test-web-push.mjs` la verifica contra una implementación independiente (`http_ece`) para garantizar que los navegadores reales puedan descifrar el payload.
+La función consulta las tareas con `start_time` y envía la notificación. En el formulario de tareas puedes elegir que la alarma avise **5, 10 o 15 minutos antes** (por defecto 10). Tras un envío exitoso, la función marca `reminder_sent = true` en la tarea (migración `00008`) para no repetirla en el siguiente tick del cron.
+
+La misma función envía el **aviso de Sueño**: 15 minutos antes de la *hora de ir a dormir* configurada en el módulo de Sueño ("En 15 min tienes que dormirte para cumplir tu hábito de sueño"). Se activa con el interruptor de la página de Sueño, se deduplica con `reminder_log` (una fila por usuario, noche y momento programado, migración `00016`) y el aviso abre `/sueno`. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm); `scripts/test-web-push.mjs` la verifica contra una implementación independiente (`http_ece`) para garantizar que los navegadores reales puedan descifrar el payload.
 
 **Zona horaria:** la app guarda la hora de inicio como hora local (HH:MM) y `due_date` como instante UTC (`timestamptz`). Al iniciar sesión, la app escribe la zona horaria real del navegador en `public.users`, y la Edge Function la usa para convertir cada tarea a su instante UTC exacto (con horario de verano incluido), comparando siempre en milisegundos UTC sin desfases manuales. Si la zona del perfil no está definida, la función avisa por logs en vez de fallar en silencio.
 
@@ -306,14 +311,15 @@ src/
   app/
     (auth)/login/            # Login con Google
     (app)/                   # Rutas de la aplicación
-      dashboard/ academic/ pomodoro/ sport/ finance/
+      dashboard/ academic/ pomodoro/ sport/ sueno/ finance/
     api/
       chat/                  # Chat del Secretario IA
       plan/                  # Plan estructurado del día
       classroom/             # OAuth e importación de Classroom
     auth/callback/           # Callback del login de Supabase
   components/
-    dashboard/               # Dashboard, chat, plan y tareas
+    dashboard/               # Dashboard, chat, plan, tareas y tarjeta de Sueño
+    sleep/                   # Módulo de Sueño (registro, semana y heatmap anual)
     academic/                # Estudios y Classroom
     forms/                   # Formularios de datos
     layout/                  # Shell de la aplicación
@@ -321,6 +327,7 @@ src/
     ui/                      # Componentes de interfaz
   lib/
     supabase/                # Clientes browser, server y admin
+    sleep.ts                 # Niveles de sueño, horas entre horarios y fechas
     ai/                      # Proveedores y prompts de IA
     classroom/               # Cliente de Google Classroom
     data.ts                  # Cálculos y datos del dashboard

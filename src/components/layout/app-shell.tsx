@@ -27,6 +27,7 @@ import {
   Dumbbell,
   Wallet,
   StickyNote,
+  Moon,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -39,6 +40,10 @@ const navItems = [
   { href: "/pomodoro", label: "Pomodoro", icon: Timer },
   { href: "/notes", label: "Notas", icon: StickyNote },
   { href: "/sport", label: "Deporte", icon: Dumbbell },
+  // Sueño se abre desde aquí (sidebar de escritorio) y desde su tarjeta de
+  // "Hoy". A propósito NO está en BOTTOM_NAV_ROUTES: no aparece en la barra
+  // inferior móvil ni entra en el gesto de swipe.
+  { href: "/sueno", label: "Sueño", icon: Moon },
   { href: "/finance", label: "Finanzas", icon: Wallet },
   { href: "/settings", label: "Ajustes", icon: Settings },
 ];

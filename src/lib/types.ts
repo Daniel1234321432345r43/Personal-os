@@ -143,6 +143,46 @@ export interface Note {
 }
 
 /**
+ * Registro de sueño de una noche. `date` es el día en el que el usuario se
+ * despertó (YYYY-MM-DD), que es la forma natural de registrarlo por la mañana.
+ * Las horas de acostarse y despertar son opcionales: si no se recuerdan, basta
+ * con el total de horas dormidas.
+ */
+export interface SleepLog {
+  id: string;
+  user_id: string;
+  /** Día del despertar en formato YYYY-MM-DD. */
+  date: string;
+  /** Hora a la que se acostó (HH:MM). */
+  bedtime: string | null;
+  /** Hora a la que se despertó (HH:MM). */
+  wake_time: string | null;
+  /** Total de horas dormidas (0-24). */
+  hours: number;
+  /** Valoración subjetiva del descanso (1-5), opcional. */
+  quality: number | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/**
+ * Objetivo de sueño y preferencias. Es una única fila por usuario (como el
+ * presupuesto mensual): si no existe, se usan los valores por defecto.
+ */
+export interface SleepSettings {
+  /** Horas de sueño objetivo (por defecto 8). */
+  target_hours: number;
+  /** Hora objetivo de acostarse (HH:MM). */
+  bedtime: string;
+  /** Hora objetivo de despertar (HH:MM). */
+  wake_time: string;
+  /** Si el aviso push 15 min antes de acostarse está activo. */
+  reminder_enabled: boolean;
+  updated_at?: string;
+}
+
+/**
  * Calificación / nota académica de un examen, entrega o evaluación.
  * Incluye la puntuación obtenida, la puntuación máxima y el porcentaje de ponderación
  * sobre la nota final de la asignatura.

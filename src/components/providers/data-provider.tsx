@@ -23,10 +23,13 @@ import type {
   Note,
   Grade,
   PlannedExpense,
+  SleepLog,
+  SleepSettings,
 } from "@/lib/types";
 import { computeFinance, type DashboardData } from "@/lib/data";
 import { todayKey } from "@/lib/format";
-import { awardXp } from "@/lib/xp-system";
+import { DEFAULT_SLEEP_SETTINGS, roundHours } from "@/lib/sleep";
+import { awardXp, evaluateSleepXp } from "@/lib/xp-system";
 
 const STORAGE_KEY = "nucleo:data:v1";
 const STORAGE_VERSION = 1;
@@ -46,6 +49,8 @@ export interface DataState {
   grades: Grade[];
   budget: number | null;
   plannedExpenses: PlannedExpense[];
+  sleepLogs: SleepLog[];
+  sleepSettings: SleepSettings | null;
 }
 
 export type SubjectInput = { name: string; color?: string };
@@ -107,6 +112,21 @@ export type GradeInput = {
   date?: string | null;
   notes?: string | null;
 };
+export type SleepLogInput = {
+  /** Día del despertar (YYYY-MM-DD). Por defecto, hoy. */
+  date?: string;
+  hours: number;
+  bedtime?: string | null;
+  wake_time?: string | null;
+  quality?: number | null;
+  notes?: string | null;
+};
+export type SleepSettingsInput = {
+  target_hours: number;
+  bedtime: string;
+  wake_time: string;
+  reminder_enabled?: boolean;
+};
 
 export interface DataActions {
   addSubject: (input: SubjectInput) => void;
@@ -144,6 +164,14 @@ export interface DataActions {
   deleteGrades: (ids?: string[], titles?: string[]) => void;
   /** Actualiza la autoevaluación (1-10) de una asignatura. */
   setSubjectRating: (subjectId: string, rating: number | null) => void;
+  /**
+   * Crea o actualiza el registro de sueño de una noche. Si ya existe el de esa
+   * fecha, se actualiza (nunca se duplica). Una misma noche solo puntúa una vez.
+   */
+  saveSleepLog: (input: SleepLogInput) => void;
+  deleteSleepLog: (date: string) => void;
+  /** Objetivo de sueño (horas, hora de dormir/despertar y aviso). */
+  setSleepSettings: (input: SleepSettingsInput) => void;
   /** Restablece de fábrica: borra todos los datos del usuario (local + nube). Conserva la config de IA/API key. */
   resetAll: () => Promise<{ ok: boolean; error?: string }>;
 }
@@ -169,6 +197,8 @@ function emptyState(): DataState {
     grades: [],
     budget: null,
     plannedExpenses: [],
+    sleepLogs: [],
+    sleepSettings: null,
   };
 }
 
@@ -195,6 +225,8 @@ function loadState(storageKey = STORAGE_KEY): DataState {
       ...parsed.data,
       grades: parsed.data.grades || [],
       plannedExpenses: parsed.data.plannedExpenses || [],
+      sleepLogs: parsed.data.sleepLogs || [],
+      sleepSettings: parsed.data.sleepSettings || null,
     };
   } catch {
     return emptyState();
@@ -232,7 +264,21 @@ function mergeRemote(local: DataState, remote: DataState): DataState {
     grades: merge(local.grades, remote.grades),
     budget: remote.budget ?? local.budget,
     plannedExpenses: merge(local.plannedExpenses, remote.plannedExpenses),
+    // Los registros de sueño se identifican por FECHA, no por id: la misma noche
+    // puede llegar con un id distinto desde Supabase (la fila la genera la BD,
+    // que solo garantiza unicidad por usuario + fecha), así que se fusionan por
+    // fecha para no acabar con dos filas de la misma noche.
+    sleepLogs: mergeSleepLogs(local.sleepLogs, remote.sleepLogs),
+    sleepSettings: remote.sleepSettings ?? local.sleepSettings,
   };
+}
+
+/** Fusiona noches por fecha (el remoto gana en conflicto, como el resto). */
+function mergeSleepLogs(local: SleepLog[], remote: SleepLog[]): SleepLog[] {
+  const byDate = new Map<string, SleepLog>();
+  for (const log of local) byDate.set(log.date, log);
+  for (const log of remote) byDate.set(log.date, log);
+  return Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
 /**
@@ -280,6 +326,8 @@ function localOnly(state: DataState): DataState {
     grades: filter(state.grades),
     budget: state.budget,
     plannedExpenses: filter(state.plannedExpenses),
+    sleepLogs: filter(state.sleepLogs),
+    sleepSettings: state.sleepSettings,
   };
 }
 
@@ -294,7 +342,8 @@ function hasRecords(state: DataState): boolean {
     state.transactions,
     state.grades,
     state.plannedExpenses,
-  ].some((items) => items.length > 0);
+    state.sleepLogs,
+  ].some((items) => items.length > 0) || state.sleepSettings != null;
 }
 
 /** Sube datos locales en el orden correcto para respetar las claves foráneas. */
@@ -310,12 +359,30 @@ async function syncStateToSupabase(state: DataState, userId: string): Promise<bo
     ["grades", state.grades.map(({ id, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }) => ({ id, user_id: userId, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }))],
     ["budgets", state.budget == null ? [] : [{ user_id: userId, month: `${todayKey().slice(0, 7)}-01`, amount: state.budget }]],
     ["planned_expenses", state.plannedExpenses.map(({ id, amount, category, description, date, is_completed, created_at }) => ({ id, user_id: userId, amount: Number(amount), category, description: description ?? null, date: date ?? null, is_completed: Boolean(is_completed), created_at }))],
+    // El id NO se envía: la fila se identifica por (user_id, date) y así el
+    // upsert no reescribe la clave primaria de la fila que ya existía.
+    ["sleep_logs", state.sleepLogs.map(({ date, bedtime, wake_time, hours, quality, notes }) => ({ user_id: userId, date, bedtime: bedtime ?? null, wake_time: wake_time ?? null, hours: Number(hours), quality: quality ?? null, notes: notes ?? null }))],
+    ["sleep_settings", state.sleepSettings
+      ? [{
+          user_id: userId,
+          target_hours: Number(state.sleepSettings.target_hours),
+          bedtime: state.sleepSettings.bedtime,
+          wake_time: state.sleepSettings.wake_time,
+          reminder_enabled: Boolean(state.sleepSettings.reminder_enabled),
+        }]
+      : []],
   ];
+
+  const ON_CONFLICT: Record<string, string> = {
+    budgets: "user_id,month",
+    sleep_logs: "user_id,date",
+    sleep_settings: "user_id",
+  };
 
   let allSucceeded = true;
   for (const [table, rows] of operations) {
     if (!Array.isArray(rows) || rows.length === 0) continue;
-    const onConflict = table === "budgets" ? "user_id,month" : "id";
+    const onConflict = ON_CONFLICT[table] ?? "id";
     const succeeded = await syncSupabase(
       _supabase.from(table).upsert(rows, { onConflict }),
       `guardar ${table}`,
@@ -397,16 +464,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
           _supabase.from("grades").select("*").eq("user_id", userId),
           _supabase.from("budgets").select("amount").eq("user_id", userId).eq("month", `${todayKey().slice(0, 7)}-01`).maybeSingle(),
           _supabase.from("planned_expenses").select("*").eq("user_id", userId),
+          _supabase.from("sleep_logs").select("*").eq("user_id", userId),
+          _supabase.from("sleep_settings").select("*").eq("user_id", userId).maybeSingle(),
         ]);
 
-        const labels = ["subjects", "tasks", "notes", "workouts", "habits", "habit_completions", "transactions", "grades", "budgets", "planned_expenses"];
+        const labels = ["subjects", "tasks", "notes", "workouts", "habits", "habit_completions", "transactions", "grades", "budgets", "planned_expenses", "sleep_logs", "sleep_settings"];
         results.forEach((result, index) => {
           if (result.error) {
             console.error(`[Supabase] cargar ${labels[index]}: ${result.error.message}`);
           }
         });
 
-        const [subjects, tasks, notes, workouts, habits, habitCompletions, transactions, grades, budgetRow, plannedExpensesRows] = results.map(
+        const [subjects, tasks, notes, workouts, habits, habitCompletions, transactions, grades, budgetRow, plannedExpensesRows, sleepLogRows, sleepSettingsRow] = results.map(
           (result) => result.data || [],
         );
         const normDate = (v: unknown): string | null =>
@@ -444,6 +513,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
             date: normDate(p.date),
             is_completed: Boolean(p.is_completed),
           } as unknown as PlannedExpense)),
+          sleepLogs: (sleepLogRows as Record<string, unknown>[]).map((s) => ({
+            ...s,
+            date: normDate(s.date) ?? "",
+            bedtime: typeof s.bedtime === "string" && s.bedtime.length >= 5 ? s.bedtime.slice(0, 5) : null,
+            wake_time: typeof s.wake_time === "string" && s.wake_time.length >= 5 ? s.wake_time.slice(0, 5) : null,
+            hours: Number(s.hours),
+            quality: s.quality == null ? null : Number(s.quality),
+          } as unknown as SleepLog)),
+          sleepSettings: sleepSettingsRow && !Array.isArray(sleepSettingsRow)
+            ? {
+                target_hours: Number((sleepSettingsRow as { target_hours: number }).target_hours),
+                bedtime: String((sleepSettingsRow as { bedtime: string }).bedtime).slice(0, 5),
+                wake_time: String((sleepSettingsRow as { wake_time: string }).wake_time).slice(0, 5),
+                reminder_enabled: Boolean((sleepSettingsRow as { reminder_enabled: boolean }).reminder_enabled),
+                updated_at: (sleepSettingsRow as { updated_at?: string }).updated_at,
+              }
+            : null,
         };
 
         const nextState = mergeRemote(savedUserState, mergeRemote(pending, remote));
@@ -1494,6 +1580,113 @@ export function DataProvider({ children }: { children: ReactNode }) {
         }
       },
 
+      saveSleepLog: (input) => {
+        const date = input.date || todayKey();
+        const hours = roundHours(Number(input.hours));
+        if (!Number.isFinite(hours) || hours <= 0 || hours > 24) return;
+
+        const iso = nowIso();
+        const userId = uid();
+        const bedtime = input.bedtime || null;
+        const wakeTime = input.wake_time || null;
+        const quality = input.quality ?? null;
+        const notes = input.notes?.trim() || null;
+
+        setState((prev) => {
+          const existing = prev.sleepLogs.find((log) => log.date === date);
+          if (existing) {
+            // Ya hay una noche con esa fecha: se actualiza en su sitio.
+            return {
+              ...prev,
+              sleepLogs: prev.sleepLogs.map((log) =>
+                log.date === date
+                  ? { ...log, bedtime, wake_time: wakeTime, hours, quality, notes, updated_at: iso }
+                  : log,
+              ),
+            };
+          }
+          const newLog: SleepLog = {
+            id: newId(),
+            user_id: userId,
+            date,
+            bedtime,
+            wake_time: wakeTime,
+            hours,
+            quality,
+            notes,
+            created_at: iso,
+            updated_at: iso,
+          };
+          return { ...prev, sleepLogs: [newLog, ...prev.sleepLogs] };
+        });
+
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase
+              .from("sleep_logs")
+              .upsert(
+                { user_id: userId, date, bedtime, wake_time: wakeTime, hours, quality, notes, updated_at: iso },
+                { onConflict: "user_id,date" },
+              ),
+            "guardar sueño",
+          );
+        }
+
+        // XP de la noche: +15 (objetivo), +5 (casi), 0 (insuficiente) o -5 (muy
+        // corta). Se evalúa aquí, al registrar la noche, y nunca dos veces por
+        // fecha (aunque se edite o se recargue la app).
+        const target =
+          stateRef.current.sleepSettings?.target_hours ?? DEFAULT_SLEEP_SETTINGS.target_hours;
+        evaluateSleepXp(date, hours, target);
+      },
+
+      deleteSleepLog: (date) => {
+        const userId = uid();
+        setState((prev) => ({
+          ...prev,
+          sleepLogs: prev.sleepLogs.filter((log) => log.date !== date),
+        }));
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase.from("sleep_logs").delete().eq("user_id", userId).eq("date", date),
+            "borrar registro de sueño",
+          );
+        }
+      },
+
+      setSleepSettings: (input) => {
+        const userId = uid();
+        const targetHours = roundHours(Number(input.target_hours));
+        const settings: SleepSettings = {
+          target_hours:
+            Number.isFinite(targetHours) && targetHours > 0 && targetHours <= 24
+              ? targetHours
+              : DEFAULT_SLEEP_SETTINGS.target_hours,
+          bedtime: input.bedtime || DEFAULT_SLEEP_SETTINGS.bedtime,
+          wake_time: input.wake_time || DEFAULT_SLEEP_SETTINGS.wake_time,
+          reminder_enabled: input.reminder_enabled ?? true,
+          updated_at: nowIso(),
+        };
+        setState((prev) => ({ ...prev, sleepSettings: settings }));
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase
+              .from("sleep_settings")
+              .upsert(
+                {
+                  user_id: userId,
+                  target_hours: settings.target_hours,
+                  bedtime: settings.bedtime,
+                  wake_time: settings.wake_time,
+                  reminder_enabled: settings.reminder_enabled,
+                },
+                { onConflict: "user_id" },
+              ),
+            "guardar objetivo de sueño",
+          );
+        }
+      },
+
       resetAll: async () => {
         const userId = userIdRef.current;
 
@@ -1530,6 +1723,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
           "grades",
           "budgets",
           "planned_expenses",
+          "sleep_logs",
+          "sleep_settings",
           "tree_progress",
           "tree_xp_events",
         ] as const;

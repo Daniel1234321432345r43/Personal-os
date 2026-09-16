@@ -412,8 +412,8 @@ export function ProgressTree() {
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-center gap-x-2 gap-y-1 px-2 text-center text-xs text-muted-foreground">
               <Target className="h-4 w-4" /> +20 tareas · +5 hábitos ·
-              -15 hábitos incumplidos · -10 día sin entrenar · tope {effectiveXpCap()}
-              /día
+              -15 hábitos incumplidos · +15 sueño (meta) · +5 sueño (casi) · -5
+              sueño (muy corto) · tope {effectiveXpCap()}/día
             </div>
             <SheetClose asChild>
               <Button

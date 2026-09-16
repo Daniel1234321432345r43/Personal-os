@@ -38,6 +38,9 @@ export async function POST() {
       "transactions",
       "grades",
       "budgets",
+      "planned_expenses",
+      "sleep_logs",
+      "sleep_settings",
       "tree_progress",
       "tree_xp_events",
     ] as const;

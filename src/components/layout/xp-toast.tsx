@@ -55,7 +55,8 @@ function ToastItem({
       ) : (
         <span className="flex items-center gap-2">
           <span className="text-sm font-black" style={{ color: toast.color }}>
-            {toast.penalty ? "-" : "+"}{toast.value} XP
+            {toast.penalty ? "-" : toast.value > 0 ? "+" : ""}
+            {toast.value} XP
           </span>
           <span className="text-xs font-medium text-slate-600">{toast.label}</span>
         </span>
