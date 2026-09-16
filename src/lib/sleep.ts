@@ -50,6 +50,36 @@ export const SLEEP_LEVEL_LABEL: Record<SleepLevel, string> = {
   bad: "Muy insuficiente",
 };
 
+/** Mismo color en `stroke` (SVG) que SLEEP_LEVEL_CLASS, para el dial circular. */
+export const SLEEP_LEVEL_STROKE: Record<SleepLevel, string> = {
+  perfect: "#10b981",
+  partial: "#fbbf24",
+  low: "#f97316",
+  bad: "#ef4444",
+};
+
+/** Duración mínima y máxima del arco de sueño (minutos). */
+export const SLEEP_MIN_DURATION_MINUTES = 30;
+export const SLEEP_MAX_DURATION_MINUTES = 16 * 60;
+
+/** Minutos desde medianoche → "HH:MM" (admite valores fuera de 0-1439). */
+export function minutesToTime(minutes: number): string {
+  const wrapped = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  const h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+}
+
+/** Redondea minutos al paso indicado (5 min por defecto, como Apple Salud). */
+export function snapMinutes(minutes: number, step = 5): number {
+  return Math.round(minutes / step) * step;
+}
+
+/** Diferencia firmada más corta entre dos minutos del día (-720 a 720). */
+export function signedMinuteDelta(to: number, from: number): number {
+  return ((to - from + 720 + 1440) % 1440) - 720;
+}
+
 /** XP que corresponde a cada nivel (debe coincidir con SLEEP_XP de xp-system). */
 export const SLEEP_XP_LABEL: Record<SleepLevel, string> = {
   perfect: "+15 XP",

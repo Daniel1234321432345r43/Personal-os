@@ -6,8 +6,12 @@ import { ChevronDown } from "lucide-react";
 import type { ReactNode } from "react";
 
 /**
- * Tarjeta colapsable con animación de altura suave (para móvil).
- * El usuario la usa dentro de contenedores `lg:hidden` para no tocar desktop.
+ * Tarjeta colapsable con animación de altura suave.
+ *
+ * Nació para móvil (dentro de contenedores `lg:hidden`, con el contenido
+ * abierto para no tocar desktop), pero también sirve como acordeón en
+ * cualquier tamaño: en ese caso conviene dejarla `defaultOpen={false}` para que
+ * sea el usuario quien la despliegue (ej. "Mi objetivo de sueño" en Ajustes).
  */
 export function MobileCollapsible({
   title,

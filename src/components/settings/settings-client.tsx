@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import { useSettings } from "@/components/providers/settings-provider";
@@ -13,11 +14,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown, Leaf, RotateCcw, LogOut, UserX } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown, Leaf, RotateCcw, LogOut, UserX, MoonStar } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { isXpCapDisabled, setXpCapDisabled } from "@/lib/xp-cap";
 import { resetTree } from "@/lib/xp-system";
+import { MobileCollapsible } from "@/components/ui/mobile-collapsible";
+import { SleepScheduleForm } from "@/components/forms/sleep-schedule-form";
+import { DEFAULT_SLEEP_SETTINGS } from "@/lib/sleep";
 
 function LoadingState() {
   return (
@@ -42,7 +46,8 @@ function LoadingState() {
 
 export function SettingsClient() {
   const { settings, setSettings, configured, envConfigured, hydrated } = useSettings();
-  const { actions } = useData();
+  const { data, actions } = useData();
+  const sleepSettings = data.sleepSettings ?? DEFAULT_SLEEP_SETTINGS;
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -424,6 +429,29 @@ export function SettingsClient() {
           </Card>
         </div>
       </div>
+
+      {/* Mi objetivo de sueño: colapsado por defecto (se despliega al pulsarlo) */}
+      <MobileCollapsible
+        title="Mi objetivo de sueño"
+        subtitle={`${sleepSettings.bedtime} → ${sleepSettings.wake_time} · objetivo ${sleepSettings.target_hours} h`}
+        icon={<MoonStar className="h-4 w-4 text-violet-500" />}
+        defaultOpen={false}
+      >
+        <SleepScheduleForm
+          key={`${sleepSettings.bedtime}-${sleepSettings.wake_time}-${sleepSettings.target_hours}-${sleepSettings.reminder_enabled}`}
+          initial={sleepSettings}
+          onSave={(input) => actions.setSleepSettings(input)}
+        />
+        <p className="mt-3 text-xs text-muted-foreground">
+          El horario objetivo se usa para calcular el cumplimiento de cada noche y
+          para programar el aviso push antes de acostarte. Los registros de sueño
+          y las gráficas están en{" "}
+          <Link href="/sueno" className="font-medium underline">
+            Sueño
+          </Link>
+          .
+        </p>
+      </MobileCollapsible>
 
       {/* Gestion de cuenta: cerrar sesion y borrar cuenta (movil + escritorio) */}
       {accountEnabled && (

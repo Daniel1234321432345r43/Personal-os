@@ -10,6 +10,7 @@ import {
   Flame,
   MoonStar,
   Save,
+  Settings2,
   Sunrise,
   Trash2,
   TrendingUp,
@@ -17,22 +18,26 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
+import { fieldClass, inputClass, labelClass } from "@/components/forms/ui";
 import { useData } from "@/components/providers/data-provider";
 import { formatDate, formatDateLong, formatDuration } from "@/lib/format";
 import {
   DEFAULT_SLEEP_SETTINGS,
   SLEEP_LEVEL_CLASS,
   SLEEP_LEVEL_LABEL,
+  SLEEP_MIN_DURATION_MINUTES,
+  SLEEP_REMINDER_MINUTES,
   SLEEP_XP_LABEL,
   addDays,
   dateKey,
-  hoursBetween,
+  roundHours,
   sleepLevel,
+  timeToMinutes,
   weekKeys,
 } from "@/lib/sleep";
 import type { SleepLog } from "@/lib/types";
 import { SleepHeatmap } from "./sleep-heatmap";
+import { SleepRingDial } from "./sleep-ring-dial";
 import { SleepWeekChart } from "./sleep-week-chart";
 
 function LoadingState() {
@@ -53,12 +58,22 @@ function LoadingState() {
   );
 }
 
+/** Valoración de la noche (misma escala 1-5 que se guarda en la base de datos). */
+const QUALITY_OPTIONS = [
+  { value: 1, emoji: "😖", label: "Malo" },
+  { value: 2, emoji: "😕", label: "Flojo" },
+  { value: 3, emoji: "🙂", label: "Normal" },
+  { value: 4, emoji: "😌", label: "Bueno" },
+  { value: 5, emoji: "🤩", label: "Excelente" },
+];
+
 /** Formulario de una noche. Se remonta con `key={fecha}` para cargar sus datos. */
 function SleepLogForm({
   date,
   log,
   defaultBedtime,
   defaultWake,
+  targetHours,
   onSave,
   onDelete,
 }: {
@@ -66,6 +81,7 @@ function SleepLogForm({
   log: SleepLog | null;
   defaultBedtime: string;
   defaultWake: string;
+  targetHours: number;
   onSave: (input: {
     date: string;
     hours: number;
@@ -78,89 +94,85 @@ function SleepLogForm({
 }) {
   const [bedtime, setBedtime] = useState(log?.bedtime ?? defaultBedtime);
   const [wakeTime, setWakeTime] = useState(log?.wake_time ?? defaultWake);
-  const [hours, setHours] = useState(
-    log ? String(log.hours) : hoursBetween(defaultBedtime, defaultWake).toString(),
-  );
-  const [quality, setQuality] = useState(log?.quality ? String(log.quality) : "");
+  const [quality, setQuality] = useState<number | null>(log?.quality ?? null);
   const [notes, setNotes] = useState(log?.notes ?? "");
 
-  /** Al cambiar las horas, se recalcula el total (editable a mano después). */
-  function updateTimes(nextBedtime: string, nextWake: string) {
-    setBedtime(nextBedtime);
-    setWakeTime(nextWake);
-    if (nextBedtime && nextWake) setHours(String(hoursBetween(nextBedtime, nextWake)));
-  }
-
-  const hoursValue = Number(hours.replace(",", "."));
-  const valid = Number.isFinite(hoursValue) && hoursValue > 0 && hoursValue <= 24;
+  // Las horas dormidas salen del arco del dial: no se escriben a mano.
+  const bedMinutes = timeToMinutes(bedtime);
+  const wakeMinutes = timeToMinutes(wakeTime);
+  const durationMinutes =
+    bedMinutes != null && wakeMinutes != null
+      ? (wakeMinutes - bedMinutes + 1440) % 1440
+      : 0;
+  const hoursValue = roundHours(durationMinutes / 60);
+  const valid = durationMinutes >= SLEEP_MIN_DURATION_MINUTES;
+  const level = sleepLevel(hoursValue, targetHours);
 
   return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className={fieldClass}>
-          <label className={labelClass} htmlFor="sleep-bedtime">
-            Hora de acostarse
-          </label>
-          <input
-            id="sleep-bedtime"
-            type="time"
-            value={bedtime}
-            onChange={(e) => updateTimes(e.target.value, wakeTime)}
-            className={inputClass}
-          />
-        </div>
-        <div className={fieldClass}>
-          <label className={labelClass} htmlFor="sleep-wake">
-            Hora de despertar
-          </label>
-          <input
-            id="sleep-wake"
-            type="time"
-            value={wakeTime}
-            onChange={(e) => updateTimes(bedtime, e.target.value)}
-            className={inputClass}
-          />
-        </div>
-      </div>
+    <div className="space-y-4">
+      {/* Selector circular: arrastra el arco para indicar de qué hora a qué hora dormiste */}
+      <SleepRingDial
+        bedtime={bedtime}
+        wakeTime={wakeTime}
+        targetHours={targetHours}
+        onChange={(nextBedtime, nextWake) => {
+          setBedtime(nextBedtime);
+          setWakeTime(nextWake);
+        }}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2">
+        {/* Horas dormidas: se calculan en tiempo real según el arco */}
         <div className={fieldClass}>
-          <label className={labelClass} htmlFor="sleep-hours">
-            Horas dormidas
-          </label>
-          <input
-            id="sleep-hours"
-            type="number"
-            inputMode="decimal"
-            step="0.25"
-            min="0.25"
-            max="24"
-            value={hours}
-            onChange={(e) => setHours(e.target.value)}
-            className={inputClass}
-          />
+          <span className={labelClass}>Horas dormidas</span>
+          <div className="flex items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+            <span className="text-lg font-semibold tabular-nums">
+              {formatDuration(durationMinutes)}
+            </span>
+            <span
+              className={`h-2.5 w-2.5 shrink-0 rounded-full ${SLEEP_LEVEL_CLASS[level]}`}
+            />
+            <span className="truncate text-xs text-muted-foreground">
+              {SLEEP_LEVEL_LABEL[level]}
+            </span>
+            <span className="ml-auto shrink-0 text-xs font-medium">
+              {SLEEP_XP_LABEL[level]}
+            </span>
+          </div>
           <p className="text-[11px] text-muted-foreground">
-            Se calcula de las horas de arriba; puedes escribirlo a mano si no las
-            recuerdas.
+            Calculadas del arco del dial. En pasos de 5 minutos.
           </p>
         </div>
+
+        {/* Sensación de la noche */}
         <div className={fieldClass}>
-          <label className={labelClass} htmlFor="sleep-quality">
-            ¿Cómo has descansado?
-          </label>
-          <select
-            id="sleep-quality"
-            value={quality}
-            onChange={(e) => setQuality(e.target.value)}
-            className={selectClass}
-          >
-            <option value="">Sin valorar</option>
-            <option value="1">1 · Fatal</option>
-            <option value="2">2 · Mal</option>
-            <option value="3">3 · Normal</option>
-            <option value="4">4 · Bien</option>
-            <option value="5">5 · Genial</option>
-          </select>
+          <span className={labelClass}>Qué tal has dormido</span>
+          <div className="flex gap-1.5">
+            {QUALITY_OPTIONS.map((option) => {
+              const active = quality === option.value;
+              return (
+                <button
+                  key={option.value}
+                  type="button"
+                  aria-pressed={active}
+                  aria-label={option.label}
+                  onClick={() => setQuality(active ? null : option.value)}
+                  className={`flex min-w-0 flex-1 flex-col items-center gap-0.5 rounded-lg border px-1 py-1.5 transition-colors ${
+                    active
+                      ? "border-primary bg-primary/10"
+                      : "bg-background hover:bg-muted/50"
+                  }`}
+                >
+                  <span className="text-lg leading-none" aria-hidden>
+                    {option.emoji}
+                  </span>
+                  <span className="w-full truncate text-center text-[10px] text-muted-foreground">
+                    {option.label}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
 
@@ -178,7 +190,7 @@ function SleepLogForm({
         />
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <Button
           type="button"
           disabled={!valid}
@@ -188,13 +200,13 @@ function SleepLogForm({
               hours: hoursValue,
               bedtime: bedtime || null,
               wake_time: wakeTime || null,
-              quality: quality ? Number(quality) : null,
+              quality,
               notes: notes.trim() || null,
             })
           }
         >
           <Save className="h-4 w-4" />
-          {log ? "Actualizar noche" : "Guardar noche"}
+          {log ? "Actualizar registro" : "Guardar registro"}
         </Button>
         {log && (
           <Button type="button" variant="outline" onClick={() => onDelete(date)}>
@@ -203,118 +215,13 @@ function SleepLogForm({
           </Button>
         )}
       </div>
-    </div>
-  );
-}
 
-/** Objetivo de sueño: horas, horario y aviso push antes de acostarse. */
-function ScheduleForm({
-  initial,
-  onSave,
-}: {
-  initial: { target_hours: number; bedtime: string; wake_time: string; reminder_enabled: boolean };
-  onSave: (input: {
-    target_hours: number;
-    bedtime: string;
-    wake_time: string;
-    reminder_enabled: boolean;
-  }) => void;
-}) {
-  const [target, setTarget] = useState(String(initial.target_hours));
-  const [bedtime, setBedtime] = useState(initial.bedtime);
-  const [wakeTime, setWakeTime] = useState(initial.wake_time);
-  const [reminder, setReminder] = useState(initial.reminder_enabled);
-
-  const scheduled = bedtime && wakeTime ? hoursBetween(bedtime, wakeTime) : null;
-  const targetValue = Number(target.replace(",", "."));
-  const valid = Number.isFinite(targetValue) && targetValue > 0 && targetValue <= 24;
-
-  return (
-    <div className="space-y-3">
-      <div className="grid gap-3 sm:grid-cols-2">
-        <div className={fieldClass}>
-          <label className={labelClass} htmlFor="schedule-bedtime">
-            Hora de ir a dormir
-          </label>
-          <input
-            id="schedule-bedtime"
-            type="time"
-            value={bedtime}
-            onChange={(e) => setBedtime(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-        <div className={fieldClass}>
-          <label className={labelClass} htmlFor="schedule-wake">
-            Hora de despertar
-          </label>
-          <input
-            id="schedule-wake"
-            type="time"
-            value={wakeTime}
-            onChange={(e) => setWakeTime(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-      </div>
-
-      <div className={fieldClass}>
-        <label className={labelClass} htmlFor="schedule-target">
-          Horas objetivo
-        </label>
-        <input
-          id="schedule-target"
-          type="number"
-          inputMode="decimal"
-          step="0.25"
-          min="1"
-          max="24"
-          value={target}
-          onChange={(e) => setTarget(e.target.value)}
-          className={inputClass}
-        />
-      </div>
-
-      {scheduled != null && (
+      {!valid && (
         <p className="text-[11px] text-muted-foreground">
-          De {bedtime} a {wakeTime} son {formatDuration(Math.round(scheduled * 60))}
-          {Math.abs(scheduled - (Number.isFinite(targetValue) ? targetValue : scheduled)) > 0.25 &&
-            ` · tu objetivo son ${targetValue} h`}
+          Arrastra el arco del dial para indicar cuándo dormiste: hacen falta al
+          menos {SLEEP_MIN_DURATION_MINUTES} minutos.
         </p>
       )}
-
-      <label className="flex items-start gap-2 rounded-lg border bg-muted/20 p-3 text-sm">
-        <input
-          type="checkbox"
-          checked={reminder}
-          onChange={(e) => setReminder(e.target.checked)}
-          className="mt-0.5 h-4 w-4 accent-[var(--primary)]"
-        />
-        <span>
-          <span className="font-medium">
-            Avisarme 15 minutos antes de dormir
-          </span>
-          <span className="block text-xs text-muted-foreground">
-            Notificación push: te avisa para que cumplas el objetivo de sueño.
-          </span>
-        </span>
-      </label>
-
-      <Button
-        type="button"
-        disabled={!valid}
-        onClick={() =>
-          onSave({
-            target_hours: targetValue,
-            bedtime,
-            wake_time: wakeTime,
-            reminder_enabled: reminder,
-          })
-        }
-      >
-        <Save className="h-4 w-4" />
-        Guardar objetivo
-      </Button>
     </div>
   );
 }
@@ -490,6 +397,7 @@ export function SleepClient() {
                 log={selectedLog}
                 defaultBedtime={settings.bedtime}
                 defaultWake={settings.wake_time}
+                targetHours={target}
                 onSave={(input) => actions.saveSleepLog(input)}
                 onDelete={(date) => actions.deleteSleepLog(date)}
               />
@@ -572,7 +480,7 @@ export function SleepClient() {
           </Card>
         </div>
 
-        {/* Objetivo y aviso */}
+        {/* Objetivo y aviso (se configuran en Ajustes) */}
         <div className="min-w-0 space-y-6">
           <Card>
             <CardHeader className="pb-3">
@@ -580,43 +488,56 @@ export function SleepClient() {
                 <BedDouble className="h-4 w-4 text-primary" /> Mi objetivo
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <ScheduleForm
-                key={`${settings.bedtime}-${settings.wake_time}-${settings.target_hours}-${settings.reminder_enabled}`}
-                initial={settings}
-                onSave={(input) => actions.setSleepSettings(input)}
-              />
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <MoonStar className="h-3.5 w-3.5" /> Ir a dormir
+                </span>
+                <span className="font-semibold tabular-nums">{settings.bedtime}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Sunrise className="h-3.5 w-3.5" /> Despertar
+                </span>
+                <span className="font-semibold tabular-nums">{settings.wake_time}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3 border-t pt-3">
+                <span className="flex items-center gap-2 text-muted-foreground">
+                  <Bell className="h-3.5 w-3.5" /> Aviso {SLEEP_REMINDER_MINUTES} min antes
+                </span>
+                <span className="font-semibold">
+                  {settings.reminder_enabled ? "Activado" : "Desactivado"}
+                </span>
+              </div>
+              <Button asChild variant="outline" className="w-full">
+                <Link href="/settings">
+                  <Settings2 className="h-4 w-4" />
+                  Cambiar en Ajustes
+                </Link>
+              </Button>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Bell className="h-4 w-4 text-primary" /> Recordatorio
+                <Bell className="h-4 w-4 text-primary" /> Cómo puntúa
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-xs text-muted-foreground">
-              <p className="flex items-start gap-2">
-                <Sunrise className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <span>
-                  {settings.reminder_enabled
-                    ? `Recibirás un aviso 15 minutos antes de las ${settings.bedtime}: «En 15 minutos tienes que dormirte para cumplir tu hábito de sueño».`
-                    : "El aviso antes de dormir está desactivado en tu objetivo."}
-                </span>
+              <p className="rounded-lg bg-muted/40 p-2.5">
+                Puntuación por noche: <strong>+15 XP</strong> si cumples el
+                objetivo de {target} h, <strong>+5 XP</strong> si te quedas
+                cerca, <strong>0 XP</strong> si es insuficiente y{" "}
+                <strong>−5 XP</strong> si te quedas muy corto.
               </p>
               <p>
-                Las notificaciones push se activan en{" "}
+                El XP se otorga una sola vez por noche, al guardar el registro.
+                El aviso push necesita las notificaciones activadas en{" "}
                 <Link href="/settings" className="font-medium underline">
                   Ajustes → Notificaciones
                 </Link>{" "}
-                y necesitan la Edge Function desplegada para llegar con la app
-                cerrada.
-              </p>
-              <p className="rounded-lg bg-muted/40 p-2.5">
-                Puntuación por noche: <strong>+15 XP</strong> si cumples el
-                objetivo, <strong>+5 XP</strong> si te quedas cerca,{" "}
-                <strong>0 XP</strong> si es insuficiente y{" "}
-                <strong>−5 XP</strong> si te quedas muy corto.
+                y la Edge Function desplegada para llegar con la app cerrada.
               </p>
             </CardContent>
           </Card>
