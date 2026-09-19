@@ -1,6 +1,10 @@
-import { CalendarClock } from "lucide-react";
+"use client";
+
+import { CalendarClock, Check, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { formatDate } from "@/lib/format";
+import { useData } from "@/components/providers/data-provider";
 import type { DashboardData } from "@/lib/data";
 import type { TaskPriority } from "@/lib/types";
 
@@ -26,6 +30,7 @@ const typeLabel: Record<string, string> = {
 };
 
 export function UpcomingTasks({ data }: { data: DashboardData }) {
+  const { actions } = useData();
   const subjectById = new Map(data.subjects.map((s) => [s.id, s]));
 
   const upcoming = data.tasks
@@ -49,7 +54,7 @@ export function UpcomingTasks({ data }: { data: DashboardData }) {
             return (
               <li
                 key={task.id}
-                className="flex items-center gap-3 rounded-lg border bg-card p-2.5 transition-colors motion-safe:hover:bg-muted/50"
+                className="flex items-center gap-2.5 rounded-lg border bg-card p-2.5 transition-colors motion-safe:hover:bg-muted/50"
               >
                 <span
                   className="h-8 w-1.5 shrink-0 rounded-full"
@@ -74,6 +79,30 @@ export function UpcomingTasks({ data }: { data: DashboardData }) {
                       {formatDate(task.due_date)}
                     </span>
                   )}
+                </div>
+                {/* Acciones en el propio widget: sin esto había tareas que solo
+                    se veían aquí y no se podían ni completar ni borrar. */}
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-primary"
+                    onClick={() => actions.toggleTaskDone(task.id)}
+                    title="Marcar como hecha"
+                  >
+                    <Check className="h-4 w-4" />
+                    <span className="sr-only">Completar {task.title}</span>
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                    onClick={() => actions.deleteTask(task.id)}
+                    title="Eliminar"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span className="sr-only">Eliminar {task.title}</span>
+                  </Button>
                 </div>
               </li>
             );

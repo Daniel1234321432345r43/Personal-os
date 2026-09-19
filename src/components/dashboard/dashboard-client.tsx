@@ -5,6 +5,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatDateLong } from "@/lib/format";
 import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
+import { SyncErrorBanner } from "@/components/layout/sync-error-banner";
 import { StatCards } from "./stat-cards";
 import { SleepCard } from "./sleep-card";
 import { SecretaryChat } from "./secretary-chat";
@@ -55,6 +56,8 @@ export function DashboardClient() {
           {userName && <span className="text-primary">, {userName}</span>}
         </h1>
       </header>
+
+      <SyncErrorBanner />
 
       <StatCards data={data} />
 

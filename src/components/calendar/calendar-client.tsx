@@ -320,7 +320,10 @@ export function CalendarClient() {
       if (!ev) return null;
 
       const hasAcademic = ev.exams.length > 0 || ev.assignments.length > 0 || ev.studySessions.length > 0;
-      const hasTasks = ev.tasks.length > 0;
+      // El filtro "Tareas" incluye también las sesiones de estudio: son tareas
+      // de trabajo (a menudo las crea el Secretario) y ocultarlas aquí hacía
+      // que parecieran perdidas.
+      const hasTasks = ev.tasks.length > 0 || ev.studySessions.length > 0;
       const hasFinance = ev.incomes.length > 0 || ev.expenses.length > 0;
       const hasSport = ev.workouts.length > 0;
 
@@ -556,7 +559,8 @@ export function CalendarClient() {
                     // Filtrar elementos según el filtro activo
                     const showExams = filter === "all" || filter === "academic";
                     const showAssignments = filter === "all" || filter === "academic";
-                    const showStudy = filter === "all" || filter === "academic";
+                    const showStudy =
+                      filter === "all" || filter === "academic" || filter === "tasks";
                     const showTasks = filter === "all" || filter === "tasks";
                     const showFinance = filter === "all" || filter === "finance";
                     const showSport = filter === "all" || filter === "sport";

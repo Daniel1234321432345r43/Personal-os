@@ -2,6 +2,7 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useMemo,
@@ -28,12 +29,14 @@ import type {
 } from "@/lib/types";
 import { computeFinance, type DashboardData } from "@/lib/data";
 import { todayKey } from "@/lib/format";
+import { findSubjectByExactName, findSubjectByName, namesMatch } from "@/lib/subjects";
 import { DEFAULT_SLEEP_SETTINGS, roundHours } from "@/lib/sleep";
 import { awardXp, evaluateSleepXp } from "@/lib/xp-system";
 
 const STORAGE_KEY = "nucleo:data:v1";
 const STORAGE_VERSION = 1;
 const USER_STORAGE_PREFIX = `${STORAGE_KEY}:user:`;
+const DELETED_TASKS_PREFIX = `${STORAGE_KEY}:deleted-tasks:`;
 
 const _supabase = createClient();
 
@@ -181,6 +184,13 @@ interface DataContextValue {
   data: DashboardData;
   hydrated: boolean;
   actions: DataActions;
+  /**
+   * Aviso de la última sincronización fallida con la nube. Antes un borrado
+   * rechazado solo aparecía en la consola y el dato "resucitaba" al recargar:
+   * ahora la app lo dice en pantalla.
+   */
+  syncError: string | null;
+  clearSyncError: () => void;
 }
 
 const DataContext = createContext<DataContextValue | null>(null);
@@ -245,6 +255,71 @@ function saveState(state: DataState, storageKey = STORAGE_KEY) {
   }
 }
 
+/**
+ * "Lápidas" de las tareas borradas en este dispositivo.
+ *
+ * Si el borrado remoto falla (sin conexión, sesión caducada…) la fila sigue en
+ * Supabase y la hidratación la devolvía: ese era el fantasma que no se podía
+ * quitar. Guardamos los ids borrados hasta que la nube confirme, y durante la
+ * hidratación se filtran para que nunca vuelvan.
+ */
+function deletedTasksKey(userId: string | null): string {
+  return `${DELETED_TASKS_PREFIX}${userId ?? "local"}`;
+}
+
+function loadDeletedTaskIds(userId: string | null): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(deletedTasksKey(userId));
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveDeletedTaskIds(userId: string | null, ids: Set<string>) {
+  if (typeof window === "undefined") return;
+  try {
+    if (ids.size === 0) window.localStorage.removeItem(deletedTasksKey(userId));
+    else window.localStorage.setItem(deletedTasksKey(userId), JSON.stringify([...ids]));
+  } catch {
+    // Ignorar errores de cuota o serialización.
+  }
+}
+
+/** Quita del estado las tareas borradas localmente que aún esperan confirmación. */
+function withoutDeletedTasks(state: DataState, deletedIds: Set<string>): DataState {
+  if (deletedIds.size === 0) return state;
+  return { ...state, tasks: state.tasks.filter((t) => !deletedIds.has(t.id)) };
+}
+
+/**
+ * Borra tareas en la nube manteniendo las "lápidas": si el borrado remoto falla,
+ * los ids quedan anotados (y se reintentan al volver a cargar), de modo que la
+ * hidratación nunca devuelve esas tareas. Cuando la nube confirma, se limpian.
+ */
+function deleteTasksRemotely(
+  userId: string,
+  ids: string[],
+  tombstones: { current: Set<string> },
+): Promise<boolean> {
+  if (ids.length === 0) return Promise.resolve(true);
+  for (const id of ids) tombstones.current.add(id);
+  saveDeletedTaskIds(userId, tombstones.current);
+  return syncSupabase(
+    _supabase.from("tasks").delete().in("id", ids),
+    "borrar tareas",
+  ).then((ok: boolean) => {
+    if (ok) {
+      for (const id of ids) tombstones.current.delete(id);
+      saveDeletedTaskIds(userId, tombstones.current);
+    }
+    return ok;
+  });
+}
+
 /** Fusiona los datos remotos de Supabase con los locales. Remoto gana en conflicto. */
 function mergeRemote(local: DataState, remote: DataState): DataState {
   const merge = <T extends { id: string }>(l: T[], r: T[]): T[] => {
@@ -296,6 +371,7 @@ function syncSupabase(p: any, label = "operación") {
     (result: { error?: { message?: string } | null }) => {
       if (result?.error) {
         console.error(`[Supabase] ${label}: ${result.error.message || "error desconocido"}`);
+        notifySyncError(label);
         return false;
       }
       console.info(`[Supabase diagnóstico] petición correcta: ${label}`);
@@ -303,8 +379,22 @@ function syncSupabase(p: any, label = "operación") {
     },
     (error: unknown) => {
       console.error(`[Supabase] ${label}:`, error);
+      notifySyncError(label);
       return false;
     },
+  );
+}
+
+/**
+ * Canal de avisos de sincronización. Las acciones no pueden bloquear la UI,
+ * así que el provider registra aquí su setter y `syncSupabase` lo alimenta.
+ */
+let reportSyncError: ((message: string) => void) | null = null;
+
+function notifySyncError(label: string) {
+  reportSyncError?.(
+    `No se han podido sincronizar los últimos cambios (${label}). ` +
+      "Revisa tu conexión: siguen guardados en este dispositivo y se reintentará.",
   );
 }
 
@@ -402,15 +492,41 @@ export function DataProvider({ children }: { children: ReactNode }) {
     stateRef.current = state;
   }, [state]);
   const [hydrated, setHydrated] = useState(false);
+  /** Último error de sincronización con la nube, para avisar en pantalla. */
+  const [syncError, setSyncError] = useState<string | null>(null);
+  /**
+   * La primera sincronización con la nube ya terminó. Es estado (no ref) a
+   * propósito: al pasar a true, el efecto de re-sincronización se ejecuta una
+   * vez con el estado VIVO, así lo que se creó durante la carga también sube.
+   */
+  const [initialSyncDone, setInitialSyncDone] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const syncedRef = useRef(false);
-  const syncingUserRef = useRef(false);
+  /** Ids de tareas borradas pendientes de confirmar en la nube (anti-fantasmas). */
+  const deletedTaskIdsRef = useRef<Set<string>>(new Set());
+  const syncErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Registro del canal de errores de sincronización (ver syncSupabase).
+  useEffect(() => {
+    reportSyncError = (message) => {
+      setSyncError(message);
+      if (syncErrorTimerRef.current) clearTimeout(syncErrorTimerRef.current);
+      syncErrorTimerRef.current = setTimeout(() => setSyncError(null), 12_000);
+    };
+    return () => {
+      reportSyncError = null;
+      if (syncErrorTimerRef.current) clearTimeout(syncErrorTimerRef.current);
+    };
+  }, []);
+
+  const clearSyncError = useCallback(() => setSyncError(null), []);
 
   // Cargar desde localStorage una sola vez al montar (evita mismatch de hidratación).
   useEffect(() => {
     // La lectura depende de window y debe ejecutarse después de hidratar.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(loadState());
+    deletedTaskIdsRef.current = loadDeletedTaskIds(null);
     setHydrated(true);
   }, []);
 
@@ -425,7 +541,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (syncedRef.current && userIdRef.current === userId) return;
       syncedRef.current = true;
       userIdRef.current = userId;
-      syncingUserRef.current = true;
+      deletedTaskIdsRef.current = loadDeletedTaskIds(userId);
+      setInitialSyncDone(false);
+      // Las lápidas pendientes son también una cola de reintento: si el borrado
+      // con la nube falló (sin conexión, token caducado…), se vuelve a intentar.
+      if (deletedTaskIdsRef.current.size > 0) {
+        void deleteTasksRemotely(userId, [...deletedTaskIdsRef.current], deletedTaskIdsRef);
+      }
 
       try {
         // Registrar la zona horaria real del navegador en el perfil. La Edge
@@ -533,11 +655,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
         };
 
         const nextState = mergeRemote(savedUserState, mergeRemote(pending, remote));
-        setState(nextState);
-        saveState(nextState, userKey);
+
+        // Fusión NO destructiva: la nube entra, pero el estado vivo gana en
+        // conflicto y conserva lo que aún no ha llegado a la nube. Antes se
+        // hacía `setState(nextState)` con una foto tomada ANTES de las
+        // consultas, así que lo que el usuario (o el Secretario IA) creaba
+        // mientras la app cargaba desaparecía… y al volver desde Supabase
+        // parecía una tarea fantasma; un borrado hecho en esa ventana
+        // resucitaba igual. El estado resultante lo persiste el efecto de
+        // guardado, que escribe en la clave del usuario ya autenticado.
+        setState((prev) =>
+          withoutDeletedTasks(mergeRemote(nextState, prev), deletedTaskIdsRef.current),
+        );
         if (pendingSynced && hasRecords(pending)) window.localStorage.removeItem(STORAGE_KEY);
       } finally {
-        syncingUserRef.current = false;
+        // Fin de la carga inicial: al pasar a true, el efecto de
+        // re-sincronización sube el estado final (incluido lo creado durante
+        // la ventana de hidratación, que ese efecto se saltó).
+        setInitialSyncDone(true);
       }
     };
 
@@ -597,9 +732,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // Reintentar la sincronización con el estado ya calculado. Esto cubre las
   // acciones masivas y evita depender de valores asignados dentro de setState.
   useEffect(() => {
-    if (!hydrated || !userIdRef.current || syncingUserRef.current) return;
+    if (!hydrated || !userIdRef.current || !initialSyncDone) return;
     void syncStateToSupabase(state, userIdRef.current);
-  }, [state, hydrated]);
+  }, [state, hydrated, initialSyncDone]);
 
   const actions = useMemo<DataActions>(() => {
     const DEFAULT_COLORS = [
@@ -612,6 +747,22 @@ export function DataProvider({ children }: { children: ReactNode }) {
         console.warn("[Supabase diagnóstico] esta acción se está guardando solo en localStorage: no hay sesión");
       }
       return userIdRef.current || "local";
+    };
+
+    /** Borra tareas en la nube (con lápida y reintento) si hay sesión. */
+    const deleteTasksInCloud = (ids: string[]) => {
+      const userId = userIdRef.current;
+      if (!userId) return; // invitado: solo localStorage
+      void deleteTasksRemotely(userId, ids, deletedTaskIdsRef);
+    };
+
+    /** Resuelve ids reales a partir de títulos (exactos o con coincidencia clara). */
+    const resolveTaskIdsByTitles = (titles: string[]): string[] => {
+      const queries = titles.map((t) => t.trim()).filter(Boolean);
+      if (queries.length === 0) return [];
+      return stateRef.current.tasks
+        .filter((task) => queries.some((q) => namesMatch(q, task.title)))
+        .map((task) => task.id);
     };
 
     return {
@@ -644,9 +795,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
           inputs.forEach((input) => {
             const trimmed = input.name.trim();
             if (!trimmed) return;
-            const exists = prev.subjects
-              .concat(newSubjects)
-              .some((s) => s.name.trim().toLowerCase() === trimmed.toLowerCase());
+            // Una asignatura ya existente con diminutivo ("mates" →
+            // "Matemáticas") no se vuelve a crear. Se exige coincidencia
+            // estricta: crear "Historia" existiendo "Historia del Arte" es
+            // legítimo.
+            const exists = findSubjectByExactName(
+              trimmed,
+              prev.subjects.concat(newSubjects),
+            );
             if (!exists) {
               const colorIndex = (prev.subjects.length + newSubjects.length) % DEFAULT_COLORS.length;
               const id = newId();
@@ -720,9 +876,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
           if (!resolvedSubjectId && input.subject_name?.trim()) {
             const trimmed = input.subject_name.trim();
-            const found = prev.subjects.find(
-              (s) => s.name.trim().toLowerCase() === trimmed.toLowerCase(),
-            );
+            // "mates" debe reutilizar "Matemáticas", no crear otra asignatura.
+            const found = findSubjectByName(trimmed, prev.subjects);
             if (found) {
               resolvedSubjectId = found.id;
             } else {
@@ -847,9 +1002,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             }
             if (subjectName && subjectName.trim()) {
               const trimmed = subjectName.trim();
-              const found = allSubjects.find(
-                (s) => s.name.trim().toLowerCase() === trimmed.toLowerCase(),
-              );
+              // Emparejar diminutivos ("mates" → "Matemáticas") para no duplicar.
+              const found = findSubjectByName(trimmed, allSubjects);
               if (found) return found.id;
 
               const colorIndex = allSubjects.length % DEFAULT_COLORS.length;
@@ -964,21 +1118,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       deleteTask: (id) => {
         setState((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== id) }));
-        syncSupabase(_supabase.from("tasks").delete().eq("id", id));
+        deleteTasksInCloud([id]);
       },
 
       deleteTasks: (ids, titles) => {
-        setState((prev) => {
-          const idSet = new Set(ids || []);
-          const titleSet = new Set((titles || []).map((t) => t.trim().toLowerCase()));
-          return {
-            ...prev,
-            tasks: prev.tasks.filter(
-              (t) => !idSet.has(t.id) && !titleSet.has(t.title.trim().toLowerCase()),
-            ),
-          };
-        });
-        if (ids?.length) syncSupabase(_supabase.from("tasks").delete().in("id", ids));
+        // Los títulos se resuelven a ids reales: antes un borrado por título
+        // ("borra la tarea de mates") se quedaba solo en local y la fila seguía
+        // en Supabase, de modo que al recargar la hidratación la devolvía.
+        const resolvedIds = new Set<string>((ids || []).filter(Boolean));
+        for (const id of resolveTaskIdsByTitles(titles || [])) resolvedIds.add(id);
+        if (resolvedIds.size === 0) return;
+        setState((prev) => ({
+          ...prev,
+          tasks: prev.tasks.filter((t) => !resolvedIds.has(t.id)),
+        }));
+        deleteTasksInCloud([...resolvedIds]);
       },
 
       toggleTaskDone: (id) => {
@@ -1317,9 +1471,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
           if (!resolvedSubjectId && input.subject_name?.trim()) {
             const trimmed = input.subject_name.trim();
-            const found = prev.subjects.find(
-              (s) => s.name.trim().toLowerCase() === trimmed.toLowerCase(),
-            );
+            const found = findSubjectByName(trimmed, prev.subjects);
             if (found) {
               resolvedSubjectId = found.id;
             } else {
@@ -1431,9 +1583,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             }
             if (subjectName && subjectName.trim()) {
               const trimmed = subjectName.trim();
-              const found = allSubjects.find(
-                (s) => s.name.trim().toLowerCase() === trimmed.toLowerCase(),
-              );
+              // Mismo criterio que en las tareas: no duplicar por un diminutivo.
+              const found = findSubjectByName(trimmed, allSubjects);
               if (found) return found.id;
 
               const colorIndex = allSubjects.length % DEFAULT_COLORS.length;
@@ -1701,6 +1852,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
             window.localStorage.removeItem("nucleo:progress-tree:v2");
             window.localStorage.removeItem("nucleo:progress-tree:v3");
             if (userId) window.localStorage.removeItem(userStorageKey(userId));
+            // Las "lápidas" de tareas borradas también se van: si no, tras el
+            // reset seguirían filtrando tareas nuevas con esos ids.
+            window.localStorage.removeItem(deletedTasksKey(userId));
+            deletedTaskIdsRef.current = new Set();
           }
         } catch {
           // Ignorar errores de cuota/acceso.
@@ -1752,8 +1907,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
       data: { ...state, finance },
       hydrated,
       actions,
+      syncError,
+      clearSyncError,
     };
-  }, [state, hydrated, actions]);
+  }, [state, hydrated, actions, syncError, clearSyncError]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }

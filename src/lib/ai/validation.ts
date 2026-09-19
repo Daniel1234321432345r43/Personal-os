@@ -2,13 +2,18 @@
  * Reglas de integridad del Secretario IA.
  *
  * El asistente NO puede rellenar huecos con datos que el usuario no ha dado:
- * nunca asigna una fecha por defecto ni una asignatura inventada. Cuando falta
- * información, la herramienta se bloquea y devuelve las preguntas exactas que
- * el modelo debe formular antes de volver a intentarlo.
+ * nunca asigna una fecha por defecto. Cuando falta la fecha, la herramienta se
+ * bloquea y devuelve la pregunta exacta que el modelo debe formular antes de
+ * volver a intentarlo.
  *
- * Lo que NUNCA se exige aquí: la hora de inicio (`start_time`) es opcional, igual
- * que la duración, la prioridad o la descripción. Solo se bloquea por la fecha
- * de un elemento académico y por la asignatura de una sesión de estudio.
+ * La ASIGNATURA ya no bloquea nada: si el usuario no la ha dicho, la tarea se
+ * guarda igualmente como estudio general (sin asignatura) y el asistente deja de
+ * hacer preguntas que sobran. Antes se pedía la asignatura incluso cuando el
+ * usuario ya la había mencionado ("apúntame una tarea de mates") porque el
+ * modelo prefería preguntar antes que emparejar "mates" con "Matemáticas".
+ *
+ * Lo que NUNCA se exige aquí: la hora de inicio (`start_time`), la duración, la
+ * prioridad o la descripción.
  *
  * Estas comprobaciones viven aquí (sin dependencias de cliente ni de servidor)
  * para que las apliquen los DOS lados:
@@ -34,7 +39,7 @@ export interface TaskGuardItem {
   date_unspecified?: boolean | null;
 }
 
-export type TaskGuardIssue = "missing_date" | "missing_subject";
+export type TaskGuardIssue = "missing_date";
 
 export interface TaskGuardViolation {
   issue: TaskGuardIssue;
@@ -53,9 +58,6 @@ export interface TaskGuardResult {
 /** Tipos académicos que siempre deben tener una fecha o sesiones concretas. */
 const TYPES_REQUIRING_DATE = new Set(["task", "assignment", "exam", "study_session"]);
 
-/** Tipos que además necesitan saber a qué asignatura pertenecen. */
-const TYPES_REQUIRING_SUBJECT = new Set(["study_session"]);
-
 function clean(value?: string | null): string {
   return (value ?? "").trim();
 }
@@ -66,16 +68,12 @@ function hasScheduledDate(task: TaskGuardItem): boolean {
   return sessions.length > 0;
 }
 
-function hasSubject(task: TaskGuardItem): boolean {
-  return Boolean(clean(task.subject_name) || clean(task.subject_id));
-}
-
 function requiresDate(task: TaskGuardItem): boolean {
   if (!task.type) return true;
   return TYPES_REQUIRING_DATE.has(task.type);
 }
 
-/** Nombres de las tareas a las que les falta la fecha / la asignatura. */
+/** Nombres de las tareas a las que les falta algo. */
 export function titlesFor(
   violations: TaskGuardViolation[],
   issue: TaskGuardIssue,
@@ -89,7 +87,6 @@ export function buildGuardQuestions(
 ): string[] {
   const questions: string[] = [];
   const missingDate = titlesFor(violations, "missing_date");
-  const missingSubject = titlesFor(violations, "missing_subject");
 
   if (missingDate.length > 0) {
     questions.push(
@@ -99,20 +96,12 @@ export function buildGuardQuestions(
     );
   }
 
-  if (missingSubject.length > 0) {
-    questions.push(
-      missingSubject.length === 1
-        ? `¿De qué asignatura es "${missingSubject[0]}"? Dímelo antes de agendarlo.`
-        : `¿De qué asignatura son (${missingSubject.join(", ")})? Dímelo antes de agendarlos.`,
-    );
-  }
-
   return questions;
 }
 
 /**
  * Valida un lote de tareas antes de guardarlo. Devuelve `ok: false` con las
- * preguntas pendientes cuando el usuario no ha dado la fecha o la asignatura.
+ * preguntas pendientes cuando el usuario no ha dado la fecha.
  */
 export function checkTaskInputs(tasks: TaskGuardItem[]): TaskGuardResult {
   const violations: TaskGuardViolation[] = [];
@@ -120,9 +109,6 @@ export function checkTaskInputs(tasks: TaskGuardItem[]): TaskGuardResult {
   for (const task of tasks) {
     if (requiresDate(task) && task.date_unspecified !== true && !hasScheduledDate(task)) {
       violations.push({ issue: "missing_date", title: clean(task.title) || "(sin título)" });
-    }
-    if (TYPES_REQUIRING_SUBJECT.has(task.type ?? "") && !hasSubject(task)) {
-      violations.push({ issue: "missing_subject", title: clean(task.title) || "(sin título)" });
     }
   }
 
@@ -134,10 +120,11 @@ export function checkTaskInputs(tasks: TaskGuardItem[]): TaskGuardResult {
     violations,
     questions,
     error:
-      "NO se ha guardado nada: faltan datos que el usuario no ha proporcionado. " +
-      "Está prohibido inventar fechas (hoy, mañana o cualquier día por defecto) y asignaturas. " +
+      "NO se ha guardado nada: falta la fecha de alguno de los elementos, que el usuario no ha proporcionado. " +
+      "Está prohibido inventar fechas (hoy, mañana o cualquier día por defecto). " +
       "Pregunta al usuario exactamente esto y espera su respuesta: " +
       questions.map((q) => `«${q}»`).join(" ") +
-      " No vuelvas a llamar a la herramienta hasta que responda.",
+      " No vuelvas a llamar a la herramienta hasta que responda. " +
+      "No preguntes por la asignatura ni por la hora: ni una cosa ni la otra bloquean el guardado.",
   };
 }

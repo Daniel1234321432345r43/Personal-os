@@ -38,7 +38,8 @@ export const secretaryTools = {
   addTasks: tool({
     description:
       "Añade una o más tareas, entregas (trabajos/prácticas/deberes), exámenes o sesiones de estudio al sistema. " +
-      "Requiere fecha (due_date o session_dates) y, para sesiones de estudio, asignatura (subject_name): si el usuario no los ha dado, la herramienta se bloquea y devuelve las preguntas a hacer. " +
+      "La fecha (due_date o session_dates) es obligatoria: si el usuario no la ha dado, la herramienta se bloquea y devuelve la pregunta a hacer. " +
+      "La ASIGNATURA nunca bloquea y nunca se pregunta: si el usuario la ha mencionado, pásala en subject_name emparejando con las que ya existen (\"mates\" → \"Matemáticas\"); si no la ha mencionado, guarda igualmente sin subject_name. " +
       "La hora de inicio (start_time) es OPCIONAL: nunca preguntes por ella ni dejes de guardar por no tenerla.",
     inputSchema: z.object({
       tasks: z
@@ -57,8 +58,9 @@ export const secretaryTools = {
             category: z
               .enum(["academic", "personal", "sport", "finance"])
               .optional()
-              .default("academic")
-              .describe("Categoría temática"),
+              .describe(
+                "Categoría temática (opcional). Déjala vacía si no la tienes clara: el sistema pone 'academic' cuando hay asignatura y 'personal' cuando el elemento es general (por ejemplo un bloque de estudio sin asignatura)",
+              ),
             priority: z
               .enum(["low", "medium", "high", "urgent"])
               .optional()
@@ -106,7 +108,7 @@ export const secretaryTools = {
               .nullable()
               .optional()
               .describe(
-                "Nombre de la asignatura asociada (debe coincidir con una asignatura existente o que se esté creando)",
+                "OPCIONAL y nunca bloqueante. Nombre de la asignatura del elemento. Si el usuario la ha mencionado, escríbela emparejando con una asignatura del contexto aunque use un diminutivo (\"mates\" → \"Matemáticas\"); si no la ha mencionado, omite este campo: no preguntes por ella",
               ),
             description: z
               .string()
@@ -143,7 +145,7 @@ export const secretaryTools = {
 
   deleteTasks: tool({
     description:
-      "Elimina una o más tareas o exámenes usando sus IDs o títulos.",
+      "Elimina una o más tareas o exámenes. Usa SIEMPRE los IDs del contexto cuando los tengas (task_ids); los títulos también valen y se emparejan de forma aproximada, así que cópialos exactamente como aparecen en el contexto.",
     inputSchema: z.object({
       task_ids: z
         .array(z.string())
@@ -164,7 +166,8 @@ export const secretaryTools = {
   }),
 
   deleteSubjects: tool({
-    description: "Elimina una o más asignaturas por su ID o nombre.",
+    description:
+      "Elimina una o más asignaturas por su ID o nombre. Prefiere los IDs del contexto (subject_ids).",
     inputSchema: z.object({
       subject_ids: z
         .array(z.string())

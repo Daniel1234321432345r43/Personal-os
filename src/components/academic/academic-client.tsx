@@ -15,6 +15,7 @@ import { SubjectForm } from "@/components/forms/subject-form";
 import { TaskForm } from "@/components/forms/task-form";
 import { ClassroomConnect } from "./classroom-connect";
 import { SubjectGradesSheet } from "./subject-grades-sheet";
+import { SyncErrorBanner } from "@/components/layout/sync-error-banner";
 import { Check, Plus, Trash2, Award, ChevronRight, ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TaskPriority, TaskType, Subject, Task } from "@/lib/types";
@@ -158,12 +159,19 @@ export function AcademicClient() {
   // Derivar el subject actual desde el estado vivo (no el snapshot stale de useState).
   const currentSubject = selectedSubject ? subjectById.get(selectedSubject.id) ?? selectedSubject : null;
 
-  const academicTasks = data.tasks
-    .filter((t) => t.subject_id || t.category === "academic")
-    .sort((a, b) => (a.due_date ?? "").localeCompare(b.due_date ?? ""));
+  // TODAS las tareas, no solo las académicas. Una tarea sin asignatura (o con
+  // categoría personal, como un estudio general que pide el Secretario) también
+  // tiene que verse aquí: esta es la única lista con botones de completar y
+  // borrar. Antes se filtraba por asignatura/categoría, así que esas tareas solo
+  // aparecían en el dashboard y era imposible quitarlas: auténticos fantasmas.
+  const allTasks = [...data.tasks].sort(
+    (a, b) =>
+      (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31") ||
+      (a.created_at ?? "").localeCompare(b.created_at ?? ""),
+  );
   // Pendientes siempre visibles; completadas ocultas detrás del acordeón.
-  const pendingTasks = academicTasks.filter((t) => t.status !== "done");
-  const completedTasks = academicTasks.filter((t) => t.status === "done");
+  const pendingTasks = allTasks.filter((t) => t.status !== "done");
+  const completedTasks = allTasks.filter((t) => t.status === "done");
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -173,6 +181,8 @@ export function AcademicClient() {
           Tus asignaturas, notas, ponderaciones, entregas y exámenes.
         </p>
       </header>
+
+      <SyncErrorBanner />
 
       {/* Asignaturas (van debajo de Tareas, en todos los tamaños) */}
       <Card className="order-2">
@@ -250,7 +260,7 @@ export function AcademicClient() {
               variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
             >
               {data.subjects.map((subject) => {
-                const pending = academicTasks.filter(
+                const pending = allTasks.filter(
                   (t) => t.subject_id === subject.id && t.status !== "done",
                 ).length;
                 const subjectGrades = data.grades.filter(
@@ -388,7 +398,7 @@ export function AcademicClient() {
               animate="visible"
               variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
             >
-              <AnimatePresence initial={academicTasks.length === 0}>
+              <AnimatePresence initial={allTasks.length === 0}>
                 {pendingTasks.map((task) => (
                   <TaskItem
                     key={task.id}
@@ -399,9 +409,10 @@ export function AcademicClient() {
                 ))}
               </AnimatePresence>
             </motion.ul>
-            {academicTasks.length === 0 && (
+            {allTasks.length === 0 && (
               <p className="text-sm text-muted-foreground">
-                No hay tareas académicas todavía.
+                No tienes tareas todavía. Añade la primera con «Nueva» o pídesela
+                al Secretario.
               </p>
             )}
 

@@ -9,8 +9,11 @@ import {
   Wallet,
   GraduationCap,
   ChevronRight,
+  Check,
+  Trash2,
 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { useData } from "@/components/providers/data-provider";
 import { formatCurrency, formatDuration, todayKey } from "@/lib/format";
 import type { DashboardData } from "@/lib/data";
 
@@ -22,6 +25,7 @@ function daysUntil(iso: string | null): number | null {
 }
 
 export function StatCards({ data }: { data: DashboardData }) {
+  const { actions } = useData();
   const today = todayKey();
 
   const pendingTasks = data.tasks.filter((t) => t.status !== "done");
@@ -159,46 +163,71 @@ export function StatCards({ data }: { data: DashboardData }) {
           </p>
         </MotionLink>
 
-        {/* Estudios (columna derecha, ocupa el alto completo) → /academic */}
-        <MotionLink
-          href="/academic"
-          whileHover={{ y: -2 }}
-          whileTap={{ scale: 0.96 }}
-          transition={cardSpring}
+        {/* Estudios (columna derecha, ocupa el alto completo) → /academic.
+            La tarjeta entera ya no es un enlace: cada fila lleva sus propias
+            acciones (completar/borrar) para que ninguna tarea se quede sin
+            poder quitarse desde la pantalla principal. */}
+        <div
           className={`col-start-2 row-span-2 row-start-1 h-full gap-2 ${cardClass}`}
         >
-          <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
-              <GraduationCap className="h-4 w-4" />
+          <Link href="/academic" className="group flex min-w-0 flex-col gap-1">
+            <div className="flex items-center gap-2">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                <GraduationCap className="h-4 w-4" />
+              </div>
+              <span className="text-sm font-semibold">Estudios</span>
+              <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
             </div>
-            <span className="text-sm font-semibold">Estudios</span>
-            <ChevronRight className="ml-auto h-4 w-4 text-muted-foreground/50" />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {pending === 0
-              ? "Sin tareas pendientes 🎉"
-              : `${pending} tarea${pending === 1 ? "" : "s"} pendiente${pending === 1 ? "" : "s"}`}
-          </p>
+            <p className="text-xs text-muted-foreground">
+              {pending === 0
+                ? "Sin tareas pendientes 🎉"
+                : `${pending} tarea${pending === 1 ? "" : "s"} pendiente${pending === 1 ? "" : "s"}`}
+            </p>
+          </Link>
           {pendingTasks.length > 0 && (
-            <ul className="min-w-0 space-y-1 text-xs text-muted-foreground">
+            <ul className="min-w-0 space-y-0.5 text-xs text-muted-foreground">
               {pendingTasks.slice(0, 5).map((t) => (
-                <li key={t.id} className="truncate">
-                  <span className="mr-1.5 text-primary">•</span>
-                  {t.title}
+                <li key={t.id} className="flex min-w-0 items-center gap-1">
+                  <span className="mr-0.5 text-primary">•</span>
+                  <span className="min-w-0 flex-1 truncate">{t.title}</span>
+                  <button
+                    type="button"
+                    onClick={() => actions.toggleTaskDone(t.id)}
+                    title="Marcar como hecha"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-primary active:scale-95"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    <span className="sr-only">Completar {t.title}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => actions.deleteTask(t.id)}
+                    title="Eliminar"
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/70 hover:text-destructive active:scale-95"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="sr-only">Eliminar {t.title}</span>
+                  </button>
                 </li>
               ))}
             </ul>
           )}
-          <div className="mt-auto pt-1">
-            <p className="text-xs text-muted-foreground">
+          <div className="mt-auto flex items-center justify-between gap-2 pt-1">
+            <p className="min-w-0 truncate text-xs text-muted-foreground">
               {nextDays == null
                 ? "Sin entregas próximas"
                 : nextDays <= 0
                   ? "Próxima entrega: ¡Hoy!"
                   : `Próxima entrega en ${nextDays} d`}
             </p>
+            <Link
+              href="/academic"
+              className="shrink-0 text-xs font-medium text-primary"
+            >
+              Ver todas
+            </Link>
           </div>
-        </MotionLink>
+        </div>
       </div>
 
       {/* ── Escritorio: grid de métricas (intacto, solo ≥ lg) ────────── */}

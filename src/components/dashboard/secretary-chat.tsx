@@ -40,35 +40,49 @@ import { cn } from "@/lib/utils";
 import { useIsDesktop, useIsMobile } from "@/lib/use-is-mobile";
 
 /**
- * Forma de la parte de UI de una herramienta. El SDK expone `input` como
- * `unknown`, así que lo tipamos con los tipos reales de entrada de la app.
+ * Payload de cada herramienta. El `execute` del servidor devuelve el MISMO
+ * objeto que ya pasó el esquema (con sus valores por defecto aplicados), así
+ * que el cliente aplica la salida validada y usa la entrada solo como respaldo.
+ */
+type ToolPayload = {
+  subjects?: SubjectInput[];
+  tasks?: TaskInput[];
+  workouts?: WorkoutInput[];
+  habits?: HabitInput[];
+  transactions?: TransactionInput[];
+  plannedExpenses?: PlannedExpenseInput[];
+  notes?: NoteInput[];
+  grades?: GradeInput[];
+  task_ids?: string[];
+  task_titles?: string[];
+  subject_ids?: string[];
+  subject_names?: string[];
+  grade_ids?: string[];
+  grade_titles?: string[];
+};
+
+/**
+ * Forma de la parte de UI de una herramienta. El SDK expone `input`/`output`
+ * como `unknown`, así que los tipamos con los tipos reales de la app.
  */
 type ToolUIPartShape = {
   toolCallId?: string;
+  /** `input-streaming` | `input-available` | `output-available` | `output-error`. */
+  state?: string;
+  input?: ToolPayload;
   /** Salida de la herramienta: puede venir bloqueada por los guardarraíles. */
-  output?: {
+  output?: ToolPayload & {
     success?: boolean;
     blocked?: boolean;
     error?: string;
     questions?: string[];
   };
-  input?: {
-    subjects?: SubjectInput[];
-    tasks?: TaskInput[];
-    workouts?: WorkoutInput[];
-    habits?: HabitInput[];
-    transactions?: TransactionInput[];
-    plannedExpenses?: PlannedExpenseInput[];
-    notes?: NoteInput[];
-    grades?: GradeInput[];
-    task_ids?: string[];
-    task_titles?: string[];
-    subject_ids?: string[];
-    subject_names?: string[];
-    grade_ids?: string[];
-    grade_titles?: string[];
-  };
 };
+
+/** Une entrada y salida: los datos de la salida (validada) mandan por campo. */
+function toolPayload(part: ToolUIPartShape): ToolPayload {
+  return { ...(part.input ?? {}), ...(part.output ?? {}) };
+}
 
 function messageText(message: UIMessage): string {
   return message.parts
@@ -82,10 +96,11 @@ function messageText(message: UIMessage): string {
 function ToolPartView({ part }: { part: Parameters<typeof isToolUIPart>[0] }) {
   if (!isToolUIPart(part)) return null;
   const toolName = getToolName(part);
-  const output = (part as ToolUIPartShape).output;
+  const shape = part as ToolUIPartShape;
+  const output = shape.output;
 
-  // Herramienta bloqueada por los guardarraíles (faltan fecha o asignatura):
-  // nunca mostramos la tarjeta de "añadido", porque no se ha guardado nada.
+  // Herramienta bloqueada por los guardarraíles (falta la fecha): nunca
+  // mostramos la tarjeta de "añadido", porque no se ha guardado nada.
   if (output?.success === false) {
     const questions = output.questions?.filter(Boolean) ?? [];
     return (
@@ -109,8 +124,36 @@ function ToolPartView({ part }: { part: Parameters<typeof isToolUIPart>[0] }) {
     );
   }
 
-  const input = (part as ToolUIPartShape).input;
-  if (!input) return null;
+  // La herramienta falló (entrada inválida, error del servidor o red): antes se
+  // pintaba igualmente la tarjeta verde desde el `input`, así que el usuario
+  // creía que se había guardado cuando no se había creado nada.
+  if (shape.state === "output-error") {
+    return (
+      <div className="mb-2 rounded-xl border border-destructive/30 bg-destructive/5 p-2.5 text-xs">
+        <div className="mb-1 flex items-center gap-1.5 font-medium text-destructive">
+          <CircleAlert className="h-3.5 w-3.5 shrink-0" />
+          <span>No se ha podido guardar</span>
+        </div>
+        <p className="text-muted-foreground">
+          No se ha creado nada. Vuelve a pedírselo al Secretario.
+        </p>
+      </div>
+    );
+  }
+
+  // Todavía en curso: honestidad antes que una tarjeta prematura.
+  if (shape.state === "input-streaming" || shape.state === "input-available") {
+    return (
+      <div className="mb-2 rounded-xl border border-border bg-muted/40 p-2.5 text-xs text-muted-foreground">
+        Guardando…
+      </div>
+    );
+  }
+
+  // Solo la salida confirmada (`output-available`) justifica decir "añadido".
+  if (shape.state && shape.state !== "output-available") return null;
+
+  const input = toolPayload(shape);
 
   if (
     toolName === "addSubjects" &&
@@ -425,11 +468,13 @@ export function SecretaryChat() {
             processedToolsRef.current.add(toolCallId);
             const toolName = getToolName(part);
             const partShape = part as ToolUIPartShape;
-            const input = partShape.input;
-            if (!input) continue;
             // HERRAMIENTA BLOQUEADA: los guardarraíles han rechazado la llamada
-            // (sin fecha o sin asignatura). No se aplica nada al estado local.
+            // (sin fecha). No se aplica nada al estado local.
             if (partShape.output?.success === false) continue;
+            // Se aplica la SALIDA validada (mismos datos que ya pasaron los
+            // guardarraíles, con los valores por defecto del esquema); el input
+            // del modelo queda solo como respaldo si no hubiera salida.
+            const input = toolPayload(partShape);
 
             if (toolName === "addSubjects" && Array.isArray(input.subjects)) {
               actions.addSubjects(input.subjects);
