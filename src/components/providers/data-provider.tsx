@@ -11,6 +11,27 @@ import {
 } from "react";
 import type { ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
+import {
+  STATE_FIELD_OF_TABLE,
+  SYNC_TABLES,
+  TABLE_KEY_COLUMN,
+  addTombstone,
+  removeTombstone,
+  filterTombstonedRows,
+  mergePendingDeletes,
+  normalizeDeletes,
+  parsePendingDeletes,
+  parseTombstoneRows,
+  pickNewer,
+  rowKey,
+  serializePendingDeletes,
+  tombstoneRows,
+  withoutTombstonedRows,
+  type DeleteInput,
+  type SyncTable,
+  type TombstoneEntry,
+  type TombstoneMap,
+} from "@/lib/sync-tombstones";
 import type {
   Subject,
   Task,
@@ -36,7 +57,9 @@ import { awardXp, evaluateSleepXp } from "@/lib/xp-system";
 const STORAGE_KEY = "nucleo:data:v1";
 const STORAGE_VERSION = 1;
 const USER_STORAGE_PREFIX = `${STORAGE_KEY}:user:`;
-const DELETED_TASKS_PREFIX = `${STORAGE_KEY}:deleted-tasks:`;
+const PENDING_DELETES_PREFIX = `${STORAGE_KEY}:pending-deletes:`;
+/** Clave de la versión anterior (solo ids de tareas); se migra al arrancar. */
+const LEGACY_DELETED_TASKS_PREFIX = `${STORAGE_KEY}:deleted-tasks:`;
 
 const _supabase = createClient();
 
@@ -256,76 +279,88 @@ function saveState(state: DataState, storageKey = STORAGE_KEY) {
 }
 
 /**
- * "Lápidas" de las tareas borradas en este dispositivo.
+ * Cola de borrados pendientes de confirmar en la nube, por usuario.
  *
  * Si el borrado remoto falla (sin conexión, sesión caducada…) la fila sigue en
- * Supabase y la hidratación la devolvía: ese era el fantasma que no se podía
- * quitar. Guardamos los ids borrados hasta que la nube confirme, y durante la
- * hidratación se filtran para que nunca vuelvan.
+ * Supabase. Estos borrados se reintentan al arrancar y al recuperar el foco, y
+ * mientras tanto las lápidas en memoria impiden que la fila vuelva a entrar.
  */
-function deletedTasksKey(userId: string | null): string {
-  return `${DELETED_TASKS_PREFIX}${userId ?? "local"}`;
+function pendingDeletesKey(userId: string | null): string {
+  return `${PENDING_DELETES_PREFIX}${userId ?? "local"}`;
 }
 
-function loadDeletedTaskIds(userId: string | null): Set<string> {
-  if (typeof window === "undefined") return new Set();
+function loadPendingDeletes(userId: string | null): TombstoneEntry[] {
+  if (typeof window === "undefined") return [];
   try {
-    const raw = window.localStorage.getItem(deletedTasksKey(userId));
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return new Set(Array.isArray(parsed) ? parsed.filter((id) => typeof id === "string") : []);
+    const entries = parsePendingDeletes(window.localStorage.getItem(pendingDeletesKey(userId)));
+    // Migración: antes solo se anotaban ids de tareas, en otra clave.
+    const legacyKey = `${LEGACY_DELETED_TASKS_PREFIX}${userId ?? "local"}`;
+    const legacyRaw = window.localStorage.getItem(legacyKey);
+    if (legacyRaw) {
+      try {
+        const legacy = JSON.parse(legacyRaw);
+        if (Array.isArray(legacy)) {
+          for (const id of legacy) {
+            if (typeof id === "string" && id) entries.push({ table: "tasks", key: id, deletedAt: Date.now() });
+          }
+        }
+      } catch {
+        // Datos antiguos corruptos: se descartan.
+      }
+      window.localStorage.removeItem(legacyKey);
+    }
+    return mergePendingDeletes(entries, []);
   } catch {
-    return new Set();
+    return [];
   }
 }
 
-function saveDeletedTaskIds(userId: string | null, ids: Set<string>) {
+function savePendingDeletes(userId: string | null, entries: readonly TombstoneEntry[]) {
   if (typeof window === "undefined") return;
   try {
-    if (ids.size === 0) window.localStorage.removeItem(deletedTasksKey(userId));
-    else window.localStorage.setItem(deletedTasksKey(userId), JSON.stringify([...ids]));
+    if (entries.length === 0) window.localStorage.removeItem(pendingDeletesKey(userId));
+    else window.localStorage.setItem(pendingDeletesKey(userId), serializePendingDeletes(entries));
   } catch {
     // Ignorar errores de cuota o serialización.
   }
 }
 
-/** Quita del estado las tareas borradas localmente que aún esperan confirmación. */
-function withoutDeletedTasks(state: DataState, deletedIds: Set<string>): DataState {
-  if (deletedIds.size === 0) return state;
-  return { ...state, tasks: state.tasks.filter((t) => !deletedIds.has(t.id)) };
+/**
+ * Mapa de lápidas (tabla::clave → instante del borrado) a partir de los
+ * borrados conocidos, ya estén confirmados en la nube o pendientes.
+ */
+function tombstoneMapFrom(entries: readonly TombstoneEntry[]): TombstoneMap {
+  const map: TombstoneMap = new Map();
+  for (const entry of entries) addTombstone(map, entry.table, entry.key, entry.deletedAt);
+  return map;
+}
+
+/** Cuántas claves se borran por petición (evita URLs gigantes en el borrado masivo). */
+const DELETE_CHUNK_SIZE = 80;
+
+function chunk<T>(items: readonly T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
 }
 
 /**
- * Borra tareas en la nube manteniendo las "lápidas": si el borrado remoto falla,
- * los ids quedan anotados (y se reintentan al volver a cargar), de modo que la
- * hidratación nunca devuelve esas tareas. Cuando la nube confirma, se limpian.
+ * Fusiona los datos remotos de Supabase con los locales.
+ *
+ * En un mismo id gana la versión modificada más recientemente (`updated_at`),
+ * no siempre la remota: si no, un dispositivo con la copia antigua deshacía la
+ * edición hecha en el otro. Solo se comparan filas con marca temporal; en el
+ * resto (hábitos, entrenamientos…) sigue ganando la nube, como antes. Las filas
+ * con lápida se quitan después, en `withoutTombstonedRows`.
  */
-function deleteTasksRemotely(
-  userId: string,
-  ids: string[],
-  tombstones: { current: Set<string> },
-): Promise<boolean> {
-  if (ids.length === 0) return Promise.resolve(true);
-  for (const id of ids) tombstones.current.add(id);
-  saveDeletedTaskIds(userId, tombstones.current);
-  return syncSupabase(
-    _supabase.from("tasks").delete().in("id", ids),
-    "borrar tareas",
-  ).then((ok: boolean) => {
-    if (ok) {
-      for (const id of ids) tombstones.current.delete(id);
-      saveDeletedTaskIds(userId, tombstones.current);
-    }
-    return ok;
-  });
-}
-
-/** Fusiona los datos remotos de Supabase con los locales. Remoto gana en conflicto. */
 function mergeRemote(local: DataState, remote: DataState): DataState {
   const merge = <T extends { id: string }>(l: T[], r: T[]): T[] => {
     const map = new Map<string, T>();
     for (const item of l) map.set(item.id, item);
-    for (const item of r) map.set(item.id, item);
+    for (const item of r) {
+      const localItem = map.get(item.id);
+      map.set(item.id, localItem ? pickNewer(localItem, item) : item);
+    }
     return Array.from(map.values());
   };
   return {
@@ -348,11 +383,14 @@ function mergeRemote(local: DataState, remote: DataState): DataState {
   };
 }
 
-/** Fusiona noches por fecha (el remoto gana en conflicto, como el resto). */
+/** Fusiona noches por fecha (gana la modificada más recientemente, como el resto). */
 function mergeSleepLogs(local: SleepLog[], remote: SleepLog[]): SleepLog[] {
   const byDate = new Map<string, SleepLog>();
   for (const log of local) byDate.set(log.date, log);
-  for (const log of remote) byDate.set(log.date, log);
+  for (const log of remote) {
+    const localLog = byDate.get(log.date);
+    byDate.set(log.date, localLog ? pickNewer(localLog, log) : log);
+  }
   return Array.from(byDate.values()).sort((a, b) => (a.date < b.date ? 1 : -1));
 }
 
@@ -437,21 +475,32 @@ function hasRecords(state: DataState): boolean {
 }
 
 /** Sube datos locales en el orden correcto para respetar las claves foráneas. */
-async function syncStateToSupabase(state: DataState, userId: string): Promise<boolean> {
+async function syncStateToSupabase(
+  state: DataState,
+  userId: string,
+  tombstones: TombstoneMap,
+): Promise<boolean> {
+  // Las filas con lápida no se suben NUNCA: es lo que impide que un dispositivo
+  // que conserva copias antiguas resucite lo que se ha borrado en otro.
+  const keep = <T extends Record<string, unknown>>(table: SyncTable, rows: T[]): T[] =>
+    filterTombstonedRows(table, rows, tombstones);
+
   const operations: Array<[string, unknown]> = [
-    ["subjects", state.subjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))],
-    ["habits", state.habits.map(({ id, name, emoji, frequency, created_at }) => ({ id, user_id: userId, name, emoji, frequency, created_at }))],
-    ["tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, start_time, remind_before_minutes, estimated_minutes, subject_id, classroom_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, start_time: start_time ?? null, remind_before_minutes: remind_before_minutes ?? null, estimated_minutes, subject_id, classroom_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at }))],
-    ["notes", state.notes.map(({ id, title, content, file_name, file_type, file_data, created_at, updated_at }) => ({ id, user_id: userId, title, content, file_name, file_type, file_data, created_at, updated_at }))],
-    ["workouts", state.workouts.map(({ id, activity_type, title, date, start_time, duration_minutes, notes, created_at }) => ({ id, user_id: userId, activity_type, title, date, start_time: start_time ?? null, duration_minutes, notes, created_at }))],
-    ["transactions", state.transactions.map(({ id, type, amount, category, description, date, created_at }) => ({ id, user_id: userId, type, amount, category, description, date, created_at }))],
-    ["habit_completions", state.habitCompletions.map(({ id, habit_id, completed_on }) => ({ id, user_id: userId, habit_id, completed_on }))],
-    ["grades", state.grades.map(({ id, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }) => ({ id, user_id: userId, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }))],
+    ["subjects", keep("subjects", state.subjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at })))],
+    ["habits", keep("habits", state.habits.map(({ id, name, emoji, frequency, created_at }) => ({ id, user_id: userId, name, emoji, frequency, created_at })))],
+    ["tasks", keep("tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, start_time, remind_before_minutes, estimated_minutes, subject_id, classroom_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, start_time: start_time ?? null, remind_before_minutes: remind_before_minutes ?? null, estimated_minutes, subject_id, classroom_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at })))],
+    ["notes", keep("notes", state.notes.map(({ id, title, content, file_name, file_type, file_data, created_at, updated_at }) => ({ id, user_id: userId, title, content, file_name, file_type, file_data, created_at, updated_at })))],
+    ["workouts", keep("workouts", state.workouts.map(({ id, activity_type, title, date, start_time, duration_minutes, notes, created_at }) => ({ id, user_id: userId, activity_type, title, date, start_time: start_time ?? null, duration_minutes, notes, created_at })))],
+    ["transactions", keep("transactions", state.transactions.map(({ id, type, amount, category, description, date, created_at }) => ({ id, user_id: userId, type, amount, category, description, date, created_at })))],
+    ["habit_completions", keep("habit_completions", state.habitCompletions.map(({ id, habit_id, completed_on }) => ({ id, user_id: userId, habit_id, completed_on })))],
+    ["grades", keep("grades", state.grades.map(({ id, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }) => ({ id, user_id: userId, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at })))],
     ["budgets", state.budget == null ? [] : [{ user_id: userId, month: `${todayKey().slice(0, 7)}-01`, amount: state.budget }]],
-    ["planned_expenses", state.plannedExpenses.map(({ id, amount, category, description, date, is_completed, created_at }) => ({ id, user_id: userId, amount: Number(amount), category, description: description ?? null, date: date ?? null, is_completed: Boolean(is_completed), created_at }))],
+    ["planned_expenses", keep("planned_expenses", state.plannedExpenses.map(({ id, amount, category, description, date, is_completed, created_at }) => ({ id, user_id: userId, amount: Number(amount), category, description: description ?? null, date: date ?? null, is_completed: Boolean(is_completed), created_at })))],
     // El id NO se envía: la fila se identifica por (user_id, date) y así el
     // upsert no reescribe la clave primaria de la fila que ya existía.
-    ["sleep_logs", state.sleepLogs.map(({ date, bedtime, wake_time, hours, quality, notes }) => ({ user_id: userId, date, bedtime: bedtime ?? null, wake_time: wake_time ?? null, hours: Number(hours), quality: quality ?? null, notes: notes ?? null }))],
+    // `updated_at` sí viaja (la fila tiene esa columna): así la fusión sabe cuál
+    // de las dos copias de la noche es la más reciente.
+    ["sleep_logs", keep("sleep_logs", state.sleepLogs.map(({ date, bedtime, wake_time, hours, quality, notes, updated_at }) => ({ user_id: userId, date, bedtime: bedtime ?? null, wake_time: wake_time ?? null, hours: Number(hours), quality: quality ?? null, notes: notes ?? null, updated_at: updated_at ?? null })))],
     ["sleep_settings", state.sleepSettings
       ? [{
           user_id: userId,
@@ -502,8 +551,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
   const [initialSyncDone, setInitialSyncDone] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const syncedRef = useRef(false);
-  /** Ids de tareas borradas pendientes de confirmar en la nube (anti-fantasmas). */
-  const deletedTaskIdsRef = useRef<Set<string>>(new Set());
+  /**
+   * Lápidas conocidas (`tabla::clave` → instante del borrado). Salen de la
+   * tabla `deleted_records` más los borrados locales sin confirmar, y son lo
+   * que impide que una fila borrada en otro dispositivo vuelva a entrar.
+   */
+  const tombstonesRef = useRef<TombstoneMap>(new Map());
+  /** Borrados locales pendientes de confirmar en la nube (cola de reintento). */
+  const pendingDeletesRef = useRef<TombstoneEntry[]>([]);
+  /** Canal de Realtime con los borrados que hacen los demás dispositivos. */
+  const deleteChannelRef = useRef<{ unsubscribe: () => void } | null>(null);
+  /** El aviso de "falta la migración de borrados" solo se muestra una vez. */
+  const schemaHintShownRef = useRef(false);
   const syncErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Registro del canal de errores de sincronización (ver syncSupabase).
@@ -521,12 +580,176 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
+  /**
+   * Sube los borrados pendientes y borra las filas de verdad.
+   *
+   * El orden importa: primero la lápida en `deleted_records`. Si se borrara la
+   * fila sin dejar lápida y el otro dispositivo la tuviese en caché, la
+   * resucitaría al subir su estado. Si algo falla, el borrado se queda en la
+   * cola y se reintenta al arrancar o al volver a la app.
+   */
+  const flushPendingDeletes = useCallback(async (userId: string): Promise<boolean> => {
+    const entries = pendingDeletesRef.current;
+    if (entries.length === 0) return true;
+
+    const marked = await syncSupabase(
+      _supabase.from("deleted_records").upsert(tombstoneRows(entries, userId), {
+        onConflict: "user_id,table_name,record_key",
+      }),
+      "registrar borrados",
+    );
+    // La fila se borra aunque la lápida falle. Así el borrado sigue siendo
+    // efectivo en este dispositivo (su lápida local lo protege) y la cola se
+    // reintenta hasta que la lápida llegue a la nube; sin la migración 00017
+    // aplicada, el aviso en pantalla lo explica.
+    const remaining: TombstoneEntry[] = marked ? [] : [...entries];
+    for (const table of SYNC_TABLES) {
+      const group = entries.filter((entry) => entry.table === table);
+      if (group.length === 0) continue;
+      for (const part of chunk(group, DELETE_CHUNK_SIZE)) {
+        const removed = await syncSupabase(
+          _supabase
+            .from(table)
+            .delete()
+            .in(
+              TABLE_KEY_COLUMN[table],
+              part.map((entry) => entry.key),
+            ),
+          `borrar ${table}`,
+        );
+        if (!removed) remaining.push(...part);
+      }
+    }
+    // Lo que queda pendiente son los borrados que fallaron MÁS los que se hayan
+    // marcado mientras esta tanda iba en camino: esos nunca se descartan, porque
+    // la cola es lo que reintenta el borrado.
+    const processed = new Set(entries.map((entry) => `${entry.table}::${entry.key}`));
+    const stillPending = pendingDeletesRef.current.filter(
+      (entry) => !processed.has(`${entry.table}::${entry.key}`),
+    );
+    pendingDeletesRef.current = mergePendingDeletes(remaining, stillPending);
+    savePendingDeletes(userId, pendingDeletesRef.current);
+    return pendingDeletesRef.current.length === 0;
+  }, []);
+
+  /**
+   * Marca filas como borradas: lápida en memoria (la hidratación y el envío a
+   * la nube las ignoran desde ya), cola persistida y borrado compartido.
+   */
+  const markDeleted = useCallback(
+    (inputs: DeleteInput[]) => {
+      const entries = normalizeDeletes(inputs);
+      if (entries.length === 0) return;
+      for (const entry of entries) {
+        addTombstone(tombstonesRef.current, entry.table, entry.key, entry.deletedAt);
+      }
+      pendingDeletesRef.current = mergePendingDeletes(pendingDeletesRef.current, entries);
+      const userId = userIdRef.current;
+      if (!userId) return; // invitado: solo localStorage
+      savePendingDeletes(userId, pendingDeletesRef.current);
+      void flushPendingDeletes(userId);
+    },
+    [flushPendingDeletes],
+  );
+
+  /**
+   * Reabre una noche de sueño que se había borrado.
+   *
+   * `sleep_logs` es la única tabla que se identifica por una clave reutilizable
+   * (la fecha): si se borra la noche del 18 y luego se registra otra vez, hay que
+   * quitar su lápida (aquí y en la nube) o el filtro la descartaría para siempre
+   * y los demás dispositivos seguirían viéndola borrada.
+   */
+  const reopenSleepLog = useCallback((date: string) => {
+    const userId = userIdRef.current;
+    const wasDeleted = removeTombstone(tombstonesRef.current, "sleep_logs", date);
+    if (userId) {
+      pendingDeletesRef.current = pendingDeletesRef.current.filter(
+        (entry) => !(entry.table === "sleep_logs" && entry.key === date),
+      );
+      if (wasDeleted) savePendingDeletes(userId, pendingDeletesRef.current);
+    }
+    if (!wasDeleted || !userId) return;
+    void syncSupabase(
+      _supabase
+        .from("deleted_records")
+        .delete()
+        .eq("user_id", userId)
+        .eq("table_name", "sleep_logs")
+        .eq("record_key", date),
+      "reabrir noche de sueño",
+    );
+  }, []);
+
+  /**
+   * Relee las lápidas de la nube y quita del estado lo que ya está borrado.
+   * Se llama al arrancar y cada vez que la app vuelve a primer plano: cubre el
+   * caso de dos dispositivos abiertos a la vez, en el que el otro ha borrado
+   * algo que este todavía no sabía (y podía volver a subir).
+   */
+  const refreshTombstones = useCallback(async (userId: string): Promise<void> => {
+    const { data, error } = await _supabase
+      .from("deleted_records")
+      .select("table_name, record_key, deleted_at")
+      .eq("user_id", userId);
+    if (error) {
+      console.error(`[Supabase] cargar borrados: ${error.message}`);
+      if (!schemaHintShownRef.current) {
+        schemaHintShownRef.current = true;
+        reportSyncError?.(
+          "Falta la tabla de borrados en Supabase: aplica la migración " +
+            "00017_deleted_records.sql para que los borrados se sincronicen entre dispositivos.",
+        );
+      }
+      return;
+    }
+    const map: TombstoneMap = new Map(tombstonesRef.current);
+    for (const entry of parseTombstoneRows(data)) {
+      addTombstone(map, entry.table, entry.key, entry.deletedAt);
+    }
+    tombstonesRef.current = map;
+    // Si no se quita nada, `withoutTombstonedRows` devuelve el mismo objeto: no
+    // hay render nuevo ni envío a la nube innecesario.
+    setState((prev) => withoutTombstonedRows(prev, map));
+  }, []);
+
+  /** Avisos en vivo: un borrado en otro dispositivo desaparece aquí al momento. */
+  const subscribeToDeletes = useCallback((userId: string) => {
+    try {
+      void deleteChannelRef.current?.unsubscribe();
+      deleteChannelRef.current = _supabase
+        .channel(`deleted-records:${userId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "deleted_records",
+            filter: `user_id=eq.${userId}`,
+          },
+          (payload) => {
+            const entries = parseTombstoneRows([payload.new]);
+            if (entries.length === 0) return;
+            for (const entry of entries) {
+              addTombstone(tombstonesRef.current, entry.table, entry.key, entry.deletedAt);
+            }
+            setState((prev) => withoutTombstonedRows(prev, tombstonesRef.current));
+          },
+        )
+        .subscribe();
+    } catch (error) {
+      console.warn("[Supabase] no se pudo escuchar los borrados en vivo:", error);
+    }
+  }, []);
+
   // Cargar desde localStorage una sola vez al montar (evita mismatch de hidratación).
   useEffect(() => {
     // La lectura depende de window y debe ejecutarse después de hidratar.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setState(loadState());
-    deletedTaskIdsRef.current = loadDeletedTaskIds(null);
+    // Los borrados del invitado también se leen aquí (sin nube, solo local).
+    pendingDeletesRef.current = loadPendingDeletes(null);
+    tombstonesRef.current = tombstoneMapFrom(pendingDeletesRef.current);
     setHydrated(true);
   }, []);
 
@@ -541,13 +764,15 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (syncedRef.current && userIdRef.current === userId) return;
       syncedRef.current = true;
       userIdRef.current = userId;
-      deletedTaskIdsRef.current = loadDeletedTaskIds(userId);
+      pendingDeletesRef.current = loadPendingDeletes(userId);
+      tombstonesRef.current = tombstoneMapFrom(pendingDeletesRef.current);
       setInitialSyncDone(false);
-      // Las lápidas pendientes son también una cola de reintento: si el borrado
-      // con la nube falló (sin conexión, token caducado…), se vuelve a intentar.
-      if (deletedTaskIdsRef.current.size > 0) {
-        void deleteTasksRemotely(userId, [...deletedTaskIdsRef.current], deletedTaskIdsRef);
-      }
+      // Lo primero de todo: saber qué se ha borrado en otros dispositivos
+      // (antes se fusionaba a ciegas y los borrados volvían) y reintentar los
+      // borrados que este dispositivo no pudo confirmar.
+      await refreshTombstones(userId);
+      subscribeToDeletes(userId);
+      if (pendingDeletesRef.current.length > 0) void flushPendingDeletes(userId);
 
       try {
         // Registrar la zona horaria real del navegador en el perfil. La Edge
@@ -573,7 +798,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const userKey = userStorageKey(userId);
         const savedUserState = loadState(userKey);
         const pending = hasRecords(guestState) ? guestState : emptyState();
-        const pendingSynced = !hasRecords(pending) || await syncStateToSupabase(pending, userId);
+        const pendingSynced =
+          !hasRecords(pending) ||
+          await syncStateToSupabase(pending, userId, tombstonesRef.current);
 
         const results = await Promise.all([
           _supabase.from("subjects").select("*").eq("user_id", userId),
@@ -665,7 +892,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // resucitaba igual. El estado resultante lo persiste el efecto de
         // guardado, que escribe en la clave del usuario ya autenticado.
         setState((prev) =>
-          withoutDeletedTasks(mergeRemote(nextState, prev), deletedTaskIdsRef.current),
+          withoutTombstonedRows(mergeRemote(nextState, prev), tombstonesRef.current),
         );
         if (pendingSynced && hasRecords(pending)) window.localStorage.removeItem(STORAGE_KEY);
       } finally {
@@ -714,13 +941,21 @@ export function DataProvider({ children }: { children: ReactNode }) {
       if (event === "SIGNED_OUT") {
         userIdRef.current = null;
         syncedRef.current = false;
+        tombstonesRef.current = new Map();
+        pendingDeletesRef.current = [];
+        void deleteChannelRef.current?.unsubscribe();
+        deleteChannelRef.current = null;
         setState(localOnly(loadState()));
         return;
       }
       if (session?.user) void syncUser(session.user.id);
     });
-    return () => subscription.subscription.unsubscribe();
-  }, [hydrated]);
+    return () => {
+      subscription.subscription.unsubscribe();
+      void deleteChannelRef.current?.unsubscribe();
+      deleteChannelRef.current = null;
+    };
+  }, [hydrated, refreshTombstones, flushPendingDeletes, subscribeToDeletes]);
 
   // Guardar cada sesión en su propia clave. La clave global solo representa
   // el modo invitado y no debe mezclar datos entre cuentas del mismo navegador.
@@ -733,8 +968,24 @@ export function DataProvider({ children }: { children: ReactNode }) {
   // acciones masivas y evita depender de valores asignados dentro de setState.
   useEffect(() => {
     if (!hydrated || !userIdRef.current || !initialSyncDone) return;
-    void syncStateToSupabase(state, userIdRef.current);
+    void syncStateToSupabase(state, userIdRef.current, tombstonesRef.current);
   }, [state, hydrated, initialSyncDone]);
+
+  // Al volver a la app (cambiar de pestaña, desbloquear el móvil) se releen las
+  // lápidas: si otro dispositivo ha borrado algo mientras tanto, se quita aquí
+  // antes de que este dispositivo pueda volver a subirlo.
+  useEffect(() => {
+    if (!hydrated) return;
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      const userId = userIdRef.current;
+      if (!userId) return;
+      void refreshTombstones(userId);
+      if (pendingDeletesRef.current.length > 0) void flushPendingDeletes(userId);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [hydrated, refreshTombstones, flushPendingDeletes]);
 
   const actions = useMemo<DataActions>(() => {
     const DEFAULT_COLORS = [
@@ -749,11 +1000,18 @@ export function DataProvider({ children }: { children: ReactNode }) {
       return userIdRef.current || "local";
     };
 
-    /** Borra tareas en la nube (con lápida y reintento) si hay sesión. */
-    const deleteTasksInCloud = (ids: string[]) => {
-      const userId = userIdRef.current;
-      if (!userId) return; // invitado: solo localStorage
-      void deleteTasksRemotely(userId, ids, deletedTaskIdsRef);
+    /** Resuelve ids reales a partir de ids o títulos de calificaciones. */
+    const resolveGradeIds = (ids?: string[], titles?: string[]): string[] => {
+      const resolved = new Set<string>((ids || []).filter(Boolean));
+      const titleSet = new Set(
+        (titles || []).map((t) => t.trim().toLowerCase()).filter(Boolean),
+      );
+      if (titleSet.size > 0) {
+        for (const grade of stateRef.current.grades) {
+          if (titleSet.has(grade.title.trim().toLowerCase())) resolved.add(grade.id);
+        }
+      }
+      return [...resolved];
     };
 
     /** Resuelve ids reales a partir de títulos (exactos o con coincidencia clara). */
@@ -826,17 +1084,27 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       deleteSubject: (id) => {
+        // Las notas de la asignatura desaparecen con ella (la FK remota es
+        // `on delete cascade`), así que se marcan también: si no, el otro
+        // dispositivo intentaría volver a subirlas y daría error de clave ajena.
+        const gradeIds = stateRef.current.grades
+          .filter((g) => g.subject_id === id)
+          .map((g) => g.id);
         setState((prev) => ({
           ...prev,
           subjects: prev.subjects.filter((s) => s.id !== id),
           tasks: prev.tasks.map((t) => (t.subject_id === id ? { ...t, subject_id: null } : t)),
           grades: prev.grades.filter((g) => g.subject_id !== id),
         }));
-        syncSupabase(_supabase.from("subjects").delete().eq("id", id));
+        markDeleted([
+          { table: "subjects", key: id },
+          ...gradeIds.map((key) => ({ table: "grades" as const, key })),
+        ]);
       },
 
       deleteSubjects: (ids, names) => {
         let deletedSubjectIds: string[] = [];
+        let deletedGradeIds: string[] = [];
         setState((prev) => {
           const idSet = new Set(ids || []);
           const nameSet = new Set((names || []).map((n) => n.trim().toLowerCase()));
@@ -849,6 +1117,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
             return true;
           });
           deletedSubjectIds = Array.from(deletedIds);
+          deletedGradeIds = prev.grades
+            .filter((g) => deletedIds.has(g.subject_id))
+            .map((g) => g.id);
           return {
             ...prev,
             subjects: remainingSubjects,
@@ -859,7 +1130,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
           };
         });
         if (deletedSubjectIds.length > 0) {
-          void syncSupabase(_supabase.from("subjects").delete().in("id", deletedSubjectIds), "borrar asignaturas");
+          markDeleted([
+            ...deletedSubjectIds.map((key) => ({ table: "subjects" as const, key })),
+            ...deletedGradeIds.map((key) => ({ table: "grades" as const, key })),
+          ]);
         }
       },
 
@@ -1118,13 +1392,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       deleteTask: (id) => {
         setState((prev) => ({ ...prev, tasks: prev.tasks.filter((t) => t.id !== id) }));
-        deleteTasksInCloud([id]);
+        markDeleted([{ table: "tasks", key: id }]);
       },
 
       deleteTasks: (ids, titles) => {
-        // Los títulos se resuelven a ids reales: antes un borrado por título
-        // ("borra la tarea de mates") se quedaba solo en local y la fila seguía
-        // en Supabase, de modo que al recargar la hidratación la devolvía.
+        // Los títulos se resuelven a ids reales: un borrado por título
+        // ("borra la tarea de mates") debe llegar a la nube con su lápida, o el
+        // otro dispositivo la devolverá al subir su copia.
         const resolvedIds = new Set<string>((ids || []).filter(Boolean));
         for (const id of resolveTaskIdsByTitles(titles || [])) resolvedIds.add(id);
         if (resolvedIds.size === 0) return;
@@ -1132,7 +1406,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           ...prev,
           tasks: prev.tasks.filter((t) => !resolvedIds.has(t.id)),
         }));
-        deleteTasksInCloud([...resolvedIds]);
+        markDeleted([...resolvedIds].map((key) => ({ table: "tasks" as const, key })));
       },
 
       toggleTaskDone: (id) => {
@@ -1204,7 +1478,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       deleteNote: (id) => {
         setState((prev) => ({ ...prev, notes: prev.notes.filter((n) => n.id !== id) }));
-        syncSupabase(_supabase.from("notes").delete().eq("id", id));
+        markDeleted([{ table: "notes", key: id }]);
       },
 
       addWorkout: (input) => {
@@ -1236,7 +1510,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       deleteWorkout: (id) => {
         setState((prev) => ({ ...prev, workouts: prev.workouts.filter((w) => w.id !== id) }));
-        syncSupabase(_supabase.from("workouts").delete().eq("id", id));
+        markDeleted([{ table: "workouts", key: id }]);
       },
 
       addHabit: (input) => {
@@ -1267,20 +1541,28 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       deleteHabit: (id) => {
+        // Los días marcados de ese hábito se van con él (cascade en la nube),
+        // así que se marcan también para que el otro dispositivo no los reenvíe.
+        const completionIds = stateRef.current.habitCompletions
+          .filter((c) => c.habit_id === id)
+          .map((c) => c.id);
         setState((prev) => ({
           ...prev,
           habits: prev.habits.filter((h) => h.id !== id),
           habitCompletions: prev.habitCompletions.filter((c) => c.habit_id !== id),
         }));
-        syncSupabase(_supabase.from("habits").delete().eq("id", id));
+        markDeleted([
+          { table: "habits", key: id },
+          ...completionIds.map((key) => ({ table: "habit_completions" as const, key })),
+        ]);
       },
 
       toggleHabit: (habitId) => {
         // ¿Ya estaba completado hoy? Si no, se está completando ahora → XP.
-        const alreadyDoneToday = stateRef.current.habitCompletions.some(
+        const existingToday = stateRef.current.habitCompletions.find(
           (c) => c.habit_id === habitId && c.completed_on === todayKey(),
         );
-        const completing = !alreadyDoneToday;
+        const completing = !existingToday;
 
         setState((prev) => {
           const today = todayKey();
@@ -1289,7 +1571,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             (c) => c.habit_id === habitId && c.completed_on === today,
           );
           if (existing) {
-            syncSupabase(_supabase.from("habit_completions").delete().eq("id", existing.id));
             return {
               ...prev,
               habitCompletions: prev.habitCompletions.filter((c) => c.id !== existing.id),
@@ -1307,6 +1588,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
             };
           }
         });
+
+        // Desmarcar un día es un borrado: necesita lápida, o el dispositivo que
+        // todavía tiene la marca la volvería a subir y reaparecería.
+        if (existingToday) {
+          markDeleted([{ table: "habit_completions", key: existingToday.id }]);
+        }
 
         if (completing) {
           awardXp("habit", habitId);
@@ -1342,7 +1629,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       deleteTransaction: (id) => {
         setState((prev) => ({ ...prev, transactions: prev.transactions.filter((t) => t.id !== id) }));
-        syncSupabase(_supabase.from("transactions").delete().eq("id", id));
+        markDeleted([{ table: "transactions", key: id }]);
       },
 
       setBudget: (amount) => {
@@ -1414,13 +1701,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           ...prev,
           plannedExpenses: prev.plannedExpenses.filter((p) => p.id !== id),
         }));
-        const userId = uid();
-        if (userId !== "local") {
-          void syncSupabase(
-            _supabase.from("planned_expenses").delete().eq("id", id),
-            "borrar gasto planificado",
-          );
-        }
+        markDeleted([{ table: "planned_expenses", key: id }]);
       },
 
       convertPlannedExpenseToTransaction: (id, date) => {
@@ -1450,11 +1731,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
             _supabase.from("transactions").insert(newTx),
             "guardar transacción",
           );
-          void syncSupabase(
-            _supabase.from("planned_expenses").delete().eq("id", id),
-            "borrar gasto planificado",
-          );
         }
+        // El gasto planificado pasa a ser un gasto real: su fila se borra (con
+        // lápida) para que el otro dispositivo no la devuelva.
+        markDeleted([{ table: "planned_expenses", key: id }]);
       },
 
       addGrade: (input) => {
@@ -1699,20 +1979,19 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
       deleteGrade: (id) => {
         setState((prev) => ({ ...prev, grades: prev.grades.filter((g) => g.id !== id) }));
-        syncSupabase(_supabase.from("grades").delete().eq("id", id));
+        markDeleted([{ table: "grades", key: id }]);
       },
 
       deleteGrades: (ids, titles) => {
-        setState((prev) => {
-          const idSet = new Set(ids || []);
-          const titleSet = new Set((titles || []).map((t) => t.trim().toLowerCase()));
-          return {
-            ...prev,
-            grades: prev.grades.filter(
-              (g) => !idSet.has(g.id) && !titleSet.has(g.title.trim().toLowerCase()),
-            ),
-          };
-        });
+        // Este borrado no llegaba a la nube: al recargar, las notas volvían (el
+        // mismo fantasma que tenían las tareas). Ahora resuelve ids y se propaga.
+        const resolvedIds = resolveGradeIds(ids, titles);
+        if (resolvedIds.length === 0) return;
+        setState((prev) => ({
+          ...prev,
+          grades: prev.grades.filter((g) => !resolvedIds.includes(g.id)),
+        }));
+        markDeleted(resolvedIds.map((key) => ({ table: "grades" as const, key })));
       },
 
       setSubjectRating: (subjectId, rating) => {
@@ -1735,6 +2014,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const date = input.date || todayKey();
         const hours = roundHours(Number(input.hours));
         if (!Number.isFinite(hours) || hours <= 0 || hours > 24) return;
+
+        // Si esa noche se había borrado, este registro la reabre.
+        reopenSleepLog(date);
 
         const iso = nowIso();
         const userId = uid();
@@ -1792,17 +2074,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       deleteSleepLog: (date) => {
-        const userId = uid();
         setState((prev) => ({
           ...prev,
           sleepLogs: prev.sleepLogs.filter((log) => log.date !== date),
         }));
-        if (userId !== "local") {
-          void syncSupabase(
-            _supabase.from("sleep_logs").delete().eq("user_id", userId).eq("date", date),
-            "borrar registro de sueño",
-          );
-        }
+        // La clave de una noche es su fecha: la lápida también, así el otro
+        // dispositivo no la vuelve a subir. Si más adelante se registra otra vez
+        // esa noche, su `updated_at` es posterior y la lápida ya no aplica.
+        markDeleted([{ table: "sleep_logs", key: date }]);
       },
 
       setSleepSettings: (input) => {
@@ -1841,6 +2120,23 @@ export function DataProvider({ children }: { children: ReactNode }) {
       resetAll: async () => {
         const userId = userIdRef.current;
 
+        // 0. Marcar como borradas TODAS las filas actuales antes de vaciar la
+        //    nube: si no, el otro dispositivo (con sus copias en caché) volvería
+        //    a subirlas y el "borrado de todo" se desharía solo.
+        if (userId && userId !== "local") {
+          const entries: DeleteInput[] = [];
+          const fields = stateRef.current as unknown as Record<string, unknown>;
+          for (const table of SYNC_TABLES) {
+            const rows = fields[STATE_FIELD_OF_TABLE[table]];
+            if (!Array.isArray(rows)) continue;
+            for (const row of rows as Array<Record<string, unknown>>) {
+              const key = rowKey(table, row);
+              if (key) entries.push({ table, key });
+            }
+          }
+          markDeleted(entries);
+        }
+
         // 1. Vaciar el estado local (las vistas se quedan vacías al instante).
         setState(emptyState());
 
@@ -1852,10 +2148,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
             window.localStorage.removeItem("nucleo:progress-tree:v2");
             window.localStorage.removeItem("nucleo:progress-tree:v3");
             if (userId) window.localStorage.removeItem(userStorageKey(userId));
-            // Las "lápidas" de tareas borradas también se van: si no, tras el
-            // reset seguirían filtrando tareas nuevas con esos ids.
-            window.localStorage.removeItem(deletedTasksKey(userId));
-            deletedTaskIdsRef.current = new Set();
+            // La clave antigua de lápidas (solo tareas) se limpia; los borrados
+            // de ahora los lleva la cola `pending-deletes`, que en este momento
+            // guarda el borrado de todo lo que había.
+            window.localStorage.removeItem(`${LEGACY_DELETED_TASKS_PREFIX}${userId ?? "local"}`);
           }
         } catch {
           // Ignorar errores de cuota/acceso.
@@ -1895,7 +2191,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         return ok ? { ok: true } : { ok: false, error: "Hubo errores borrando algunos datos en la nube." };
       },
     };
-  }, []);
+  }, [markDeleted, reopenSleepLog]);
 
   const value = useMemo<DataContextValue>(() => {
     const finance = computeFinance(
