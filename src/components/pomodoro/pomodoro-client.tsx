@@ -121,23 +121,25 @@ function TimerRing({
     <div
       className={cn(
         "relative",
-        large ? "h-[min(58vh,26rem)] w-[min(58vh,26rem)]" : "h-56 w-56",
+        large
+          ? "h-[clamp(16rem,58vh,32rem)] w-[clamp(16rem,58vh,32rem)]"
+          : "h-56 w-56",
       )}
     >
       {/* Halo que respira mientras corre */}
       <motion.div
         aria-hidden
-        className="pointer-events-none absolute -inset-5 rounded-full"
+        className={cn("pointer-events-none absolute rounded-full", large ? "-inset-8" : "-inset-5")}
         style={{
           background:
             mode === "work"
-              ? "radial-gradient(circle, color-mix(in oklch, var(--primary) 14%, transparent), transparent 70%)"
-              : "radial-gradient(circle, rgba(16, 185, 129, 0.14), transparent 70%)",
+              ? "radial-gradient(circle, color-mix(in oklch, var(--primary) 16%, transparent), transparent 70%)"
+              : "radial-gradient(circle, rgba(16, 185, 129, 0.16), transparent 70%)",
         }}
         initial={{ opacity: 0.35, scale: 1 }}
         animate={
           running && !reduceMotion
-            ? { opacity: [0.45, 0.9, 0.45], scale: [1, 1.03, 1] }
+            ? { opacity: [0.45, 1, 0.45], scale: [1, 1.035, 1] }
             : { opacity: 0.35, scale: 1 }
         }
         transition={
@@ -148,6 +150,19 @@ function TimerRing({
       />
 
       <svg viewBox="0 0 200 200" className="h-full w-full -rotate-90">
+        {/* Aro interior decorativo, solo en el modo ampliado */}
+        {large && (
+          <circle
+            cx="100"
+            cy="100"
+            r="78"
+            fill="none"
+            strokeWidth="1"
+            strokeDasharray="1 6"
+            strokeLinecap="round"
+            className="stroke-muted-foreground/30"
+          />
+        )}
         <circle cx="100" cy="100" r="90" fill="none" strokeWidth="10" className="stroke-muted" />
         <motion.circle
           cx="100"
@@ -168,14 +183,17 @@ function TimerRing({
       </svg>
 
       <motion.div
-        className="absolute inset-0 flex flex-col items-center justify-center gap-1"
+        className={cn(
+          "absolute inset-0 flex flex-col items-center justify-center",
+          large ? "gap-2" : "gap-1",
+        )}
         animate={completedFlash ? { scale: [1, 1.07, 1] } : { scale: 1 }}
         transition={completedFlash ? { duration: 0.6, ease: "easeOut" } : { duration: 0.3 }}
       >
         <span
           className={cn(
             "font-bold tabular-nums tracking-tight",
-            large ? "text-[clamp(3rem,11vh,6rem)]" : "text-5xl",
+            large ? "text-[clamp(3.25rem,13vh,8rem)]" : "text-5xl",
             mode === "work" ? "text-foreground" : "text-emerald-600 dark:text-emerald-400",
           )}
         >
@@ -190,17 +208,19 @@ function TimerRing({
             transition={{ duration: 0.16 }}
             className={cn(
               "flex items-center gap-1.5 font-medium text-muted-foreground",
-              large ? "text-base" : "text-sm",
+              large ? "text-lg tracking-wide" : "text-sm",
             )}
           >
             {mode === "work" ? (
               <>
-                <TimerIcon className="h-4 w-4 text-primary" />
+                <TimerIcon className={cn(large ? "h-5 w-5" : "h-4 w-4", "text-primary")} />
                 Trabajo
               </>
             ) : (
               <>
-                <Coffee className="h-4 w-4 text-emerald-500" />
+                <Coffee
+                  className={cn(large ? "h-5 w-5" : "h-4 w-4", "text-emerald-500")}
+                />
                 Descanso
               </>
             )}
@@ -625,7 +645,19 @@ export function PomodoroClient() {
             transition={{ duration: 0.18, ease: "easeOut" }}
             className="fixed inset-0 z-[60] flex flex-col overflow-y-auto bg-background/95 backdrop-blur-xl"
           >
-            <div className="flex items-center justify-between px-6 py-4">
+            {/* Resplandor de fondo que acompaña al modo activo */}
+            <div
+              aria-hidden
+              className="pointer-events-none fixed inset-0 opacity-70 transition-opacity duration-700"
+              style={{
+                background:
+                  mode === "work"
+                    ? "radial-gradient(60% 50% at 50% 45%, color-mix(in oklch, var(--primary) 12%, transparent), transparent 70%)"
+                    : "radial-gradient(60% 50% at 50% 45%, rgba(16, 185, 129, 0.12), transparent 70%)",
+              }}
+            />
+
+            <div className="relative flex items-center justify-between px-6 py-4">
               <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                 <TimerIcon className="h-4 w-4 text-primary" />
                 Modo concentración
@@ -640,7 +672,7 @@ export function PomodoroClient() {
               </Button>
             </div>
 
-            <div className="flex flex-1 flex-col items-center justify-center gap-8 px-6 pb-12">
+            <div className="relative flex flex-1 flex-col items-center justify-center gap-6 py-6 pl-6 pr-6 sm:gap-8">
               <TimerRing
                 secondsLeft={secondsLeft}
                 durationSeconds={durationSeconds}
@@ -651,42 +683,54 @@ export function PomodoroClient() {
                 size="xl"
               />
 
-              <AnimatePresence initial={false}>
-                {selectedTask && (
-                  <motion.span
-                    initial={{ opacity: 0, y: 8, scale: 0.95 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                    transition={{ duration: 0.2 }}
-                    className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-4 py-1.5 text-sm font-medium text-primary"
-                  >
-                    <BellRing className="h-4 w-4" />
-                    Trabajando en: {selectedTask.title}
-                  </motion.span>
-                )}
-              </AnimatePresence>
+              {/* La tarea en curso se muestra, no se edita: para cambiarla hay que
+                  volver a la vista normal. */}
+              <div className="flex flex-col items-center gap-1.5 text-center">
+                <AnimatePresence mode="wait" initial={false}>
+                  {selectedTask ? (
+                    <motion.span
+                      key={selectedTask.id}
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
+                      className="inline-flex max-w-2xl items-center gap-2 rounded-full bg-primary/10 px-5 py-2 text-base font-medium text-primary"
+                    >
+                      <BellRing className="h-4 w-4 shrink-0" />
+                      <span className="truncate">Trabajando en: {selectedTask.title}</span>
+                    </motion.span>
+                  ) : (
+                    <motion.span
+                      key="sin-tarea"
+                      initial={{ opacity: 0, y: 8 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -8 }}
+                      transition={{ duration: 0.2 }}
+                      className="text-base text-muted-foreground"
+                    >
+                      Sin tarea específica
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <span className="text-xs text-muted-foreground/70">
+                  Cambia la tarea desde la vista normal
+                </span>
+              </div>
 
               <div className="flex flex-wrap items-center justify-center gap-3">
-                <Button className="h-11 px-6 text-base" onClick={toggleRunning}>
+                <Button className="h-12 px-8 text-base" onClick={toggleRunning}>
                   {running ? <Pause className="size-5" /> : <Play className="size-5" />}
                   {running ? "Pausar" : "Iniciar"}
                 </Button>
-                <Button variant="outline" className="h-11 px-6 text-base" onClick={handleReset}>
+                <Button variant="outline" className="h-12 px-6 text-base" onClick={handleReset}>
                   <RotateCcw className="size-5" />
                   Reiniciar
                 </Button>
-                <Button variant="ghost" className="h-11 px-6 text-base" onClick={handleSkip}>
+                <Button variant="ghost" className="h-12 px-6 text-base" onClick={handleSkip}>
                   <SkipForward className="size-5" />
                   Saltar
                 </Button>
               </div>
-
-              <p className="text-sm text-muted-foreground">
-                🍅 Pomodoros completados en esta sesión:{" "}
-                <strong className="font-semibold text-foreground">{completedSessions}</strong>
-              </p>
-
-              {renderTaskPicker("pomodoro-task-expanded", "max-w-sm")}
             </div>
           </motion.div>
         )}
