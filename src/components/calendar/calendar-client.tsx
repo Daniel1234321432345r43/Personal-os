@@ -8,7 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
-import { formatCurrency, formatDateLong, todayKey } from "@/lib/format";
+import { formatCurrency, formatDateLong, formatDuration, todayKey } from "@/lib/format";
+import { useStudyLog } from "@/lib/study-log";
 import { TaskForm } from "@/components/forms/task-form";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { WorkoutForm } from "@/components/forms/workout-form";
@@ -118,6 +119,7 @@ function LoadingState() {
 export function CalendarClient() {
   const { data, hydrated, actions } = useData();
   const today = todayKey();
+  const study = useStudyLog();
 
   const [currentDate, setCurrentDate] = useState(() => {
     const now = new Date();
@@ -425,7 +427,7 @@ export function CalendarClient() {
       </header>
 
       {/* Métricas del mes (resumen arriba, justo bajo la cabecera) */}
-      <div className="order-1 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="order-1 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Card className="p-3">
           <div className="flex min-w-0 items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 text-red-600 dark:text-red-400">
@@ -436,6 +438,30 @@ export function CalendarClient() {
               <p className="text-base font-semibold">
                 {monthStats.exams + monthStats.assignments}
               </p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+              <BookOpen className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Minutos estudiados</p>
+              <p className="text-base font-semibold">{formatDuration(study.totalMinutes)}</p>
+            </div>
+          </div>
+        </Card>
+
+        <Card className="p-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+              <Clock className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-muted-foreground">Esta semana</p>
+              <p className="text-base font-semibold">{formatDuration(study.minutesThisWeek)}</p>
             </div>
           </div>
         </Card>
@@ -1180,6 +1206,12 @@ export function CalendarClient() {
                                     {t.estimated_minutes && (
                                       <span className="flex items-center gap-1">
                                         <Clock className="h-3 w-3" /> {t.estimated_minutes} min
+                                      </span>
+                                    )}
+                                    {(study.byTask.get(t.id) ?? 0) > 0 && (
+                                      <span className="flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
+                                        <BookOpen className="h-3 w-3" />
+                                        {formatDuration(study.byTask.get(t.id) ?? 0)} dedicados
                                       </span>
                                     )}
                                   </div>

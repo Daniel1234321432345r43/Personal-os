@@ -5,6 +5,9 @@ import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
 import { registerServiceWorker } from "@/lib/push";
+import { awardXp } from "@/lib/xp-system";
+import { logStudySession, useStudyLog } from "@/lib/study-log";
+import { formatDuration } from "@/lib/format";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +16,7 @@ import { cn } from "@/lib/utils";
 import {
   BellRing,
   Coffee,
+  GraduationCap,
   Maximize2,
   Minimize2,
   Pause,
@@ -89,6 +93,18 @@ function playChime() {
 /** Formatear segundos como "MM:SS". */
 function fmt(secs: number) {
   return `${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`;
+}
+
+/**
+ * Identificador único por pomodoro. El sistema de XP deduplica por día los
+ * pomodoros, así que cada uno necesita su propio id o el segundo del día no
+ * daría XP.
+ */
+function pomodoroEventId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `pomodoro-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /**
@@ -234,6 +250,7 @@ function TimerRing({
 export function PomodoroClient() {
   const { data } = useData();
   const { settings } = useSettings();
+  const study = useStudyLog();
 
   const workMinutes = settings.pomodoroWorkMinutes ?? 25;
   const breakMinutes = settings.pomodoroBreakMinutes ?? 5;
@@ -244,6 +261,8 @@ export function PomodoroClient() {
   const [taskId, setTaskId] = useState("");
   const [completedSessions, setCompletedSessions] = useState(0);
   const [completedFlash, setCompletedFlash] = useState(false);
+  /** true tras un pomodoro de trabajo: muestra el resumen de tiempo estudiado. */
+  const [showStudySummary, setShowStudySummary] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const reduceMotion = useReducedMotion();
 
@@ -294,6 +313,14 @@ export function PomodoroClient() {
 
     playChime();
     if (wasWork) {
+      // Tiempo estudiado: cada pomodoro de trabajo suma sus minutos al registro
+      // (y a la tarea elegida, si la hay). La XP también va por tiempo: 10 XP por
+      // pomodoro, no por completar la tarea.
+      logStudySession({ taskId: taskId || null, minutes: workMinutes });
+      awardXp("pomodoro", pomodoroEventId(), {
+        value: 10,
+        label: `Pomodoro de ${formatDuration(workMinutes)}`,
+      });
       void showCompletionNotification(
         "Pomodoro completado 🍅",
         `¡Buen trabajo! Descansa ${breakMinutes} min.${taskLabel}`,
@@ -301,6 +328,7 @@ export function PomodoroClient() {
       window.setTimeout(() => {
         setRunning(false);
         setCompletedSessions((n) => n + 1);
+        setShowStudySummary(true);
         setMode("break");
         setSecondsLeft(breakMinutes * 60);
       }, 0);
@@ -439,6 +467,7 @@ export function PomodoroClient() {
     }
     void requestPermissionIfNeeded();
     completedRef.current = false;
+    setShowStudySummary(false);
     setRunning(true);
   }
 
@@ -534,6 +563,30 @@ export function PomodoroClient() {
                   <BellRing className="h-3.5 w-3.5" />
                   Trabajando en: {selectedTask.title}
                 </motion.span>
+              )}
+            </AnimatePresence>
+
+            {/* Resumen de tiempo estudiado tras completar un pomodoro */}
+            <AnimatePresence initial={false}>
+              {showStudySummary && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                  transition={{ duration: 0.25 }}
+                  className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-center text-sm"
+                >
+                  <span className="flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-300">
+                    <GraduationCap className="h-4 w-4" />
+                    ¡Pomodoro completado!
+                  </span>
+                  <span className="text-muted-foreground">
+                    Hoy: <strong className="text-foreground">{formatDuration(study.minutesToday)}</strong>
+                    {" · "}Esta semana:{" "}
+                    <strong className="text-foreground">{formatDuration(study.minutesThisWeek)}</strong>
+                    {" · "}Total: <strong className="text-foreground">{formatDuration(study.totalMinutes)}</strong>
+                  </span>
+                </motion.div>
               )}
             </AnimatePresence>
 
@@ -731,6 +784,29 @@ export function PomodoroClient() {
                   Saltar
                 </Button>
               </div>
+
+              {/* Resumen de tiempo estudiado tras completar un pomodoro */}
+              <AnimatePresence initial={false}>
+                {showStudySummary && (
+                  <motion.p
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
+                    transition={{ duration: 0.25 }}
+                    className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-center text-sm text-muted-foreground"
+                  >
+                    <span className="flex items-center gap-1.5 font-semibold text-emerald-700 dark:text-emerald-300">
+                      <GraduationCap className="h-4 w-4" />
+                      ¡Pomodoro completado!
+                    </span>
+                    <span>
+                      Hoy: <strong className="text-foreground">{formatDuration(study.minutesToday)}</strong>
+                      {" · "}Esta semana:{" "}
+                      <strong className="text-foreground">{formatDuration(study.minutesThisWeek)}</strong>
+                    </span>
+                  </motion.p>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}

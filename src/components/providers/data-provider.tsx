@@ -53,6 +53,7 @@ import { todayKey } from "@/lib/format";
 import { findSubjectByExactName, findSubjectByName, namesMatch } from "@/lib/subjects";
 import { DEFAULT_SLEEP_SETTINGS, roundHours } from "@/lib/sleep";
 import { awardXp, evaluateSleepXp } from "@/lib/xp-system";
+import { resetStudyLog } from "@/lib/study-log";
 
 const STORAGE_KEY = "nucleo:data:v1";
 const STORAGE_VERSION = 1;
@@ -1410,11 +1411,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       toggleTaskDone: (id) => {
-        // Leer el estado actual de forma síncrona para saber si la tarea se
-        // está completando (no descompletando) y otorgar XP en ese momento.
-        const currentTask = stateRef.current.tasks.find((t) => t.id === id);
-        const completing = currentTask ? currentTask.status !== "done" : false;
-
+        // La XP ya no se otorga por completar la tarea: depende del tiempo
+        // invertido (cada pomodoro completado da XP). Aquí solo cambia el estado.
         setState((prev) => {
           const task = prev.tasks.find((t) => t.id === id);
           if (!task) return prev;
@@ -1427,13 +1425,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ),
           };
         });
-
-        // Toda tarea completada da +20 XP (incluidas las sesiones de estudio).
-        // El Pomodoro da +25 por separado al terminar la sesión del temporizador:
-        // son dos eventos independientes, nunca se cuenta dos veces la misma acción.
-        if (completing && currentTask) {
-          awardXp("task", id);
-        }
       },
 
       addNote: (input) => {
@@ -1742,9 +1733,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const userId = uid();
         let createdSubject: Subject | null = null;
         let createdGrade: Grade | null = null;
-        // Tarea que pasa a "done" al enlazarle esta nota (se premia con XP
-        // igual que si se hubiera marcado a mano, una sola vez por tarea).
-        let completedTaskId: string | null = null;
         setState((prev) => {
           let resolvedSubjectId = input.subject_id ?? null;
           const newSubjects: Subject[] = [];
@@ -1791,7 +1779,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             );
             if (foundTask) {
               resolvedTaskId = foundTask.id;
-              if (foundTask.status !== "done") completedTaskId = foundTask.id;
               updatedTasks = prev.tasks.map(
                 (t) =>
                 t.id === foundTask.id ? { ...t, status: "done" as const, updated_at: iso } : t,
@@ -1821,9 +1808,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             grades: [...prev.grades, newGrade],
           };
         });
-        // +20 XP por completar la tarea desde su calificación (una única vez).
-        if (completedTaskId) awardXp("task", completedTaskId);
-
         if (userId !== "local") {
           const subjectToSave = createdSubject as Subject | null;
           const gradeToSave = createdGrade as unknown as Grade;
@@ -1845,13 +1829,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const userId = uid();
         let createdSubjects: Subject[] = [];
         let createdGrades: Grade[] = [];
-        // Tareas que pasan a "done" al enlazarles estas calificaciones.
-        let completedTaskIds: string[] = [];
         setState((prev) => {
           const newSubjects: Subject[] = [];
           const allSubjects = [...prev.subjects];
           let updatedTasks = [...prev.tasks];
-          const completedIds: string[] = [];
 
           const getOrAddSubjectId = (
             subjectId?: string | null,
@@ -1903,7 +1884,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
               );
               if (foundTask) {
                 resolvedTaskId = foundTask.id;
-                if (foundTask.status !== "done") completedIds.push(foundTask.id);
                 updatedTasks = updatedTasks.map(
                   (t) =>
                   t.id === foundTask.id ? { ...t, status: "done" as const, updated_at: iso } : t,
@@ -1927,7 +1907,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
           createdSubjects = newSubjects;
           createdGrades = newGrades;
-          completedTaskIds = completedIds;
           return {
             ...prev,
             subjects: [...prev.subjects, ...newSubjects],
@@ -1935,9 +1914,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             grades: [...prev.grades, ...newGrades],
           };
         });
-        // +20 XP por cada tarea completada desde su calificación (una vez cada una).
-        for (const completed of completedTaskIds) awardXp("task", completed);
-
         if (userId !== "local" && createdGrades.length > 0) {
           void (async () => {
             if (createdSubjects.length > 0) {
@@ -2139,6 +2115,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         // 1. Vaciar el estado local (las vistas se quedan vacías al instante).
         setState(emptyState());
+        // El registro de estudio también vive en el dispositivo: se vacía con
+        // el resto para que "Restablecer todo" deje todo a cero de verdad.
+        resetStudyLog();
 
         // 2. Limpiar localStorage de datos (invitado + usuario). NO se toca
         //    "nucleo:ai-settings:v1": ahí vive la API key del usuario.

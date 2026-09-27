@@ -9,14 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDuration } from "@/lib/format";
+import { useStudyLog } from "@/lib/study-log";
 import { useIsDesktop } from "@/lib/use-is-mobile";
 import { SubjectForm } from "@/components/forms/subject-form";
 import { TaskForm } from "@/components/forms/task-form";
 import { ClassroomConnect } from "./classroom-connect";
 import { SubjectGradesSheet } from "./subject-grades-sheet";
 import { SyncErrorBanner } from "@/components/layout/sync-error-banner";
-import { Check, Plus, Trash2, Award, ChevronRight, ChevronDown } from "lucide-react";
+import { Check, Plus, Trash2, Award, ChevronRight, ChevronDown, BookOpen } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TaskPriority, TaskType, Subject, Task } from "@/lib/types";
 
@@ -42,6 +43,7 @@ function TaskItem({
   task,
   subjectById,
   actions,
+  studiedMinutes = 0,
 }: {
   task: Task;
   subjectById: Map<string, Subject>;
@@ -49,6 +51,8 @@ function TaskItem({
     toggleTaskDone: (id: string) => void;
     deleteTask: (id: string) => void;
   };
+  /** Minutos dedicados a esta tarea con el Pomodoro. */
+  studiedMinutes?: number;
 }) {
   const subject = task.subject_id ? subjectById.get(task.subject_id) : null;
   const done = task.status === "done";
@@ -114,6 +118,17 @@ function TaskItem({
         </p>
       </div>
 
+      {studiedMinutes > 0 && (
+        <Badge
+          variant="outline"
+          className="hidden shrink-0 items-center gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 sm:inline-flex"
+          title="Tiempo dedicado con el Pomodoro"
+        >
+          <BookOpen className="h-3 w-3" />
+          {formatDuration(studiedMinutes)}
+        </Badge>
+      )}
+
       <Badge variant="outline" className={priorityClass[task.priority]}>
         {typeLabel[task.type]}
       </Badge>
@@ -152,6 +167,7 @@ export function AcademicClient() {
   const [subjectsOpen, setSubjectsOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const isDesktop = useIsDesktop();
+  const study = useStudyLog();
 
   if (!hydrated) return <LoadingState />;
 
@@ -405,6 +421,7 @@ export function AcademicClient() {
                     task={task}
                     subjectById={subjectById}
                     actions={actions}
+                    studiedMinutes={study.byTask.get(task.id) ?? 0}
                   />
                 ))}
               </AnimatePresence>
@@ -460,6 +477,7 @@ export function AcademicClient() {
                             task={task}
                             subjectById={subjectById}
                             actions={actions}
+                            studiedMinutes={study.byTask.get(task.id) ?? 0}
                           />
                         ))}
                       </motion.ul>

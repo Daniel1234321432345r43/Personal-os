@@ -8,7 +8,11 @@ import type { Habit, HabitCompletion } from "@/lib/types";
 
 // ─── Constantes ─────────────────────────────────────────────────────────────
 
-export const XP_REWARDS = { task: 20, pomodoro: 25, habit: 5, sleep: 15 } as const;
+// La XP va ligada al TIEMPO invertido, no a completar la tarea: cada pomodoro
+// de trabajo completado da 10 XP (una tarea de 3 h da mucho más que una de 10
+// min porque acumula más pomodoros). `task` se conserva para el tipo y los
+// colores, pero ya no se otorga al marcar una tarea como hecha.
+export const XP_REWARDS = { task: 20, pomodoro: 10, habit: 5, sleep: 15 } as const;
 
 /**
  * XP del módulo de Sueño según el cumplimiento del objetivo de horas
