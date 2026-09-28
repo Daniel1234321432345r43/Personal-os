@@ -673,10 +673,14 @@ export function SecretaryChat() {
             opacity: { duration: 0.3 },
             y: { duration: 0.3 },
           }}
-          className="overflow-hidden"
+          className="overflow-hidden lg:flex lg:min-h-0 lg:flex-1 lg:flex-col"
         >
-          <CardContent className="pt-0">
-            <div className="flex h-[min(420px,55dvh)] flex-col">
+          <CardContent className="pt-0 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
+            {/* En escritorio la tarjeta se estira hasta la altura de la fila
+                (la columna derecha suele ser más alta), así que el chat ocupa
+                todo ese alto y la caja de escribir queda pegada abajo del todo
+                en vez de quedarse a media altura con un hueco debajo. */}
+            <div className="flex h-[min(420px,55dvh)] flex-col lg:h-auto lg:min-h-[min(420px,55dvh)] lg:flex-1">
               <div
                 ref={scrollAreaRef}
                 className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain pr-3"

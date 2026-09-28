@@ -14,8 +14,6 @@ import {
 import { useXpSystem, LEVELS, readSeenLevel, writeSeenLevel } from "@/lib/xp-system";
 import { effectiveXpCap } from "@/lib/xp-cap";
 
-const TREE_API = "/api/tree/progress";
-
 type SceneTime = "day" | "night";
 
 function getSceneTime(date = new Date()): SceneTime {
@@ -189,7 +187,6 @@ export function ProgressTree() {
   const [open, setOpen] = useState(false);
   const [transitionKey, setTransitionKey] = useState(0);
   const [pendingGrowthMessage, setPendingGrowthMessage] = useState(false);
-  const [remoteLoaded, setRemoteLoaded] = useState(false);
   const reduced = useReducedMotion();
   const [now, setNow] = useState(() => new Date());
   const sceneTime = useMemo(() => getSceneTime(now), [now]);
@@ -247,34 +244,8 @@ export function ProgressTree() {
     return (h % 141) - 70;
   };
 
-  // Cargar el XP remoto de Supabase una sola vez al montar.
-  useEffect(() => {
-    let cancelled = false;
-    fetch(TREE_API)
-      .then((response) => (response.ok ? response.json() : null))
-      .then(() => {
-        if (!cancelled) setRemoteLoaded(true);
-      })
-      .catch(() => {
-        if (!cancelled) setRemoteLoaded(true);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  // Sincronizar el resumen local a Supabase cuando cambia el XP.
-  useEffect(() => {
-    if (!remoteLoaded) return;
-    const timer = window.setTimeout(() => {
-      void fetch(TREE_API, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ xp: tree.xp, level: tree.level }),
-      });
-    }, 500);
-    return () => window.clearTimeout(timer);
-  }, [tree.xp, tree.level, remoteLoaded]);
+  // El XP se sincroniza en `@/lib/xp-system` (fusión al abrir la app y subida
+  // del delta con retardo). Aquí solo se pinta el árbol.
 
   // Partículas visuales del árbol: se derivan directamente de las
   // notificaciones activas. Como los toasts se autodescartan (dismiss), las

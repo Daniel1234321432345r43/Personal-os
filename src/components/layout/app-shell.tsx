@@ -14,10 +14,13 @@ import { usePullRefresh } from "@/lib/use-pull-refresh";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { FullScreenLoader } from "@/components/ui/full-screen-loader";
 import { Loader2, RotateCw } from "lucide-react";
 import { ProgressTree } from "@/components/layout/progress-tree";
 import { XpToast } from "@/components/layout/xp-toast";
 import { XpPenalizer } from "@/lib/xp-penalizer";
+import { useData } from "@/components/providers/data-provider";
+import { startXpSync } from "@/lib/xp-system";
 
 import {
   LayoutDashboard,
@@ -78,6 +81,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   const reduceMotion = useReducedMotion();
   const configured = isSupabaseConfigured();
   const [email, setEmail] = useState<string | null>(null);
+  const { ready } = useData();
+
+  // Sincronización del árbol de XP con la nube: fusión al abrir la app y cada
+  // vez que vuelve a primer plano, así el XP viaja entre el móvil y el
+  // ordenador de la misma cuenta.
+  useEffect(() => {
+    startXpSync();
+  }, []);
 
   useEffect(() => {
     if (!configured) return;
@@ -236,6 +247,11 @@ export function AppShell({ children }: { children: ReactNode }) {
         duration: 0.38,
         ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number],
       };
+
+  /* Mientras la carga inicial está en marcha (localStorage + primera
+     sincronización con la nube) se muestra la pantalla de carga a pantalla
+     completa, igual en el ordenador y en el móvil, en lugar del panel vacío. */
+  if (!ready) return <FullScreenLoader />;
 
   /* `overflow-x-clip` en la raíz: el gesto de swipe desplaza la superficie de
      página con un transform y, sin recorte, ese desplazamiento ensancha el

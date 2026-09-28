@@ -65,6 +65,12 @@ export type SavedTree = {
   level: number;
   xpToday: number;
   lastDate: string;
+  /**
+   * Último total que este dispositivo sabe que está guardado en la nube.
+   * `null` = este dispositivo todavía no ha sincronizado nunca el árbol (ver
+   * `syncTreeProgress`).
+   */
+  syncedXp: number | null;
 };
 
 // ─── Almacenamiento ──────────────────────────────────────────────────────────
@@ -122,7 +128,7 @@ function addDays(dateStr: string, n: number): string {
 }
 
 export function emptyTree(): SavedTree {
-  return { xp: 0, level: 0, xpToday: 0, lastDate: yesterdayKey() };
+  return { xp: 0, level: 0, xpToday: 0, lastDate: yesterdayKey(), syncedXp: null };
 }
 
 function readTree(): SavedTree {
@@ -134,6 +140,7 @@ function readTree(): SavedTree {
     level: typeof parsed.level === "number" ? parsed.level : levelForXp(parsed.xp ?? 0),
     xpToday: parsed.xpToday ?? 0,
     lastDate: parsed.lastDate ?? yesterdayKey(),
+    syncedXp: typeof parsed.syncedXp === "number" ? parsed.syncedXp : null,
   });
 
   // 1) Clave actual.
@@ -264,6 +271,108 @@ function getServerSnapshot() {
   return EMPTY_STORE_STATE;
 }
 
+// ─── Sincronización con la nube ──────────────────────────────────────────────
+//
+// El XP es un contador COMPARTIDO por cuenta: la nube guarda un único total por
+// usuario (`tree_progress`) y aquí solo viaja el DELTA ganado en este
+// dispositivo desde la última subida correcta (`syncedXp`). Antes cada
+// dispositivo subía su total local y el último en abrir la app borraba el del
+// otro, así que el XP no viajaba entre el móvil y el ordenador.
+//
+// Con el delta, dos dispositivos no se pisan (lo ganado en uno se suma a lo que
+// ya había) y las penalizaciones también se propagan, porque van dentro del
+// delta aunque no sean eventos.
+
+const TREE_API = "/api/tree/progress";
+
+let uploadTimer: ReturnType<typeof setTimeout> | null = null;
+/** `startXpSync` se ejecuta una sola vez por carga de la app. */
+let syncStarted = false;
+
+/** Sube el total actual de este dispositivo. Al confirmarse, queda sincronizado. */
+async function uploadTree(): Promise<boolean> {
+  const uploaded = storeState.tree.xp;
+  try {
+    const res = await fetch(TREE_API, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ xp: uploaded, level: levelForXp(uploaded) }),
+    });
+    if (!res.ok) return false;
+  } catch {
+    return false;
+  }
+  // Se relee el árbol VIVO: puede haber ganado XP mientras la petición iba en
+  // camino, y eso todavía no está en la nube.
+  const next: SavedTree = { ...storeState.tree, syncedXp: uploaded };
+  writeTree(next);
+  storeState = { ...storeState, tree: next };
+  return true;
+}
+
+/** Sube el XP con un pequeño retardo para agrupar ráfagas de premios. */
+function scheduleUpload(): void {
+  if (typeof window === "undefined") return;
+  if (uploadTimer) clearTimeout(uploadTimer);
+  uploadTimer = setTimeout(() => {
+    uploadTimer = null;
+    void uploadTree();
+  }, 600);
+}
+
+/**
+ * Fusiona el XP local con el de la nube. Se llama al abrir la app y cada vez
+ * que vuelve a primer plano, así el XP ganado en el ordenador aparece en el
+ * móvil en cuanto se abre. Sin sesión (401) o sin red se queda lo local.
+ */
+export async function syncTreeProgress(): Promise<void> {
+  if (typeof window === "undefined") return;
+  let remoteXp: number;
+  try {
+    const res = await fetch(TREE_API);
+    if (!res.ok) return;
+    const payload = (await res.json()) as { xp?: unknown } | null;
+    const xp = payload?.xp;
+    remoteXp =
+      typeof xp === "number" && Number.isFinite(xp) ? Math.max(0, Math.floor(xp)) : 0;
+  } catch {
+    return;
+  }
+
+  const local = storeState.tree;
+  const base =
+    local.syncedXp === null
+      // Primer contacto de este dispositivo con la nube: se fusiona tomando el
+      // mayor, para no sumar dos veces el mismo trabajo hecho antes de que
+      // existiera la sincronización (cada dispositivo ya tenía su XP propio).
+      ? Math.max(local.xp, remoteXp)
+      // Ya sincronizado alguna vez: encima del total remoto solo va lo ganado
+      // (o restado) aquí desde la última subida correcta.
+      : Math.max(0, remoteXp + (local.xp - local.syncedXp));
+
+  if (base !== local.xp) {
+    const next: SavedTree = { ...local, xp: base, level: levelForXp(base) };
+    writeTree(next);
+    storeState = { ...storeState, tree: next };
+    emit();
+  }
+  // Deja la nube y `syncedXp` al día con el resultado de la fusión.
+  await uploadTree();
+}
+
+/**
+ * Arranca la sincronización del XP: una fusión al montar y otra cada vez que
+ * la app vuelve a primer plano. Idempotente (React puede montar dos veces).
+ */
+export function startXpSync(): void {
+  if (typeof window === "undefined" || syncStarted) return;
+  syncStarted = true;
+  void syncTreeProgress();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void syncTreeProgress();
+  });
+}
+
 // ─── API pública ─────────────────────────────────────────────────────────────
 
 export type XpKind = keyof typeof XP_REWARDS;
@@ -363,6 +472,8 @@ export function awardXp(
   };
 
   emit();
+  // El XP es compartido: cada premio viaja a la nube (con retardo, agrupado).
+  scheduleUpload();
 }
 
 /**
@@ -394,9 +505,9 @@ export function dismissNotification(id: string): void {
 
 /**
  * Reinicia el progreso del árbol: elimina el XP, el nivel, el contador
- * diario, las penalizaciones y las celebraciones guardadas (solo en este
- * dispositivo, igual que el resto del sistema de XP) y notifica a los
- * suscriptores para que el árbol vuelva a la fase inicial al instante.
+ * diario, las penalizaciones y las celebraciones guardadas, lo propaga a la
+ * nube (para que no vuelva al abrir la app en otro dispositivo) y notifica a
+ * los suscriptores para que el árbol vuelva a la fase inicial al instante.
  */
 export function resetTree(): void {
   if (typeof window !== "undefined") {
@@ -413,8 +524,13 @@ export function resetTree(): void {
   // Se vacía también el registro de tareas para que, tras reiniciar el
   // progreso, volver a completarlas vuelva a dar XP desde cero.
   taskCredits.clear();
-  storeState = { tree: emptyTree(), notifications: [] };
+  // `syncedXp: 0` (y no `null`) porque el reinicio también se propaga a la
+  // nube: así el XP no vuelve al abrir la app en este ni en otro dispositivo.
+  const reset: SavedTree = { ...emptyTree(), syncedXp: 0 };
+  writeTree(reset);
+  storeState = { tree: reset, notifications: [] };
   emit();
+  void uploadTree();
 }
 
 /**
@@ -486,6 +602,7 @@ export function applyHabitPenalty(habits: Habit[], completions: HabitCompletion[
     notifications: [...storeState.notifications, notification].slice(-6),
   };
   emit();
+  scheduleUpload();
 }
 
 /**

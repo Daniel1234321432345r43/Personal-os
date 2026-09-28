@@ -52,7 +52,7 @@ import { computeFinance, type DashboardData } from "@/lib/data";
 import { todayKey } from "@/lib/format";
 import { findSubjectByExactName, findSubjectByName, namesMatch } from "@/lib/subjects";
 import { DEFAULT_SLEEP_SETTINGS, roundHours } from "@/lib/sleep";
-import { awardXp, evaluateSleepXp } from "@/lib/xp-system";
+import { awardXp, evaluateSleepXp, resetTree } from "@/lib/xp-system";
 import { resetStudyLog } from "@/lib/study-log";
 
 const STORAGE_KEY = "nucleo:data:v1";
@@ -207,6 +207,13 @@ export interface DataActions {
 interface DataContextValue {
   data: DashboardData;
   hydrated: boolean;
+  /**
+   * Todo listo para pintar la app: localStorage leído y, si hay sesión, la
+   * primera sincronización con la nube ya terminada. La app espera a esto para
+   * mostrar la pantalla de carga en vez de un panel vacío mientras llegan los
+   * datos (en el móvil se veían ~2 s de datos en blanco al abrir).
+   */
+  ready: boolean;
   actions: DataActions;
   /**
    * Aviso de la última sincronización fallida con la nube. Antes un borrado
@@ -550,6 +557,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
    * vez con el estado VIVO, así lo que se creó durante la carga también sube.
    */
   const [initialSyncDone, setInitialSyncDone] = useState(false);
+  /**
+   * Red de seguridad: sin red, la comprobación de sesión puede quedarse
+   * colgada. Pasado un tiempo se pinta la app con lo que hay en el dispositivo
+   * en lugar de dejar la pantalla de carga para siempre.
+   */
+  const [syncTimedOut, setSyncTimedOut] = useState(false);
   const userIdRef = useRef<string | null>(null);
   const syncedRef = useRef(false);
   /**
@@ -565,6 +578,11 @@ export function DataProvider({ children }: { children: ReactNode }) {
   /** El aviso de "falta la migración de borrados" solo se muestra una vez. */
   const schemaHintShownRef = useRef(false);
   const syncErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setSyncTimedOut(true), 8_000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Registro del canal de errores de sincronización (ver syncSupabase).
   useEffect(() => {
@@ -917,18 +935,39 @@ export function DataProvider({ children }: { children: ReactNode }) {
       }
       console.info("[Supabase diagnóstico] cliente", { configured, projectHost });
 
-      const { data: { user }, error } = await _supabase.auth.getUser();
-      if (error) {
-        console.error("[Supabase] comprobar sesión:", error.message);
+      if (!configured) {
+        // Sin Supabase no hay nada remoto que esperar: la app se pinta con los
+        // datos del dispositivo.
+        setInitialSyncDone(true);
+        return;
       }
-      console.info("[Supabase diagnóstico] sesión inicial:", user ? user.id : "ninguna");
-      if (user) {
+
+      let userId: string | null = null;
+      try {
+        const { data, error } = await _supabase.auth.getUser();
+        if (error) {
+          console.error("[Supabase] comprobar sesión:", error.message);
+        }
+        userId = data.user?.id ?? null;
+      } catch (error) {
+        // Sin red la comprobación puede rechazar: se sigue con lo local en vez
+        // de dejar la pantalla de carga esperando para siempre.
+        console.error("[Supabase] no se pudo comprobar la sesión:", error);
+      }
+      console.info("[Supabase diagnóstico] sesión inicial:", userId ?? "ninguna");
+      if (userId) {
         try {
-          await syncUser(user.id);
+          await syncUser(userId);
         } catch (error) {
           syncedRef.current = false;
           console.error("[Supabase] sincronización inicial fallida:", error);
+          // La carga no puede quedarse esperando para siempre.
+          setInitialSyncDone(true);
         }
+      } else {
+        // Sin sesión (invitado, o la comprobación ha fallado): no hay nada que
+        // esperar de la nube, así que la app puede pintarse ya con lo local.
+        setInitialSyncDone(true);
       }
     };
 
@@ -2118,6 +2157,10 @@ export function DataProvider({ children }: { children: ReactNode }) {
         // El registro de estudio también vive en el dispositivo: se vacía con
         // el resto para que "Restablecer todo" deje todo a cero de verdad.
         resetStudyLog();
+        // El árbol de XP se vacía (y se propaga a la nube) con el resto: sin
+        // esto, el XP local volvería a subirse al servidor acto seguido y el
+        // progreso reaparecería tras "Restablecer todo".
+        resetTree();
 
         // 2. Limpiar localStorage de datos (invitado + usuario). NO se toca
         //    "nucleo:ai-settings:v1": ahí vive la API key del usuario.
@@ -2181,11 +2224,12 @@ export function DataProvider({ children }: { children: ReactNode }) {
     return {
       data: { ...state, finance },
       hydrated,
+      ready: hydrated && (initialSyncDone || syncTimedOut),
       actions,
       syncError,
       clearSyncError,
     };
-  }, [state, hydrated, actions, syncError, clearSyncError]);
+  }, [state, hydrated, initialSyncDone, syncTimedOut, actions, syncError, clearSyncError]);
 
   return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 }
