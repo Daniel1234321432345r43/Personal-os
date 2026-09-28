@@ -76,9 +76,18 @@ export function DashboardClient() {
             </CardContent>
           </Card>
 
+          {/* Exámenes y tareas van en tarjetas distintas: mezclados, los
+              exámenes de la próxima semana escondían las entregas. */}
+          {/* En móvil los exámenes ya encabezan «Hoy»; aquí solo en escritorio. */}
+          <Card className="hidden bg-muted/40 lg:block">
+            <CardContent className="pt-4">
+              <UpcomingTasks data={data} kind="exams" />
+            </CardContent>
+          </Card>
+
           <Card className="bg-muted/40">
             <CardContent className="pt-4">
-              <UpcomingTasks data={data} />
+              <UpcomingTasks data={data} kind="tasks" />
             </CardContent>
           </Card>
         </div>

@@ -15,6 +15,14 @@ const TYPES: { value: TaskType; label: string }[] = [
   { value: "task", label: "Tarea" },
 ];
 
+/** Cómo se llama lo que se está añadiendo, para el botón de enviar. */
+const ADD_NOUN: Record<TaskType, string> = {
+  study_session: "sesión de estudio",
+  assignment: "entrega",
+  exam: "examen",
+  task: "tarea",
+};
+
 const PRIORITIES: { value: TaskPriority; label: string }[] = [
   { value: "low", label: "Baja" },
   { value: "medium", label: "Media" },
@@ -119,7 +127,9 @@ export function TaskForm({
     }
 
     setTitle("");
-    setType("study_session");
+    // Volver al tipo con el que se abrió el formulario (puede venir prefijado
+    // desde la tarjeta de exámenes o desde la de tareas).
+    setType(initialType);
     setSubjectId("");
     setPriority("medium");
     setDueDate(initialDueDate || todayKey());
@@ -398,7 +408,7 @@ export function TaskForm({
         <Button type="submit">
           {isMultiDay
             ? `Crear ${sessionDates.length} sesiones`
-            : "Añadir tarea"}
+            : `Añadir ${ADD_NOUN[type]}`}
         </Button>
       </div>
     </form>

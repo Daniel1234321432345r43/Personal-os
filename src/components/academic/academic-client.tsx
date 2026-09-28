@@ -159,13 +159,156 @@ function LoadingState() {
   );
 }
 
+/**
+ * Tarjeta con una lista de plazos. Se usa dos veces —exámenes por un lado y
+ * tareas/entregas por otro— porque con una decena de exámenes apuntados para
+ * las próximas semanas, una sola lista mezclada enterraba los trabajos y había
+ * que buscarlos para marcarlos como hechos.
+ */
+function TaskCard({
+  className,
+  title,
+  newLabel,
+  formTitle,
+  emptyText,
+  initialType,
+  tasks,
+  completed,
+  subjectById,
+  actions,
+  study,
+}: {
+  className?: string;
+  title: string;
+  newLabel: string;
+  formTitle: string;
+  emptyText: string;
+  initialType: TaskType;
+  /** Pendientes, ya ordenadas por fecha. */
+  tasks: Task[];
+  /** Completadas, ya ordenadas por fecha. */
+  completed: Task[];
+  subjectById: Map<string, Subject>;
+  actions: {
+    toggleTaskDone: (id: string) => void;
+    deleteTask: (id: string) => void;
+  };
+  study: ReturnType<typeof useStudyLog>;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const isDesktop = useIsDesktop();
+
+  const renderTask = (task: Task) => (
+    <TaskItem
+      key={task.id}
+      task={task}
+      subjectById={subjectById}
+      actions={actions}
+      studiedMinutes={study.byTask.get(task.id) ?? 0}
+    />
+  );
+
+  return (
+    <Card className={className}>
+      <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+        <CardTitle className="text-base">{title}</CardTitle>
+        <Button size="sm" onClick={() => setShowForm((v) => !v)}>
+          <Plus className="h-4 w-4" />
+          {newLabel}
+        </Button>
+      </CardHeader>
+      <CardContent>
+        {/* Escritorio: formulario inline (como antes). Solo se dibuja cuando
+            está abierto; si no, quedaba una caja vacía con borde. */}
+        {showForm && (
+          <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
+            <TaskForm
+              onDone={() => setShowForm(false)}
+              initialType={initialType}
+            />
+          </div>
+        )}
+        {/* Móvil: bottom sheet */}
+        <ResponsiveFormSheet
+          open={showForm}
+          onOpenChange={setShowForm}
+          title={formTitle}
+        >
+          <TaskForm onDone={() => setShowForm(false)} initialType={initialType} />
+        </ResponsiveFormSheet>
+
+        <motion.ul
+          className="divide-y"
+          initial="hidden"
+          animate="visible"
+          variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
+        >
+          <AnimatePresence initial={tasks.length === 0}>
+            {tasks.map(renderTask)}
+          </AnimatePresence>
+        </motion.ul>
+        {tasks.length === 0 && (
+          <p className="text-sm text-muted-foreground">{emptyText}</p>
+        )}
+
+        {completed.length > 0 && (
+          <div className="mt-2 border-t pt-2">
+            <button
+              type="button"
+              onClick={() => setShowCompleted((v) => !v)}
+              aria-expanded={isDesktop || showCompleted}
+              className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 lg:hidden"
+            >
+              <span className="flex items-center gap-2">
+                <Check className="h-4 w-4" />
+                Completadas ({completed.length})
+              </span>
+              <motion.span
+                animate={{ rotate: showCompleted ? 180 : 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </motion.span>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {(isDesktop || showCompleted) && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{
+                    height: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] },
+                    opacity: { duration: 0.25 },
+                  }}
+                  className="overflow-hidden"
+                >
+                  <motion.ul
+                    className="divide-y"
+                    initial="hidden"
+                    animate="visible"
+                    variants={{
+                      visible: { transition: { staggerChildren: 0.08 } },
+                    }}
+                  >
+                    {completed.map(renderTask)}
+                  </motion.ul>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export function AcademicClient() {
   const { data, hydrated, actions } = useData();
   const [showSubject, setShowSubject] = useState(false);
-  const [showTask, setShowTask] = useState(false);
   const [selectedSubject, setSelectedSubject] = useState<Subject | null>(null);
   const [subjectsOpen, setSubjectsOpen] = useState(false);
-  const [showCompleted, setShowCompleted] = useState(false);
   const isDesktop = useIsDesktop();
   const study = useStudyLog();
 
@@ -185,9 +328,17 @@ export function AcademicClient() {
       (a.due_date ?? "9999-12-31").localeCompare(b.due_date ?? "9999-12-31") ||
       (a.created_at ?? "").localeCompare(b.created_at ?? ""),
   );
-  // Pendientes siempre visibles; completadas ocultas detrás del acordeón.
-  const pendingTasks = allTasks.filter((t) => t.status !== "done");
-  const completedTasks = allTasks.filter((t) => t.status === "done");
+  // Pendientes siempre visibles; completadas ocultas detrás del acordeón. Los
+  // exámenes van en su propia tarjeta para no sepultar las entregas.
+  const isExam = (t: Task) => t.type === "exam";
+  const pendingExams = allTasks.filter((t) => t.status !== "done" && isExam(t));
+  const pendingTasks = allTasks.filter(
+    (t) => t.status !== "done" && !isExam(t),
+  );
+  const completedExams = allTasks.filter((t) => t.status === "done" && isExam(t));
+  const completedTasks = allTasks.filter(
+    (t) => t.status === "done" && !isExam(t),
+  );
 
   return (
     <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
@@ -200,8 +351,8 @@ export function AcademicClient() {
 
       <SyncErrorBanner />
 
-      {/* Asignaturas (van debajo de Tareas, en todos los tamaños) */}
-      <Card className="order-2">
+      {/* Asignaturas (van debajo de exámenes y tareas, en todos los tamaños) */}
+      <Card className="order-3">
         <CardHeader className="pb-3">
           <div className="hidden lg:block">
             <CardTitle className="text-base">Asignaturas</CardTitle>
@@ -251,10 +402,13 @@ export function AcademicClient() {
               Nueva asignatura
             </Button>
           </div>
-          {/* Escritorio: formulario inline (como antes) */}
-          <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
-            {showSubject && <SubjectForm onDone={() => setShowSubject(false)} />}
-          </div>
+          {/* Escritorio: formulario inline (como antes). Solo se dibuja cuando
+              está abierto; si no, quedaba una caja vacía con borde. */}
+          {showSubject && (
+            <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
+              <SubjectForm onDone={() => setShowSubject(false)} />
+            </div>
+          )}
           {/* Móvil: bottom sheet */}
           <ResponsiveFormSheet
             open={showSubject}
@@ -384,114 +538,38 @@ export function AcademicClient() {
       />
 
 
-      {/* Tareas y entregas (van primero, en todos los tamaños) */}
-      <Card className="order-1">
-        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base">Tareas y entregas</CardTitle>
-          <Button size="sm" onClick={() => setShowTask((v) => !v)}>
-            <Plus className="h-4 w-4" />
-            Nueva
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {/* Escritorio: formulario inline (como antes) */}
-          <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
-            {showTask && <TaskForm onDone={() => setShowTask(false)} />}
-          </div>
-          {/* Móvil: bottom sheet */}
-          <ResponsiveFormSheet
-            open={showTask}
-            onOpenChange={setShowTask}
-            title="Nueva tarea o entrega"
-          >
-            <TaskForm onDone={() => setShowTask(false)} />
-          </ResponsiveFormSheet>
+      {/* Exámenes y tareas en tarjetas separadas (y primero, en todos los
+          tamaños): una sola lista mezclada escondía los trabajos. */}
+      <TaskCard
+        className="order-1"
+        title="Exámenes"
+        newLabel="Nuevo"
+        formTitle="Nuevo examen"
+        emptyText="No tienes exámenes pendientes."
+        initialType="exam"
+        tasks={pendingExams}
+        completed={completedExams}
+        subjectById={subjectById}
+        actions={actions}
+        study={study}
+      />
 
-          <>
-            <motion.ul
-              className="divide-y"
-              initial="hidden"
-              animate="visible"
-              variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-            >
-              <AnimatePresence initial={allTasks.length === 0}>
-                {pendingTasks.map((task) => (
-                  <TaskItem
-                    key={task.id}
-                    task={task}
-                    subjectById={subjectById}
-                    actions={actions}
-                    studiedMinutes={study.byTask.get(task.id) ?? 0}
-                  />
-                ))}
-              </AnimatePresence>
-            </motion.ul>
-            {allTasks.length === 0 && (
-              <p className="text-sm text-muted-foreground">
-                No tienes tareas todavía. Añade la primera con «Nueva» o pídesela
-                al Secretario.
-              </p>
-            )}
-
-            {completedTasks.length > 0 && (
-              <div className="mt-2 border-t pt-2">
-                <button
-                  type="button"
-                  onClick={() => setShowCompleted((v) => !v)}
-                  aria-expanded={isDesktop || showCompleted}
-                  className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 lg:hidden"
-                >
-                  <span className="flex items-center gap-2">
-                    <Check className="h-4 w-4" />
-                    Completadas ({completedTasks.length})
-                  </span>
-                  <motion.span
-                    animate={{ rotate: showCompleted ? 180 : 0 }}
-                    transition={{ duration: 0.3, ease: "easeInOut" }}
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </motion.span>
-                </button>
-
-                <AnimatePresence initial={false}>
-                  {(isDesktop || showCompleted) && (
-                    <motion.div
-                      initial={{ height: 0, opacity: 0 }}
-                      animate={{ height: "auto", opacity: 1 }}
-                      exit={{ height: 0, opacity: 0 }}
-                      transition={{
-                        height: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] },
-                        opacity: { duration: 0.25 },
-                      }}
-                      className="overflow-hidden"
-                    >
-                      <motion.ul
-                        className="divide-y"
-                        initial="hidden"
-                        animate="visible"
-                        variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
-                      >
-                        {completedTasks.map((task) => (
-                          <TaskItem
-                            key={task.id}
-                            task={task}
-                            subjectById={subjectById}
-                            actions={actions}
-                            studiedMinutes={study.byTask.get(task.id) ?? 0}
-                          />
-                        ))}
-                      </motion.ul>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            )}
-          </>
-        </CardContent>
-      </Card>
+      <TaskCard
+        className="order-2"
+        title="Tareas y entregas"
+        newLabel="Nueva"
+        formTitle="Nueva tarea o entrega"
+        emptyText="No tienes tareas ni entregas pendientes. Añade la primera con «Nueva» o pídesela al Secretario."
+        initialType="assignment"
+        tasks={pendingTasks}
+        completed={completedTasks}
+        subjectById={subjectById}
+        actions={actions}
+        study={study}
+      />
 
       {/* Sincronización con Classroom */}
-      <Card className="order-3">
+      <Card className="order-4">
         <CardHeader className="pb-3">
           <CardTitle className="text-base">Google Classroom</CardTitle>
         </CardHeader>
