@@ -1450,8 +1450,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
       },
 
       toggleTaskDone: (id) => {
-        // La XP ya no se otorga por completar la tarea: depende del tiempo
-        // invertido (cada pomodoro completado da XP). Aquí solo cambia el estado.
+        // Completar una tarea da su XP (y su aviso: "+20 XP · Tarea
+        // completada"), además del XP por tiempo de estudio de los pomodoros.
+        // El aviso deja claro cuánto ha dado la acción; desmarcarla no da ni
+        // quita XP (awardXp recuerda cada tarea una sola vez).
+        const current = stateRef.current.tasks.find((t) => t.id === id);
+        const completing = !!current && current.status !== "done";
+
         setState((prev) => {
           const task = prev.tasks.find((t) => t.id === id);
           if (!task) return prev;
@@ -1464,6 +1469,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ),
           };
         });
+
+        if (completing) awardXp("task", id);
       },
 
       addNote: (input) => {
@@ -2154,8 +2161,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
 
         // 1. Vaciar el estado local (las vistas se quedan vacías al instante).
         setState(emptyState());
-        // El registro de estudio también vive en el dispositivo: se vacía con
-        // el resto para que "Restablecer todo" deje todo a cero de verdad.
+        // El registro de estudio se vacía con el resto (y también en la nube,
+        // o los minutos reaparecerían al abrir la app en otro dispositivo).
         resetStudyLog();
         // El árbol de XP se vacía (y se propaga a la nube) con el resto: sin
         // esto, el XP local volvería a subirse al servidor acto seguido y el

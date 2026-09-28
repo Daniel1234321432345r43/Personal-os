@@ -284,6 +284,8 @@ function getServerSnapshot() {
 // delta aunque no sean eventos.
 
 const TREE_API = "/api/tree/progress";
+/** Avisos compartidos de tareas completadas en otros dispositivos. */
+const XP_EVENTS_API = "/api/xp/events";
 
 let uploadTimer: ReturnType<typeof setTimeout> | null = null;
 /** `startXpSync` se ejecuta una sola vez por carga de la app. */
@@ -360,6 +362,137 @@ export async function syncTreeProgress(): Promise<void> {
   await uploadTree();
 }
 
+// ─── Avisos de tareas completadas en otros dispositivos ──────────────────────
+//
+// El XP del árbol ya viaja por deltas, pero un aviso ("+20 XP · Tarea
+// completada") es un ACONTECIMIENTO, no un total: para poder mostrarlo en el
+// móvil después de completar la tarea en el ordenador hay que dejar constancia
+// compartida. Se anota en `tree_xp_events` a través de /api/xp/events (ver esa
+// ruta: NO suma XP allí) y cada dispositivo avisa de lo que aún no conocía.
+
+/** Último aviso remoto ya visto por ESTE dispositivo (ISO). */
+const REMOTE_SEEN_KEY = "nucleo:xp-remote-seen:v1";
+
+interface RemoteTaskEvent {
+  taskId: string;
+  xp: number;
+  createdAt: string;
+}
+
+/**
+ * Anota en la nube que esta tarea se ha completado, para que el resto de
+ * dispositivos puedan avisar de ello. No suma XP: el total del árbol viaja
+ * aparte con `uploadTree`.
+ */
+function publishTaskCompletion(taskId: string, xp: number): void {
+  void fetch(XP_EVENTS_API, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ taskId, xp }),
+  }).catch(() => {
+    // Sin red: los otros dispositivos no verán el aviso (el XP sí llega).
+  });
+}
+
+function readRemoteSeen(): string | null {
+  if (typeof window === "undefined") return null;
+  try { return localStorage.getItem(REMOTE_SEEN_KEY); } catch { return null; }
+}
+
+function writeRemoteSeen(iso: string): void {
+  if (typeof window === "undefined") return;
+  try { localStorage.setItem(REMOTE_SEEN_KEY, iso); } catch { /* noop */ }
+}
+
+function parseRemoteEvents(raw: unknown): RemoteTaskEvent[] {
+  if (!Array.isArray(raw)) return [];
+  const events: RemoteTaskEvent[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const e = item as Record<string, unknown>;
+    const xp = Number(e.xp);
+    if (
+      typeof e.taskId !== "string" ||
+      !e.taskId ||
+      typeof e.createdAt !== "string" ||
+      !Number.isFinite(xp)
+    ) {
+      continue;
+    }
+    events.push({ taskId: e.taskId, xp: Math.max(0, Math.round(xp)), createdAt: e.createdAt });
+  }
+  return events;
+}
+
+/**
+ * Muestra los avisos de tareas completadas en otro dispositivo (mensajito
+ * dentro de la app, sin tocar la XP: en el dispositivo donde se completó ya se
+ * otorgó, y aquí llega dentro del total al fusionar).
+ */
+async function syncRemoteCelebrations(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const cursor = readRemoteSeen();
+
+  let events: RemoteTaskEvent[];
+  let serverNow: string | null;
+  try {
+    const res = await fetch(
+      `${XP_EVENTS_API}${cursor ? `?since=${encodeURIComponent(cursor)}` : ""}`,
+    );
+    if (!res.ok) return;
+    const payload = (await res.json()) as { events?: unknown; now?: unknown } | null;
+    events = parseRemoteEvents(payload?.events);
+    serverNow = typeof payload?.now === "string" ? payload.now : null;
+  } catch {
+    return;
+  }
+
+  // Primera consulta de este dispositivo: solo se marca el punto de partida
+  // (un móvil recién instalado no debe soltar un aluvión con todo lo completado
+  // desde siempre). Si todavía no hay eventos, se usa el reloj del servidor;
+  // así el primer aviso de verdad sí se ve.
+  if (cursor === null) {
+    const baseline =
+      events.length > 0
+        ? events.reduce((max, e) => (e.createdAt > max ? e.createdAt : max), events[0].createdAt)
+        : (serverNow ?? new Date().toISOString());
+    writeRemoteSeen(baseline);
+    return;
+  }
+
+  if (events.length === 0) return;
+
+  const newest = events.reduce(
+    (max, e) => (e.createdAt > max ? e.createdAt : max),
+    events[0].createdAt,
+  );
+
+  const fresh = events.filter((e) => !taskCredits.has(`task:${e.taskId}`));
+  writeRemoteSeen(newest);
+  if (fresh.length === 0) return;
+
+  const notifications: XpNotification[] = fresh.map((e) => {
+    // Se apunta como evento conocido para no repetir el aviso en cada apertura
+    // (ni volver a premiar esa tarea aquí).
+    taskCredits.add(`task:${e.taskId}`);
+    return {
+      id: `remote:task:${e.taskId}:${e.createdAt}`,
+      kind: "task",
+      value: e.xp,
+      color: XP_COLORS.task,
+      label: "Completada en otro dispositivo",
+      limit: false,
+    };
+  });
+  writeTaskCredits(taskCredits);
+
+  storeState = {
+    ...storeState,
+    notifications: [...storeState.notifications, ...notifications].slice(-6),
+  };
+  emit();
+}
+
 /**
  * Arranca la sincronización del XP: una fusión al montar y otra cada vez que
  * la app vuelve a primer plano. Idempotente (React puede montar dos veces).
@@ -368,8 +501,12 @@ export function startXpSync(): void {
   if (typeof window === "undefined" || syncStarted) return;
   syncStarted = true;
   void syncTreeProgress();
+  void syncRemoteCelebrations();
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") void syncTreeProgress();
+    if (document.visibilityState === "visible") {
+      void syncTreeProgress();
+      void syncRemoteCelebrations();
+    }
   });
 }
 
@@ -474,6 +611,8 @@ export function awardXp(
   emit();
   // El XP es compartido: cada premio viaja a la nube (con retardo, agrupado).
   scheduleUpload();
+  // Y las tareas completadas se anuncian a los demás dispositivos de la cuenta.
+  if (kind === "task") publishTaskCompletion(eventId, value);
 }
 
 /**
@@ -519,6 +658,7 @@ export function resetTree(): void {
     try { localStorage.removeItem(TASK_CREDITS_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(HABIT_PENALTY_KEY); } catch { /* noop */ }
     try { localStorage.removeItem(SEEN_LEVEL_KEY); } catch { /* noop */ }
+    try { localStorage.removeItem(REMOTE_SEEN_KEY); } catch { /* noop */ }
   }
   celebrated.clear();
   // Se vacía también el registro de tareas para que, tras reiniciar el

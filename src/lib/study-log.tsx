@@ -4,15 +4,16 @@ import { useMemo, useSyncExternalStore } from "react";
 import { todayKey } from "@/lib/format";
 
 /**
- * Registro de estudio del dispositivo.
+ * Registro de estudio compartido por cuenta.
  *
  * Cada pomodoro de trabajo completado añade una sesión aquí: cuántos minutos y
  * a qué tarea (o a ninguna). De este único registro salen todas las métricas
  * de estudio: minutos totales, de hoy, de la semana y por tarea.
  *
- * Igual que el sistema de XP, vive SOLO en este dispositivo (localStorage): no
- * forma parte del estado sincronizado con la nube, así que no necesita ni tabla
- * nueva en Supabase ni migración.
+ * Se sincroniza con la nube (tabla `study_sessions`, migración 00018) para que
+ * lo estudiado en el ordenador se vea en el móvil de la misma cuenta. El
+ * registro es de SOLO-AÑADIR y cada sesión lleva un id generado aquí, así que
+ * la fusión es idempotente: subir o bajar lo mismo dos veces no duplica nada.
  */
 
 const STORAGE_KEY = "nucleo:study-log:v1";
@@ -153,6 +154,183 @@ function getServerSnapshot(): StudySession[] {
 
 // ─── API pública ─────────────────────────────────────────────────────────────
 
+// ─── Sincronización con la nube ──────────────────────────────────────────────
+//
+// El registro es de solo-añadir, así que se sincroniza con dos cursores:
+//   · `pulledUpTo`: hasta qué instante (completedAt) ya se leyó de la nube.
+//   · `pushedUpTo`: hasta qué instante ya está subido.
+// Cada dispositivo lleva los suyos; el id de cada sesión evita duplicados al
+// fusionar. Así lo estudiado en el ordenador aparece en el móvil (y al revés)
+// sin reenviar el historial entero cada vez.
+
+const SYNC_API = "/api/study/sessions";
+const SYNC_STATE_KEY = "nucleo:study-log:sync:v1";
+/** Solape al pedir novedades: si algo se subía mientras se pedía, vuelve otra vez. */
+const PULL_OVERLAP_MS = 12 * 60 * 60 * 1000;
+
+interface SyncState {
+  pushedUpTo: string | null;
+  pulledUpTo: string | null;
+}
+
+const EMPTY_SYNC_STATE: SyncState = { pushedUpTo: null, pulledUpTo: null };
+
+function readSyncState(): SyncState {
+  if (typeof window === "undefined") return EMPTY_SYNC_STATE;
+  try {
+    const parsed = JSON.parse(
+      localStorage.getItem(SYNC_STATE_KEY) ?? "null",
+    ) as Partial<SyncState> | null;
+    return {
+      pushedUpTo: typeof parsed?.pushedUpTo === "string" ? parsed.pushedUpTo : null,
+      pulledUpTo: typeof parsed?.pulledUpTo === "string" ? parsed.pulledUpTo : null,
+    };
+  } catch {
+    return EMPTY_SYNC_STATE;
+  }
+}
+
+function writeSyncState(state: SyncState): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(SYNC_STATE_KEY, JSON.stringify(state));
+  } catch {
+    // Ignorar errores de acceso.
+  }
+}
+
+/** Convierte las sesiones de la API en sesiones del registro (o descarta lo raro). */
+function parseRemoteSessions(raw: unknown): StudySession[] {
+  if (!Array.isArray(raw)) return [];
+  const out: StudySession[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const s = item as Record<string, unknown>;
+    if (
+      typeof s.id !== "string" ||
+      typeof s.minutes !== "number" ||
+      typeof s.date !== "string" ||
+      typeof s.completedAt !== "string"
+    ) {
+      continue;
+    }
+    out.push({
+      id: s.id,
+      taskId: typeof s.taskId === "string" && s.taskId ? s.taskId : null,
+      minutes: s.minutes,
+      date: s.date,
+      completedAt: s.completedAt,
+    });
+  }
+  return out;
+}
+
+/** Instante más reciente de una lista no vacía de sesiones. */
+function latestCompletedAt(sessions: readonly StudySession[]): string {
+  return sessions.reduce(
+    (max, s) => (s.completedAt > max ? s.completedAt : max),
+    sessions[0].completedAt,
+  );
+}
+
+let pushTimer: ReturnType<typeof setTimeout> | null = null;
+/** `startStudyLogSync` se ejecuta una sola vez por carga de la app. */
+let syncStarted = false;
+
+/** Sube las sesiones que la nube todavía no tiene. */
+async function pushStudySessions(): Promise<void> {
+  const { pushedUpTo } = readSyncState();
+  const pending = pushedUpTo
+    ? storeSessions.filter((s) => s.completedAt > pushedUpTo)
+    : [...storeSessions];
+  if (pending.length === 0) return;
+
+  try {
+    const res = await fetch(SYNC_API, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sessions: pending }),
+    });
+    if (!res.ok) return;
+  } catch {
+    return;
+  }
+
+  // El cursor solo avanza cuando el servidor ha confirmado: si la subida falla
+  // (sin red, sesión caducada…), la próxima sincronización las reintenta.
+  writeSyncState({ ...readSyncState(), pushedUpTo: latestCompletedAt(pending) });
+}
+
+/** Sube lo nuevo con un pequeño retardo para agrupar ráfagas de pomodoros. */
+function schedulePush(): void {
+  if (typeof window === "undefined") return;
+  if (pushTimer) clearTimeout(pushTimer);
+  pushTimer = setTimeout(() => {
+    pushTimer = null;
+    void pushStudySessions();
+  }, 600);
+}
+
+/**
+ * Fusiona el registro local con el de la nube: baja lo estudiado en otros
+ * dispositivos y sube lo de este. Se llama al abrir la app y cada vez que
+ * vuelve a primer plano. Sin sesión (401) o sin red se queda lo local.
+ */
+export async function syncStudyLog(): Promise<void> {
+  if (typeof window === "undefined") return;
+  const state = readSyncState();
+
+  const since = state.pulledUpTo
+    ? new Date(
+        new Date(state.pulledUpTo).getTime() - PULL_OVERLAP_MS,
+      ).toISOString()
+    : null;
+  let remote: StudySession[] = [];
+  try {
+    const res = await fetch(
+      `${SYNC_API}${since ? `?since=${encodeURIComponent(since)}` : ""}`,
+    );
+    if (!res.ok) return;
+    const payload = (await res.json()) as { sessions?: unknown } | null;
+    remote = parseRemoteSessions(payload?.sessions);
+  } catch {
+    return;
+  }
+
+  if (remote.length > 0) {
+    // La fusión por id es idempotente: el solape y los reintentos no duplican.
+    const byId = new Map<string, StudySession>();
+    for (const s of storeSessions) byId.set(s.id, s);
+    for (const s of remote) byId.set(s.id, s);
+    const merged = [...byId.values()]
+      .sort((a, b) => a.completedAt.localeCompare(b.completedAt))
+      .slice(-STORAGE_LIMIT);
+    storeSessions = merged;
+    writeSessions(merged);
+    writeSyncState({ ...readSyncState(), pulledUpTo: latestCompletedAt(remote) });
+    emit();
+  } else if (state.pulledUpTo === null) {
+    // Primera sincronización con la nube vacía: se marca el punto de partida
+    // para no volver a pedir el historial entero en cada apertura.
+    writeSyncState({ ...readSyncState(), pulledUpTo: new Date().toISOString() });
+  }
+
+  await pushStudySessions();
+}
+
+/**
+ * Arranca la sincronización del registro: una fusión al montar y otra cada vez
+ * que la app vuelve a primer plano. Idempotente (React puede montar dos veces).
+ */
+export function startStudyLogSync(): void {
+  if (typeof window === "undefined" || syncStarted) return;
+  syncStarted = true;
+  void syncStudyLog();
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") void syncStudyLog();
+  });
+}
+
 /**
  * Registra tiempo estudiado. Se llama al completar cada pomodoro de trabajo.
  * Devuelve la sesión creada (o null si no había minutos que registrar).
@@ -176,10 +354,15 @@ export function logStudySession(input: {
   storeSessions = [...storeSessions, session].slice(-STORAGE_LIMIT);
   writeSessions(storeSessions);
   emit();
+  // El tiempo estudiado es compartido: viaja a la nube (con retardo, agrupado).
+  schedulePush();
   return session;
 }
 
-/** Borra todo el historial de estudio (se usa en "Restablecer todo"). */
+/**
+ * Borra todo el historial de estudio. Se usa en "Restablecer todo": limpia
+ * también la nube, o el registro volvería al abrir la app en otro dispositivo.
+ */
 export function resetStudyLog(): void {
   if (typeof window !== "undefined") {
     try {
@@ -187,9 +370,17 @@ export function resetStudyLog(): void {
     } catch {
       // Ignorar errores de acceso.
     }
+    try {
+      localStorage.removeItem(SYNC_STATE_KEY);
+    } catch {
+      // Ignorar errores de acceso.
+    }
   }
   storeSessions = [];
   emit();
+  void fetch(SYNC_API, { method: "DELETE" }).catch(() => {
+    // Sin red o sin sesión: la nube se quedará como estaba.
+  });
 }
 
 /**

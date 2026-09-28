@@ -21,6 +21,7 @@ import { XpToast } from "@/components/layout/xp-toast";
 import { XpPenalizer } from "@/lib/xp-penalizer";
 import { useData } from "@/components/providers/data-provider";
 import { startXpSync } from "@/lib/xp-system";
+import { startStudyLogSync } from "@/lib/study-log";
 
 import {
   LayoutDashboard,
@@ -83,11 +84,12 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [email, setEmail] = useState<string | null>(null);
   const { ready } = useData();
 
-  // Sincronización del árbol de XP con la nube: fusión al abrir la app y cada
-  // vez que vuelve a primer plano, así el XP viaja entre el móvil y el
-  // ordenador de la misma cuenta.
+  // Sincronización con la nube: fusión al abrir la app y cada vez que vuelve a
+  // primer plano, así el XP y los minutos de estudio viajan entre el móvil y
+  // el ordenador de la misma cuenta.
   useEffect(() => {
     startXpSync();
+    startStudyLogSync();
   }, []);
 
   useEffect(() => {
