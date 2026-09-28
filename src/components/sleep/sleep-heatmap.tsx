@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { formatDate, formatDuration } from "@/lib/format";
-import { SLEEP_LEVEL_CLASS, SLEEP_LEVEL_LABEL, addDays, sleepLevel } from "@/lib/sleep";
+import { SLEEP_BANDS, SLEEP_BAND_ORDER, SLEEP_LEVEL_LABEL, addDays, sleepBand, sleepLevel } from "@/lib/sleep";
 import type { SleepLog } from "@/lib/types";
 
 const MONTH_LABELS = [
@@ -20,8 +20,9 @@ interface DayCell {
 
 /**
  * Mapa de calor anual estilo contribuciones: una columna por semana (lunes
- * arriba) y un cuadro por día. El color va del verde (objetivo cumplido) al
- * amarillo, naranja y rojo según las horas dormidas, y gris si no hay registro.
+ * arriba) y un cuadro por día. El color de cada cuadro sale de las horas
+ * dormidas (granate por debajo de 6 h, verdes de 6 a 9 h y ámbar a partir de
+ * 9 h), y gris si no hay registro.
  */
 export function SleepHeatmap({
   logs,
@@ -136,10 +137,15 @@ export function SleepHeatmap({
                       title={label}
                       aria-label={label}
                       className={`h-2.5 w-2.5 shrink-0 rounded-[2px] transition-transform hover:scale-125 sm:h-3 sm:w-3 ${
-                        cell.hours == null ? "bg-muted" : SLEEP_LEVEL_CLASS[cell.level ?? "bad"]
+                        cell.hours == null ? "bg-muted" : ""
                       } ${cell.inYear ? "" : "opacity-25"} ${
                         isSelected ? "ring-2 ring-primary ring-offset-1 ring-offset-background" : ""
                       }`}
+                      style={
+                        cell.hours == null
+                          ? undefined
+                          : { backgroundColor: SLEEP_BANDS[sleepBand(cell.hours)].hex }
+                      }
                     />
                   );
                 })}
@@ -149,23 +155,20 @@ export function SleepHeatmap({
         </div>
       </div>
 
-      {/* Leyenda del gradiente */}
+      {/* Leyenda: los cinco tramos de horas dormidas con su color */}
       <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-[2px] bg-muted" /> sin registro
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-[2px] bg-red-500" /> muy poco
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-[2px] bg-orange-500" /> insuficiente
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-[2px] bg-amber-400" /> casi ({target - 1} h)
-        </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2.5 w-2.5 rounded-[2px] bg-emerald-500" /> objetivo ({target} h)
-        </span>
+        {SLEEP_BAND_ORDER.map((band) => (
+          <span key={band} className="flex items-center gap-1.5">
+            <span
+              className="h-2.5 w-2.5 rounded-[2px]"
+              style={{ backgroundColor: SLEEP_BANDS[band].hex }}
+            />
+            {SLEEP_BANDS[band].label}
+          </span>
+        ))}
       </div>
 
       <p className="text-[11px] text-muted-foreground">

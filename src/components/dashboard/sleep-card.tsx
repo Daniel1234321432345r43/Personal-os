@@ -6,10 +6,11 @@ import { ChevronRight, Moon, MoonStar, Sunrise } from "lucide-react";
 import { formatDuration } from "@/lib/format";
 import {
   DEFAULT_SLEEP_SETTINGS,
-  SLEEP_LEVEL_CLASS,
+  SLEEP_BANDS,
   SLEEP_LEVEL_LABEL,
   addDays,
   dateKey,
+  sleepBand,
   sleepLevel,
   weekKeys,
 } from "@/lib/sleep";
@@ -32,6 +33,7 @@ export function SleepCard({ data }: { data: DashboardData }) {
   const byDate = new Map(data.sleepLogs.map((log) => [log.date, log]));
   const lastNight = byDate.get(today) ?? byDate.get(addDays(today, -1));
   const level = lastNight ? sleepLevel(lastNight.hours, target) : null;
+  const band = lastNight ? SLEEP_BANDS[sleepBand(lastNight.hours)] : null;
 
   const week = weekKeys(today).map((key, index) => ({
     key,
@@ -60,9 +62,10 @@ export function SleepCard({ data }: { data: DashboardData }) {
           <Moon className="h-4 w-4" />
         </div>
         <span className="text-sm font-semibold">Sueño</span>
-        {level && (
+        {level && band && (
           <span
-            className={`ml-1 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium text-white ${SLEEP_LEVEL_CLASS[level]}`}
+            className="ml-1 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium"
+            style={{ backgroundColor: band.hex, color: band.ink }}
           >
             {SLEEP_LEVEL_LABEL[level]}
           </span>
@@ -91,8 +94,11 @@ export function SleepCard({ data }: { data: DashboardData }) {
             <div className="flex h-14 w-full items-end justify-center">
               {day.hours != null ? (
                 <div
-                  className={`w-full max-w-6 rounded-t ${SLEEP_LEVEL_CLASS[sleepLevel(day.hours, target)]}`}
-                  style={{ height: `${Math.max(8, (day.hours / maxHours) * 100)}%` }}
+                  className="w-full max-w-6 rounded-t"
+                  style={{
+                    height: `${Math.max(8, (day.hours / maxHours) * 100)}%`,
+                    backgroundColor: SLEEP_BANDS[sleepBand(day.hours)].hex,
+                  }}
                   title={`${day.key}: ${formatDuration(Math.round(day.hours * 60))}`}
                 />
               ) : (

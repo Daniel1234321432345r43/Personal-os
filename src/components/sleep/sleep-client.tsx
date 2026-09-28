@@ -23,7 +23,7 @@ import { useData } from "@/components/providers/data-provider";
 import { formatDate, formatDateLong, formatDuration } from "@/lib/format";
 import {
   DEFAULT_SLEEP_SETTINGS,
-  SLEEP_LEVEL_CLASS,
+  SLEEP_BANDS,
   SLEEP_LEVEL_LABEL,
   SLEEP_MIN_DURATION_MINUTES,
   SLEEP_REMINDER_MINUTES,
@@ -31,6 +31,7 @@ import {
   addDays,
   dateKey,
   roundHours,
+  sleepBand,
   sleepLevel,
   timeToMinutes,
   weekKeys,
@@ -130,7 +131,8 @@ function SleepLogForm({
               {formatDuration(durationMinutes)}
             </span>
             <span
-              className={`h-2.5 w-2.5 shrink-0 rounded-full ${SLEEP_LEVEL_CLASS[level]}`}
+              className="h-2.5 w-2.5 shrink-0 rounded-full"
+              style={{ backgroundColor: SLEEP_BANDS[sleepBand(hoursValue)].hex }}
             />
             <span className="truncate text-xs text-muted-foreground">
               {SLEEP_LEVEL_LABEL[level]}
@@ -408,7 +410,8 @@ export function SleepClient() {
                   return (
                     <p className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2.5 text-[11px] text-muted-foreground">
                       <span
-                        className={`h-2.5 w-2.5 shrink-0 rounded-full ${SLEEP_LEVEL_CLASS[level]}`}
+                        className="h-2.5 w-2.5 shrink-0 rounded-full"
+                        style={{ backgroundColor: SLEEP_BANDS[sleepBand(selectedLog.hours)].hex }}
                       />
                       <span>
                         Guardada: {selectedLog.hours} h

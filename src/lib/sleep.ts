@@ -34,14 +34,6 @@ export function sleepLevel(hours: number, target = DEFAULT_SLEEP_SETTINGS.target
   return "bad";
 }
 
-/** Color de relleno (Tailwind) de cada nivel, compartido por barras y heatmap. */
-export const SLEEP_LEVEL_CLASS: Record<SleepLevel, string> = {
-  perfect: "bg-emerald-500",
-  partial: "bg-amber-400",
-  low: "bg-orange-500",
-  bad: "bg-red-500",
-};
-
 /** Etiqueta corta de cada nivel para leyendas y avisos. */
 export const SLEEP_LEVEL_LABEL: Record<SleepLevel, string> = {
   perfect: "Objetivo cumplido",
@@ -50,13 +42,42 @@ export const SLEEP_LEVEL_LABEL: Record<SleepLevel, string> = {
   bad: "Muy insuficiente",
 };
 
-/** Mismo color en `stroke` (SVG) que SLEEP_LEVEL_CLASS, para el dial circular. */
-export const SLEEP_LEVEL_STROKE: Record<SleepLevel, string> = {
-  perfect: "#10b981",
-  partial: "#fbbf24",
-  low: "#f97316",
-  bad: "#ef4444",
+// ---------------------------------------------------------------------------
+// Paleta de las gráficas de Sueño
+//
+// El color de una noche depende de CUÁNTAS HORAS has dormido (tramos fijos),
+// no del objetivo configurado. Así el mismo color significa lo mismo en el
+// mapa de calor, en las barras de la semana, en la tarjeta de "Hoy", en el
+// dial y en la leyenda, aunque el usuario cambie su objetivo de horas.
+// ---------------------------------------------------------------------------
+
+/** Tramos de horas dormidas, de menos a más. */
+export type SleepBand = "short" | "low" | "ok" | "ideal" | "long";
+
+/** Orden de los tramos; es también el orden de la leyenda. */
+export const SLEEP_BAND_ORDER: SleepBand[] = ["short", "low", "ok", "ideal", "long"];
+
+/**
+ * Rango de horas y color de cada tramo.
+ * `hex` es el relleno (celdas, barras, puntos y trazo del dial) e `ink` el
+ * color del texto cuando va encima de ese relleno (distintivo de la tarjeta).
+ */
+export const SLEEP_BANDS: Record<SleepBand, { label: string; hex: string; ink: string }> = {
+  short: { label: "menos de 6 h", hex: "#C62828", ink: "#ffffff" },
+  low: { label: "6–7 h", hex: "#2E7D32", ink: "#ffffff" },
+  ok: { label: "7–8 h", hex: "#4CAF50", ink: "#0b2e13" },
+  ideal: { label: "8–9 h", hex: "#00E676", ink: "#0b2e13" },
+  long: { label: "9 h o más", hex: "#FF9800", ink: "#3d2100" },
 };
+
+/** Tramo al que pertenece una noche según las horas dormidas. */
+export function sleepBand(hours: number): SleepBand {
+  if (hours < 6) return "short";
+  if (hours < 7) return "low";
+  if (hours < 8) return "ok";
+  if (hours < 9) return "ideal";
+  return "long";
+}
 
 /** Duración mínima y máxima del arco de sueño (minutos). */
 export const SLEEP_MIN_DURATION_MINUTES = 30;

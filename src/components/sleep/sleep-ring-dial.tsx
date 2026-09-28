@@ -5,12 +5,12 @@ import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerE
 import { Moon, Sunrise } from "lucide-react";
 import { formatDuration } from "@/lib/format";
 import {
-  SLEEP_LEVEL_STROKE,
+  SLEEP_BANDS,
   SLEEP_MAX_DURATION_MINUTES,
   SLEEP_MIN_DURATION_MINUTES,
   minutesToTime,
   signedMinuteDelta,
-  sleepLevel,
+  sleepBand,
   snapMinutes,
   timeToMinutes,
 } from "@/lib/sleep";
@@ -95,8 +95,9 @@ export function SleepRingDial({
   /** Extremo de despertar en "minutos sin envolver" (puede pasar de 1440). */
   const wakeAnchor = bedMinutes + dragDuration;
 
-  const level = sleepLevel(duration / 60, targetHours);
-  const color = SLEEP_LEVEL_STROKE[level];
+  // El arco usa la misma paleta que las gráficas: el color dice a qué tramo de
+  // horas pertenece la noche que se está ajustando (no depende del objetivo).
+  const color = SLEEP_BANDS[sleepBand(duration / 60)].hex;
 
   const bedAngle = minuteToAngle(bedMinutes);
   const wakeAngle = minuteToAngle(bedMinutes + duration);

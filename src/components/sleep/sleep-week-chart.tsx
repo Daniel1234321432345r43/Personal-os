@@ -3,9 +3,10 @@
 import { useMemo } from "react";
 import { formatDuration } from "@/lib/format";
 import {
-  SLEEP_LEVEL_CLASS,
+  SLEEP_BANDS,
   SLEEP_LEVEL_LABEL,
   dateKey,
+  sleepBand,
   sleepLevel,
 } from "@/lib/sleep";
 import type { SleepLog } from "@/lib/types";
@@ -15,9 +16,10 @@ const WEEKDAY_SHORT = ["L", "M", "X", "J", "V", "S", "D"];
 
 /**
  * Gráfica de columnas de la semana (lunes → domingo). La altura de cada
- * columna son las horas dormidas y el color el cumplimiento del objetivo. Las
- * barras y la línea discontinua del objetivo comparten la misma área, para que
- * la línea marque exactamente la altura del objetivo.
+ * columna son las horas dormidas y el color el tramo de horas al que pertenece
+ * la noche (SLEEP_BANDS). Las barras y la línea discontinua del objetivo
+ * comparten la misma área, para que la línea marque exactamente la altura del
+ * objetivo.
  */
 export function SleepWeekChart({
   dates,
@@ -110,9 +112,13 @@ export function SleepWeekChart({
               >
                 <span
                   className={`absolute inset-x-1 bottom-0 rounded-t-md transition-[height] duration-300 ${
-                    level ? SLEEP_LEVEL_CLASS[level] : "bg-muted-foreground/20"
+                    day.hours == null ? "bg-muted-foreground/20" : ""
                   } ${day.isFuture ? "opacity-40" : ""}`}
-                  style={{ height: `${day.hours != null ? Math.max(3, heightPercent) : 3}%` }}
+                  style={{
+                    height: `${day.hours != null ? Math.max(3, heightPercent) : 3}%`,
+                    backgroundColor:
+                      day.hours == null ? undefined : SLEEP_BANDS[sleepBand(day.hours)].hex,
+                  }}
                 />
                 {day.hours != null && (
                   <span
