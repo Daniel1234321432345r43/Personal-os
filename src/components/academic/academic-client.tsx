@@ -539,23 +539,11 @@ export function AcademicClient() {
 
 
       {/* Exámenes y tareas en tarjetas separadas (y primero, en todos los
-          tamaños): una sola lista mezclada escondía los trabajos. */}
+          tamaños): una sola lista mezclada escondía los trabajos. Las entregas
+          van por delante de los exámenes: son las que se hacen día a día y
+          había que bajar para encontrarlas. */}
       <TaskCard
         className="order-1"
-        title="Exámenes"
-        newLabel="Nuevo"
-        formTitle="Nuevo examen"
-        emptyText="No tienes exámenes pendientes."
-        initialType="exam"
-        tasks={pendingExams}
-        completed={completedExams}
-        subjectById={subjectById}
-        actions={actions}
-        study={study}
-      />
-
-      <TaskCard
-        className="order-2"
         title="Tareas y entregas"
         newLabel="Nueva"
         formTitle="Nueva tarea o entrega"
@@ -563,6 +551,20 @@ export function AcademicClient() {
         initialType="assignment"
         tasks={pendingTasks}
         completed={completedTasks}
+        subjectById={subjectById}
+        actions={actions}
+        study={study}
+      />
+
+      <TaskCard
+        className="order-2"
+        title="Exámenes"
+        newLabel="Nuevo"
+        formTitle="Nuevo examen"
+        emptyText="No tienes exámenes pendientes."
+        initialType="exam"
+        tasks={pendingExams}
+        completed={completedExams}
         subjectById={subjectById}
         actions={actions}
         study={study}

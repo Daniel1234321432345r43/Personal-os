@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState } from "react";
+import { useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BedDouble,
@@ -18,7 +18,9 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { fieldClass, inputClass, labelClass } from "@/components/forms/ui";
+import { useIsMobile } from "@/lib/use-is-mobile";
 import { useData } from "@/components/providers/data-provider";
 import { formatDate, formatDateLong, formatDuration } from "@/lib/format";
 import {
@@ -228,16 +230,120 @@ function SleepLogForm({
   );
 }
 
+/**
+ * Contenido del registro de una noche (fecha, dial, sensación y resumen de lo
+ * guardado). Es el mismo bloque dentro de la tarjeta de escritorio y dentro de
+ * la hoja inferior del móvil, para no mantener dos formularios distintos.
+ */
+function NightEditor({
+  date,
+  today,
+  log,
+  defaultBedtime,
+  defaultWake,
+  target,
+  onSelectDate,
+  onSave,
+  onDelete,
+}: {
+  date: string;
+  today: string;
+  log: SleepLog | null;
+  defaultBedtime: string;
+  defaultWake: string;
+  target: number;
+  onSelectDate: (key: string) => void;
+  onSave: (input: {
+    date: string;
+    hours: number;
+    bedtime?: string | null;
+    wake_time?: string | null;
+    quality?: number | null;
+    notes?: string | null;
+  }) => void;
+  onDelete: (date: string) => void;
+}) {
+  // El editor existe a la vez en la tarjeta (escritorio) y en la hoja (móvil),
+  // así que el id del campo tiene que ser único por instancia.
+  const dateInputId = useId();
+
+  return (
+    <>
+      <div className={fieldClass}>
+        <label className={labelClass} htmlFor={dateInputId}>
+          Fecha
+        </label>
+        <input
+          id={dateInputId}
+          type="date"
+          value={date}
+          max={today}
+          onChange={(e) => onSelectDate(e.target.value || today)}
+          className={inputClass}
+        />
+        <p className="text-[11px] text-muted-foreground">
+          El día en que te has despertado. También puedes tocar un día en las
+          gráficas.
+        </p>
+      </div>
+
+      <SleepLogForm
+        key={date}
+        date={date}
+        log={log}
+        defaultBedtime={defaultBedtime}
+        defaultWake={defaultWake}
+        targetHours={target}
+        onSave={onSave}
+        onDelete={onDelete}
+      />
+
+      {log &&
+        (() => {
+          const level = sleepLevel(log.hours, target);
+          return (
+            <p className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2.5 text-[11px] text-muted-foreground">
+              <span
+                className="h-2.5 w-2.5 shrink-0 rounded-full"
+                style={{ backgroundColor: SLEEP_BANDS[sleepBand(log.hours)].hex }}
+              />
+              <span>
+                Guardada: {log.hours} h
+                {log.bedtime && log.wake_time
+                  ? ` (${log.bedtime} → ${log.wake_time})`
+                  : ""}
+              </span>
+              <span className="font-medium text-foreground">
+                {SLEEP_LEVEL_LABEL[level]}
+              </span>
+              <span>{SLEEP_XP_LABEL[level]}</span>
+            </p>
+          );
+        })()}
+    </>
+  );
+}
+
 export function SleepClient() {
   const { data, hydrated, actions } = useData();
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [weekOffset, setWeekOffset] = useState(0);
   const [year, setYear] = useState(() => new Date().getFullYear());
+  const [formOpen, setFormOpen] = useState(false);
   const formRef = useRef<HTMLDivElement>(null);
+  const isMobile = useIsMobile();
 
-  /** Cargar una noche desde las gráficas y llevar la vista al formulario. */
+  /**
+   * Cargar una noche desde las gráficas. En el móvil el formulario vive en una
+   * hoja inferior, así que se abre; en escritorio basta con desplazar la vista
+   * hasta la tarjeta, que está siempre a la vista.
+   */
   function selectDateFromChart(key: string) {
     setSelectedDate(key);
+    if (isMobile) {
+      setFormOpen(true);
+      return;
+    }
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
 
@@ -288,7 +394,7 @@ export function SleepClient() {
   if (!hydrated) return <LoadingState />;
 
   return (
-    <div className="space-y-5 p-4 md:p-6 lg:p-6">
+    <div className="flex flex-col gap-3 p-4 md:gap-5 md:p-6">
       <header>
         <h1 className="flex items-center gap-2 break-words text-2xl font-semibold tracking-tight">
           <MoonStar className="h-6 w-6 text-violet-500" /> Sueño
@@ -299,16 +405,19 @@ export function SleepClient() {
         </p>
       </header>
 
-      {/* Métricas de la última semana */}
+      {/* Métricas de la última semana. En el móvil van más apretadas (icono,
+          etiqueta y número algo menores) para que las gráficas entren antes. */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card className="p-3">
+        <Card className="p-2.5 md:p-3">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 md:h-8 md:w-8 dark:text-violet-400">
               <TrendingUp className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Media (7 días)</p>
-              <p className="text-base font-semibold">
+              <p className="text-[10px] text-muted-foreground md:text-xs">
+                Media (7 días)
+              </p>
+              <p className="text-sm font-semibold md:text-base">
                 {stats.average != null
                   ? formatDuration(Math.round(stats.average * 60))
                   : "—"}
@@ -317,16 +426,18 @@ export function SleepClient() {
           </div>
         </Card>
 
-        <Card className="p-3">
+        <Card className="p-2.5 md:p-3">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 md:h-8 md:w-8 dark:text-blue-400">
               <BedDouble className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Noches registradas</p>
-              <p className="text-base font-semibold">{stats.count} / 7</p>
+              <p className="truncate text-[10px] text-muted-foreground md:text-xs">
+                Noches registradas
+              </p>
+              <p className="text-sm font-semibold md:text-base">{stats.count} / 7</p>
               {stats.count > 0 && (
-                <p className="truncate text-[11px] text-muted-foreground">
+                <p className="truncate text-[10px] text-muted-foreground md:text-[11px]">
                   {stats.onTarget} en objetivo
                 </p>
               )}
@@ -334,37 +445,88 @@ export function SleepClient() {
           </div>
         </Card>
 
-        <Card className="p-3">
+        <Card className="p-2.5 md:p-3">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 md:h-8 md:w-8 dark:text-emerald-400">
               <Flame className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Racha en objetivo</p>
-              <p className="text-base font-semibold">
+              <p className="text-[10px] text-muted-foreground md:text-xs">
+                Racha en objetivo
+              </p>
+              <p className="text-sm font-semibold md:text-base">
                 {stats.streak} {stats.streak === 1 ? "noche" : "noches"}
               </p>
             </div>
           </div>
         </Card>
 
-        <Card className="p-3">
+        <Card className="p-2.5 md:p-3">
           <div className="flex min-w-0 items-center gap-2">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 md:h-8 md:w-8 dark:text-amber-400">
               <MoonStar className="h-4 w-4" />
             </div>
             <div className="min-w-0">
-              <p className="text-xs text-muted-foreground">Objetivo</p>
-              <p className="text-base font-semibold">{target} h</p>
+              <p className="text-[10px] text-muted-foreground md:text-xs">
+                Objetivo
+              </p>
+              <p className="text-sm font-semibold md:text-base">{target} h</p>
             </div>
           </div>
         </Card>
       </div>
 
-      <div className="grid min-w-0 gap-6 lg:grid-cols-3">
-        <div className="min-w-0 space-y-6 lg:col-span-2">
-          {/* Registrar / editar una noche */}
-          <Card ref={formRef}>
+      {/* Móvil: el registro vive en una hoja inferior, así que aquí solo deja un
+          acceso diminuto. Antes ocupaba media pantalla nada más entrar y las
+          gráficas quedaban fuera de vista. */}
+      <button
+        type="button"
+        onClick={() => setFormOpen(true)}
+        className="flex items-center gap-2.5 rounded-xl border bg-card px-3 py-2 text-left shadow-xs transition-colors hover:bg-muted/40 active:scale-[0.99] md:hidden"
+      >
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-600 dark:text-violet-400">
+          <BedDouble className="h-3.5 w-3.5" />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium">
+            Registrar una noche
+          </span>
+          <span className="block truncate text-[10px] text-muted-foreground">
+            {formatDateLong(selectedDate)}
+            {selectedDate === today && " · hoy"}
+            {selectedLog ? ` · ${selectedLog.hours} h` : ""}
+          </span>
+        </span>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </button>
+
+      <ResponsiveFormSheet
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        title="Registrar una noche"
+      >
+        <div className="space-y-3">
+          <NightEditor
+            date={selectedDate}
+            today={today}
+            log={selectedLog}
+            defaultBedtime={settings.bedtime}
+            defaultWake={settings.wake_time}
+            target={target}
+            onSelectDate={setSelectedDate}
+            onSave={(input) => {
+              actions.saveSleepLog(input);
+              setFormOpen(false);
+            }}
+            onDelete={(date) => actions.deleteSleepLog(date)}
+          />
+        </div>
+      </ResponsiveFormSheet>
+
+      <div className="flex min-w-0 flex-col gap-3 md:gap-5 lg:grid lg:grid-cols-3 lg:gap-6">
+        <div className="order-1 min-w-0 space-y-4 md:space-y-5 lg:order-none lg:col-span-2 lg:space-y-6">
+          {/* Registrar / editar una noche (en móvil va en la hoja de arriba) */}
+          <Card ref={formRef} className="hidden md:block">
             <CardHeader className="pb-3">
               <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
                 <span>Registrar una noche</span>
@@ -375,57 +537,17 @@ export function SleepClient() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className={fieldClass}>
-                <label className={labelClass} htmlFor="sleep-date">
-                  Fecha
-                </label>
-                <input
-                  id="sleep-date"
-                  type="date"
-                  value={selectedDate}
-                  max={today}
-                  onChange={(e) => setSelectedDate(e.target.value || today)}
-                  className={inputClass}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  El día en que te has despertado. También puedes tocar un día en
-                  las gráficas.
-                </p>
-              </div>
-
-              <SleepLogForm
-                key={selectedDate}
+              <NightEditor
                 date={selectedDate}
+                today={today}
                 log={selectedLog}
                 defaultBedtime={settings.bedtime}
                 defaultWake={settings.wake_time}
-                targetHours={target}
+                target={target}
+                onSelectDate={setSelectedDate}
                 onSave={(input) => actions.saveSleepLog(input)}
                 onDelete={(date) => actions.deleteSleepLog(date)}
               />
-
-              {selectedLog &&
-                (() => {
-                  const level = sleepLevel(selectedLog.hours, target);
-                  return (
-                    <p className="flex flex-wrap items-center gap-2 rounded-lg bg-muted/40 p-2.5 text-[11px] text-muted-foreground">
-                      <span
-                        className="h-2.5 w-2.5 shrink-0 rounded-full"
-                        style={{ backgroundColor: SLEEP_BANDS[sleepBand(selectedLog.hours)].hex }}
-                      />
-                      <span>
-                        Guardada: {selectedLog.hours} h
-                        {selectedLog.bedtime && selectedLog.wake_time
-                          ? ` (${selectedLog.bedtime} → ${selectedLog.wake_time})`
-                          : ""}
-                      </span>
-                      <span className="font-medium text-foreground">
-                        {SLEEP_LEVEL_LABEL[level]}
-                      </span>
-                      <span>{SLEEP_XP_LABEL[level]}</span>
-                    </p>
-                  );
-                })()}
             </CardContent>
           </Card>
 
@@ -433,8 +555,15 @@ export function SleepClient() {
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
-                <span>
-                  Semana del {formatDate(week[0])} al {formatDate(week[6])}
+                {/* En móvil el título corto cabe en la misma línea que las
+                    flechas; el largo partía el encabezado en dos. */}
+                <span className="text-sm md:text-base">
+                  <span className="hidden md:inline">
+                    Semana del {formatDate(week[0])} al {formatDate(week[6])}
+                  </span>
+                  <span className="md:hidden">
+                    {formatDate(week[0])} – {formatDate(week[6])}
+                  </span>
                 </span>
                 <span className="flex items-center gap-1">
                   <Button
@@ -483,8 +612,9 @@ export function SleepClient() {
           </Card>
         </div>
 
-        {/* Objetivo y aviso (se configuran en Ajustes) */}
-        <div className="min-w-0 space-y-6">
+        {/* Objetivo y aviso (se configuran en Ajustes). En móvil bajan al final
+            para que lo primero que se vea sean las gráficas. */}
+        <div className="order-3 min-w-0 space-y-4 md:space-y-5 lg:order-none lg:space-y-6">
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-base">
@@ -545,10 +675,10 @@ export function SleepClient() {
             </CardContent>
           </Card>
         </div>
-      </div>
 
-      {/* Heatmap anual, abajo del todo */}
-      <Card>
+        {/* Heatmap anual: en escritorio ocupa su propia fila bajo las dos
+            columnas; en móvil sube justo debajo de la semana. */}
+        <Card className="order-2 lg:order-none lg:col-span-3">
         <CardHeader className="pb-3">
           <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base">
             <span>Mapa de calor anual</span>
@@ -587,7 +717,8 @@ export function SleepClient() {
             onSelectDate={selectDateFromChart}
           />
         </CardContent>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }

@@ -72,8 +72,9 @@ export function SleepWeekChart({
         </p>
       </div>
 
-      {/* Área de la gráfica: las barras y la línea del objetivo usan el mismo eje */}
-      <div className="relative h-48 w-full">
+      {/* Área de la gráfica: las barras y la línea del objetivo usan el mismo eje.
+          En móvil es algo más baja para que quepan también las demás tarjetas. */}
+      <div className="relative h-36 w-full sm:h-44 lg:h-48">
         <div className="absolute inset-x-0 bottom-6 top-5 flex items-end gap-1 sm:gap-2">
           {/* Línea del objetivo (misma escala que la altura de las barras) */}
           <div

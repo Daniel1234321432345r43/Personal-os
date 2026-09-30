@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { formatDate, formatDuration } from "@/lib/format";
 import { SLEEP_BANDS, SLEEP_BAND_ORDER, SLEEP_LEVEL_LABEL, addDays, sleepBand, sleepLevel } from "@/lib/sleep";
 import type { SleepLog } from "@/lib/types";
@@ -42,6 +42,39 @@ export function SleepHeatmap({
     for (const log of logs) map.set(log.date, log);
     return map;
   }, [logs]);
+
+  // La matriz es más ancha que la pantalla del móvil, así que hay que colocarla
+  // a mano: si no, siempre aparece enero y el mes en el que estás queda a un
+  // deslizamiento de distancia. Se centra una sola vez por año (al entrar y al
+  // cambiar de año); después manda el dedo del usuario.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const cellRefs = useRef(new Map<string, HTMLButtonElement>());
+  const centeredYearRef = useRef<number | null>(null);
+  useLayoutEffect(() => {
+    if (centeredYearRef.current === year) return;
+    const container = scrollRef.current;
+    if (!container) return;
+    centeredYearRef.current = year;
+
+    // En el año en curso, el ancla es la noche seleccionada (hoy al entrar); en
+    // cualquier otro año, el 1 de enero.
+    const anchor = selectedDate.startsWith(`${year}-`)
+      ? selectedDate
+      : `${year}-01-01`;
+    const cell = cellRefs.current.get(anchor);
+    if (!cell) return;
+
+    const cellRect = cell.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    container.scrollLeft = Math.max(
+      0,
+      container.scrollLeft +
+        cellRect.left -
+        containerRect.left -
+        container.clientWidth / 2 +
+        cellRect.width / 2,
+    );
+  }, [year, selectedDate]);
 
   const weeks = useMemo<DayCell[][]>(() => {
     // La matriz empieza en el lunes de la semana del 1 de enero.
@@ -86,7 +119,7 @@ export function SleepHeatmap({
       </div>
 
       {/* Scroll horizontal propio de la matriz (no afecta al ancho de la página) */}
-      <div className="overflow-x-auto pb-1">
+      <div ref={scrollRef} className="overflow-x-auto pb-1">
         <div className="w-max">
           {/* Etiquetas de mes: cada una sobresale de su columna sin empujar el resto */}
           <div className="mb-1 flex h-3 gap-[3px] text-[10px] text-muted-foreground">
@@ -132,6 +165,10 @@ export function SleepHeatmap({
                   return (
                     <button
                       key={cell.key}
+                      ref={(node) => {
+                        if (node) cellRefs.current.set(cell.key, node);
+                        else cellRefs.current.delete(cell.key);
+                      }}
                       type="button"
                       onClick={() => onSelectDate(cell.key)}
                       title={label}
@@ -156,7 +193,7 @@ export function SleepHeatmap({
       </div>
 
       {/* Leyenda: los cinco tramos de horas dormidas con su color */}
-      <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-muted-foreground sm:gap-x-3 sm:text-[11px]">
         <span className="flex items-center gap-1.5">
           <span className="h-2.5 w-2.5 rounded-[2px] bg-muted" /> sin registro
         </span>
@@ -172,7 +209,7 @@ export function SleepHeatmap({
       </div>
 
       <p className="text-[11px] text-muted-foreground">
-        Toca cualquier cuadro para cargar esa noche en el formulario de arriba.
+        Toca cualquier cuadro para cargar esa noche en el formulario.
       </p>
     </div>
   );
