@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { useSettings } from "@/components/providers/settings-provider";
-import { registerServiceWorker } from "@/lib/push";
+import { showBrowserNotification } from "@/lib/browser-notify";
 import { awardXp } from "@/lib/xp-system";
 import { logStudySession, useStudyLog } from "@/lib/study-log";
-import { formatDuration } from "@/lib/format";
+import { formatDuration, todayKey } from "@/lib/format";
+import { composeWorkTitle } from "@/lib/study-summary";
+import { inferSubjectFromTitle, namesMatch } from "@/lib/subjects";
 
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fieldClass, labelClass, selectClass } from "@/components/forms/ui";
 import { cn } from "@/lib/utils";
@@ -30,34 +33,31 @@ import {
 type Mode = "work" | "break";
 
 /**
+ * Cómo se escribe el nombre del trabajo nuevo. NO es el tipo de la tarea
+ * creada: esa es siempre una sesión de estudio ("Estudiar para el examen de
+ * Dibujo técnico" es el bloque de estudio, no el examen). Si fuera de tipo
+ * examen, el sistema lo daría por hecho al pasar el día y dejaría de acumular
+ * el tiempo.
+ */
+type NewWorkKind = "exam" | "assignment" | "study_session";
+
+/** Opciones del selector de trabajo nuevo: cómo se llamará la tarea del día. */
+const NEW_WORK_KINDS: { kind: NewWorkKind; label: string }[] = [
+  { kind: "exam", label: "Estudiar para examen" },
+  { kind: "assignment", label: "Trabajar en…" },
+  { kind: "study_session", label: "Estudiar" },
+];
+
+/** Valor del selector para "algo que todavía no está en la lista". */
+const NEW_WORK_VALUE = "__nuevo__";
+
+/**
  * Notificación persistente al terminar cada sesión (timbre).
  * Se cierra sola o al pulsar sobre ella.
  */
-async function showCompletionNotification(title: string, body: string) {
-  if (typeof window === "undefined" || !("Notification" in window)) return;
-  if (Notification.permission !== "granted") return;
-
-  const options: NotificationOptions = {
-    body,
-    icon: "/icon.svg",
-    badge: "/icon.svg",
-    tag: `pomodoro-done-${Date.now()}`,
-    requireInteraction: true,
-    data: { url: "/pomodoro" },
-  };
-
-  try {
-    const reg = await registerServiceWorker();
-    if (reg) {
-      await reg.showNotification(title, options);
-    } else {
-      new Notification(title, options);
-    }
-  } catch (err) {
-    console.error("[pomodoro] no se pudo mostrar la notificación:", err);
-  }
+function showCompletionNotification(title: string, body: string) {
+  return showBrowserNotification(title, body, { url: "/pomodoro" });
 }
-
 
 
 /** Timbre corto con Web Audio API (sin archivos de audio). */
@@ -105,6 +105,18 @@ function pomodoroEventId(): string {
     return crypto.randomUUID();
   }
   return `pomodoro-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
+/**
+ * Id de la tarea de trabajo que crea el Pomodoro. Se genera aquí para poder
+ * enlazar la sesión de estudio con la tarea en el mismo instante en que se crea
+ * (con un id del servidor habría que esperar a que volviera la respuesta).
+ */
+function newTaskId(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /**
@@ -248,7 +260,7 @@ function TimerRing({
 }
 
 export function PomodoroClient() {
-  const { data } = useData();
+  const { data, actions } = useData();
   const { settings } = useSettings();
   const study = useStudyLog();
 
@@ -259,6 +271,14 @@ export function PomodoroClient() {
   const [secondsLeft, setSecondsLeft] = useState(workMinutes * 60);
   const [running, setRunning] = useState(false);
   const [taskId, setTaskId] = useState("");
+  /**
+   * Trabajo escrito a mano ("dibujo técnico") cuando lo que vas a hacer no
+   * está todavía en la lista. Al terminar el pomodoro se crea la tarea del día
+   * con ese nombre y ahí se acumula el tiempo.
+   */
+  const [customWork, setCustomWork] = useState(false);
+  const [newWork, setNewWork] = useState("");
+  const [newWorkKind, setNewWorkKind] = useState<NewWorkKind>("exam");
   const [completedSessions, setCompletedSessions] = useState(0);
   const [completedFlash, setCompletedFlash] = useState(false);
   /** true tras un pomodoro de trabajo: muestra el resumen de tiempo estudiado. */
@@ -286,6 +306,38 @@ export function PomodoroClient() {
 
 
 
+  /**
+   * Tarea del trabajo de este pomodoro. Si lo que vas a hacer no estaba en la
+   * lista ("dibujo técnico"), se crea la tarea del día con ese nombre —así el
+   * tiempo aparece en las tareas del día— y se reutiliza si ya existía una
+   * igual, para que los pomodoros del mismo trabajo sumen en la misma tarea en
+   * lugar de crear una nueva por sesión.
+   */
+  const resolveWorkTaskId = useCallback((): string | null => {
+    if (!customWork) return taskId || null;
+    const title = composeWorkTitle(newWorkKind, newWork);
+    if (!title) return null;
+
+    const existing = data.tasks.find(
+      (t) => t.status !== "done" && namesMatch(t.title, title),
+    );
+    if (existing) return existing.id;
+
+    const id = newTaskId();
+    // Si el nombre corresponde a una asignatura que ya existe, la tarea se
+    // enlaza a ella. Una asignatura NUEVA no se crea desde aquí: el pomodoro no
+    // debe llenar la lista de asignaturas por escribir una palabra.
+    const guess = inferSubjectFromTitle(newWork, data.subjects);
+    actions.addTask({
+      id,
+      title,
+      type: "study_session",
+      due_date: todayKey(),
+      subject_name: guess?.exists ? guess.name : null,
+    });
+    return id;
+  }, [actions, customWork, data.subjects, data.tasks, newWork, newWorkKind, taskId]);
+
   // Cuenta atrás cada segundo mientras corre.
   useEffect(() => {
     if (!running) return;
@@ -308,15 +360,20 @@ export function PomodoroClient() {
 
 
     const wasWork = mode === "work";
-    const task = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
-    const taskLabel = task?.title ? ` Estabas con: ${task.title}.` : "";
+    const chosenTask = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
+    // El trabajo de este pomodoro: la tarea elegida o la que se acaba de crear
+    // con lo que el usuario ha escrito (se enlaza la sesión a esa tarea nueva).
+    const workTaskId = wasWork ? resolveWorkTaskId() : null;
+    const workName =
+      chosenTask?.title ?? (customWork ? composeWorkTitle(newWorkKind, newWork) : "");
+    const taskLabel = workName ? ` Estabas con: ${workName}.` : "";
 
     playChime();
     if (wasWork) {
       // Tiempo estudiado: cada pomodoro de trabajo suma sus minutos al registro
       // (y a la tarea elegida, si la hay). La XP también va por tiempo: 10 XP por
       // pomodoro, no por completar la tarea.
-      logStudySession({ taskId: taskId || null, minutes: workMinutes });
+      logStudySession({ taskId: workTaskId, minutes: workMinutes });
       awardXp("pomodoro", pomodoroEventId(), {
         value: 10,
         label: `Pomodoro de ${formatDuration(workMinutes)}`,
@@ -331,6 +388,10 @@ export function PomodoroClient() {
         setShowStudySummary(true);
         setMode("break");
         setSecondsLeft(breakMinutes * 60);
+        // El siguiente pomodoro sigue en el mismo trabajo, ya como tarea real.
+        setTaskId(workTaskId ?? "");
+        setCustomWork(false);
+        setNewWork("");
       }, 0);
     } else {
       void showCompletionNotification(
@@ -343,7 +404,19 @@ export function PomodoroClient() {
         setSecondsLeft(workMinutes * 60);
       }, 0);
     }
-  }, [running, secondsLeft, mode, taskId, breakMinutes, workMinutes, data.tasks]);
+  }, [
+    running,
+    secondsLeft,
+    mode,
+    taskId,
+    breakMinutes,
+    workMinutes,
+    data.tasks,
+    resolveWorkTaskId,
+    customWork,
+    newWork,
+    newWorkKind,
+  ]);
 
   // ── Media Session: pantalla de bloqueo ─────────────────────────────────
   // Action handlers una sola vez (usan refs para evitar stale closures).
@@ -443,6 +516,9 @@ export function PomodoroClient() {
   }, [expanded]);
 
   const selectedTask = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
+  /** Lo que se muestra como trabajo en curso: la tarea elegida o lo escrito a mano. */
+  const selectedLabel = selectedTask?.title ?? (customWork ? newWork.trim() : "");
+  const newWorkTitle = composeWorkTitle(newWorkKind, newWork);
 
   const notifGranted =
     typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
@@ -494,7 +570,7 @@ export function PomodoroClient() {
     );
   }
 
-  /** Selector de tarea: se reutiliza en la tarjeta y en el modo ampliado. */
+  /** Selector de trabajo: se reutiliza en la tarjeta y en el modo ampliado. */
   function renderTaskPicker(id: string, maxWidth: string) {
     return (
       <div className={cn(fieldClass, "w-full", maxWidth)}>
@@ -503,8 +579,18 @@ export function PomodoroClient() {
         </label>
         <select
           id={id}
-          value={taskId}
-          onChange={(e) => setTaskId(e.target.value)}
+          value={customWork ? NEW_WORK_VALUE : taskId}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value === NEW_WORK_VALUE) {
+              setCustomWork(true);
+              setTaskId("");
+              return;
+            }
+            setCustomWork(false);
+            setNewWork("");
+            setTaskId(value);
+          }}
           className={selectClass}
         >
           <option value="">Sin tarea específica</option>
@@ -514,7 +600,44 @@ export function PomodoroClient() {
               {t.due_date ? ` · ${t.due_date}` : ""}
             </option>
           ))}
+          <option value={NEW_WORK_VALUE}>＋ Algo nuevo (se añade a las tareas del día)…</option>
         </select>
+
+        {customWork && (
+          <div className="mt-2 space-y-2 rounded-xl border border-dashed p-3">
+            <Input
+              value={newWork}
+              onChange={(e) => setNewWork(e.target.value)}
+              placeholder="Ej. Dibujo técnico, Práctica 3 de Redes…"
+              aria-label="¿En qué trabajas?"
+            />
+            <div className="flex flex-wrap gap-1.5">
+              {NEW_WORK_KINDS.map((option) => (
+                <Button
+                  key={option.kind}
+                  type="button"
+                  size="sm"
+                  variant={newWorkKind === option.kind ? "default" : "outline"}
+                  className="rounded-full text-xs"
+                  onClick={() => setNewWorkKind(option.kind)}
+                >
+                  {option.label}
+                </Button>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {newWorkTitle ? (
+                <>
+                  Al terminar el pomodoro se añadirá la tarea{" "}
+                  <span className="font-medium text-foreground">«{newWorkTitle}»</span> con el
+                  tiempo de hoy. Los pomodoros siguientes seguirán sumando ahí.
+                </>
+              ) : (
+                "Escribe en qué trabajas: se añadirá como tarea del día con el tiempo que le dediques."
+              )}
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -552,7 +675,7 @@ export function PomodoroClient() {
             />
 
             <AnimatePresence initial={false}>
-              {selectedTask && (
+              {selectedLabel && (
                 <motion.span
                   initial={{ opacity: 0, y: 8, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -561,7 +684,7 @@ export function PomodoroClient() {
                   className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-xs font-medium text-primary"
                 >
                   <BellRing className="h-3.5 w-3.5" />
-                  Trabajando en: {selectedTask.title}
+                  Trabajando en: {selectedLabel}
                 </motion.span>
               )}
             </AnimatePresence>
@@ -740,9 +863,9 @@ export function PomodoroClient() {
                   volver a la vista normal. */}
               <div className="flex flex-col items-center gap-1.5 text-center">
                 <AnimatePresence mode="wait" initial={false}>
-                  {selectedTask ? (
+                  {selectedLabel ? (
                     <motion.span
-                      key={selectedTask.id}
+                      key={selectedLabel}
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -8 }}
@@ -750,7 +873,7 @@ export function PomodoroClient() {
                       className="inline-flex max-w-2xl items-center gap-2 rounded-full bg-primary/10 px-5 py-2 text-base font-medium text-primary"
                     >
                       <BellRing className="h-4 w-4 shrink-0" />
-                      <span className="truncate">Trabajando en: {selectedTask.title}</span>
+                      <span className="truncate">Trabajando en: {selectedLabel}</span>
                     </motion.span>
                   ) : (
                     <motion.span

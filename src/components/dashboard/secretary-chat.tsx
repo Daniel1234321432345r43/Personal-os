@@ -18,6 +18,7 @@ import type {
   GradeInput,
 } from "@/components/providers/data-provider";
 import { buildSecretaryContext } from "@/lib/ai/context";
+import { inferSubjectFromTitle } from "@/lib/subjects";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -82,6 +83,30 @@ type ToolUIPartShape = {
 /** Une entrada y salida: los datos de la salida (validada) mandan por campo. */
 function toolPayload(part: ToolUIPartShape): ToolPayload {
   return { ...(part.input ?? {}), ...(part.output ?? {}) };
+}
+
+/**
+ * Último guardarraíl de la asignatura antes de guardar.
+ *
+ * El modelo no siempre rellena `subject_name`, sobre todo en frases como "añade
+ * que hoy voy a estudiar dibujo técnico": escribía la tarea "Estudiar dibujo
+ * técnico" sin asignatura y el trabajo quedaba suelto en "General". Aquí se
+ * deduce del propio título, así que aunque el modelo se despiste la tarea queda
+ * con su asignatura (la que ya existe, o una nueva).
+ */
+function withInferredSubjects(
+  tasks: TaskInput[],
+  subjects: readonly { name: string }[],
+): TaskInput[] {
+  return tasks.map((task) => {
+    if (task.subject_id || task.subject_name?.trim()) return task;
+    const guess = inferSubjectFromTitle(task.title, subjects, {
+      // En una sesión de estudio o un examen, el título entero puede ser la
+      // asignatura ("Dibujo técnico"); en una tarea suelta, no ("Comprar pan").
+      allowWholeTitle: task.type === "study_session" || task.type === "exam",
+    });
+    return guess ? { ...task, subject_name: guess.name } : task;
+  });
 }
 
 function messageText(message: UIMessage): string {
@@ -479,7 +504,7 @@ export function SecretaryChat() {
             if (toolName === "addSubjects" && Array.isArray(input.subjects)) {
               actions.addSubjects(input.subjects);
             } else if (toolName === "addTasks" && Array.isArray(input.tasks)) {
-              actions.addTasks(input.tasks);
+              actions.addTasks(withInferredSubjects(input.tasks, data.subjects));
             } else if (toolName === "deleteTasks") {
               actions.deleteTasks(input.task_ids, input.task_titles);
             } else if (toolName === "deleteSubjects") {
@@ -518,7 +543,7 @@ export function SecretaryChat() {
         }
       }
     }
-  }, [messages, actions]);
+  }, [messages, actions, data.subjects]);
 
   const isMobile = useIsMobile();
   const isDesktop = useIsDesktop();

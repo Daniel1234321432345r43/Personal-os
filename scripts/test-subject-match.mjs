@@ -7,6 +7,7 @@ import {
   canonicalSubjectKey,
   findSubjectByExactName,
   findSubjectByName,
+  inferSubjectFromTitle,
   namesMatch,
   normalizeKey,
   subjectNamesMatch,
@@ -122,6 +123,62 @@ assert(
 assert(
   findSubjectByExactName("Historia de España", SUBJECTS)?.id === "4",
   "findSubjectByExactName encuentra el nombre exacto",
+);
+
+// --- inferSubjectFromTitle ---------------------------------------------------
+// Caso real: "añade que hoy voy a estudiar dibujo técnico" acababa en una tarea
+// sin asignatura. Ahora se deduce del propio título.
+assert(
+  inferSubjectFromTitle("Estudiar dibujo técnico", SUBJECTS)?.name === "Dibujo técnico" &&
+    inferSubjectFromTitle("Estudiar dibujo técnico", SUBJECTS)?.exists === false,
+  "deduce la asignatura nueva del título (dibujo técnico)",
+);
+assert(
+  inferSubjectFromTitle("Estudiar mates", SUBJECTS)?.name === "Matemáticas",
+  "un diminutivo se resuelve a la asignatura que ya existe",
+);
+assert(
+  inferSubjectFromTitle("Apúntame una tarea de física", SUBJECTS)?.name === "Física",
+  "encuentra la asignatura aunque el título lleve más palabras",
+);
+assert(
+  inferSubjectFromTitle("Examen de Historia de España", SUBJECTS)?.name === "Historia de España",
+  "una asignatura de varias palabras gana entera",
+);
+assert(
+  inferSubjectFromTitle("Estudiar para el examen de dibujo técnico", SUBJECTS)?.name ===
+    "Dibujo técnico",
+  "también acierta con el título que usa el Pomodoro",
+);
+assert(
+  inferSubjectFromTitle("Dibujo técnico", SUBJECTS, { allowWholeTitle: true })?.name ===
+    "Dibujo técnico",
+  "allowWholeTitle usa el título entero como asignatura",
+);
+assert(
+  inferSubjectFromTitle("Historia", SUBJECTS, { allowWholeTitle: true })?.name ===
+    "Historia de España",
+  "allowWholeTitle empareja con la asignatura existente antes que inventar",
+);
+assert(
+  inferSubjectFromTitle("Estudiar para mañana", SUBJECTS) === null,
+  "una fecha no es una asignatura",
+);
+assert(
+  inferSubjectFromTitle("Estudiar 2 horas", SUBJECTS) === null,
+  "una duración no es una asignatura",
+);
+assert(
+  inferSubjectFromTitle("Bloque de estudio", SUBJECTS) === null,
+  "un bloque de estudio sin asignatura no inventa ninguna",
+);
+assert(
+  inferSubjectFromTitle("Comprar pan", SUBJECTS) === null,
+  "sin palabra guía no se inventa una asignatura",
+);
+assert(
+  inferSubjectFromTitle("", SUBJECTS) === null && inferSubjectFromTitle("   ", SUBJECTS) === null,
+  "texto vacío → null",
 );
 
 console.log(

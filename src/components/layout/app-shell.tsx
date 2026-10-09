@@ -19,6 +19,7 @@ import { Loader2, RotateCw } from "lucide-react";
 import { ProgressTree } from "@/components/layout/progress-tree";
 import { XpToast } from "@/components/layout/xp-toast";
 import { XpPenalizer } from "@/lib/xp-penalizer";
+import { ExamAutoClose } from "@/lib/exam-autoclose";
 import { useData } from "@/components/providers/data-provider";
 import { startXpSync } from "@/lib/xp-system";
 import { startStudyLogSync } from "@/lib/study-log";
@@ -331,6 +332,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {bottomBar}
       <XpPenalizer />
+      <ExamAutoClose />
       <XpToast />
     </div>
   );

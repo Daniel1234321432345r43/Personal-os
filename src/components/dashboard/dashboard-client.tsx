@@ -11,6 +11,7 @@ import { SleepCard } from "./sleep-card";
 import { SecretaryChat } from "./secretary-chat";
 import { UpcomingTasks } from "./upcoming-tasks";
 import { TodayRoutines } from "./today-routines";
+import { StudyToday } from "./study-today";
 
 function greeting(): string {
   const h = new Date().getHours();
@@ -88,6 +89,14 @@ export function DashboardClient() {
           <Card className="bg-muted/40">
             <CardContent className="pt-4">
               <UpcomingTasks data={data} kind="tasks" />
+            </CardContent>
+          </Card>
+
+          {/* A qué has dedicado el tiempo hoy con el Pomodoro, con el total
+              acumulado de cada trabajo al desplegarlo. */}
+          <Card className="bg-muted/40">
+            <CardContent className="pt-4">
+              <StudyToday />
             </CardContent>
           </Card>
         </div>

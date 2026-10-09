@@ -392,13 +392,18 @@ export function useStudyLog() {
 
   const derived = useMemo(() => {
     const startOfWeek = weekStartKey();
+    const today = todayKey();
+    const todaySessions = sessions.filter((s) => s.date === today);
     return {
       sessions,
       totalMinutes: sumMinutes(sessions),
-      minutesToday: sumMinutes(sessions.filter((s) => s.date === todayKey())),
+      minutesToday: sumMinutes(todaySessions),
       minutesThisWeek: minutesSince(sessions, startOfWeek),
       weekStart: startOfWeek,
+      /** Minutos por tarea, sumando todos los días. */
       byTask: minutesByTask(sessions),
+      /** Minutos por tarea de HOY: lo que se enseña en la tarea del día. */
+      byTaskToday: minutesByTask(todaySessions),
       byDate: minutesByDate(sessions),
     };
   }, [sessions]);

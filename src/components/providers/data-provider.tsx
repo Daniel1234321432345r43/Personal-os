@@ -82,6 +82,11 @@ export interface DataState {
 
 export type SubjectInput = { name: string; color?: string };
 export type TaskInput = {
+  /**
+   * Id con el que crear la tarea. Opcional: lo usa el Pomodoro para enlazar la
+   * sesión de estudio con la tarea de trabajo que crea en el mismo instante.
+   */
+  id?: string;
   title: string;
   type?: TaskType;
   category?: TaskCategory;
@@ -164,7 +169,12 @@ export interface DataActions {
   addTasks: (inputs: TaskInput[]) => void;
   deleteTask: (id: string) => void;
   deleteTasks: (ids?: string[], titles?: string[]) => void;
-  toggleTaskDone: (id: string) => void;
+  /**
+   * Marca o desmarca una tarea. `options.xpLabel` cambia el texto del aviso de
+   * XP (lo usan los exámenes que se completan solos al pasar su día: el aviso
+   * dice "Has completado el examen de X" en vez de "Tarea completada").
+   */
+  toggleTaskDone: (id: string, options?: { xpLabel?: string }) => void;
   addNote: (input: NoteInput) => void;
   addNotes: (inputs: NoteInput[]) => void;
   updateNote: (id: string, input: NoteInput) => void;
@@ -1234,7 +1244,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
             });
           } else {
             createdTasks.push({
-              id: newId(), user_id: userId,
+              id: input.id ?? newId(),
+              user_id: userId,
               title: input.title.trim(),
               description: input.description ?? null,
               status: "pending", priority: input.priority ?? "medium",
@@ -1449,19 +1460,25 @@ export function DataProvider({ children }: { children: ReactNode }) {
         markDeleted([...resolvedIds].map((key) => ({ table: "tasks" as const, key })));
       },
 
-      toggleTaskDone: (id) => {
+      toggleTaskDone: (id, options) => {
         // Completar una tarea da su XP (y su aviso: "+20 XP · Tarea
         // completada"), además del XP por tiempo de estudio de los pomodoros.
         // El aviso deja claro cuánto ha dado la acción; desmarcarla no da ni
         // quita XP (awardXp recuerda cada tarea una sola vez).
         const current = stateRef.current.tasks.find((t) => t.id === id);
         const completing = !!current && current.status !== "done";
+        // Sin sesión (modo local) no hay nada que sincronizar: intentarlo solo
+        // dejaba un aviso de error en pantalla cada vez que se marcaba algo.
+        const userId = uid();
 
         setState((prev) => {
           const task = prev.tasks.find((t) => t.id === id);
           if (!task) return prev;
           const newStatus: Task["status"] = task.status === "done" ? "pending" : "done";
-          const updated_at = nowIso();          void syncSupabase(_supabase.from("tasks").update({ status: newStatus, updated_at, reminder_sent: false }).eq("id", id), "actualizar tarea");
+          const updated_at = nowIso();
+          if (userId !== "local") {
+            void syncSupabase(_supabase.from("tasks").update({ status: newStatus, updated_at, reminder_sent: false }).eq("id", id), "actualizar tarea");
+          }
           return {
             ...prev,
             tasks: prev.tasks.map((t) =>
@@ -1470,7 +1487,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           };
         });
 
-        if (completing) awardXp("task", id);
+        if (completing) awardXp("task", id, options?.xpLabel ? { label: options.xpLabel } : {});
       },
 
       addNote: (input) => {

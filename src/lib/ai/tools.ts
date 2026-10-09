@@ -40,6 +40,8 @@ export const secretaryTools = {
       "Añade una o más tareas, entregas (trabajos/prácticas/deberes), exámenes o sesiones de estudio al sistema. " +
       "La fecha (due_date o session_dates) es obligatoria: si el usuario no la ha dado, la herramienta se bloquea y devuelve la pregunta a hacer. " +
       "La ASIGNATURA nunca bloquea y nunca se pregunta: si el usuario la ha mencionado, pásala en subject_name emparejando con las que ya existen (\"mates\" → \"Matemáticas\"); si no la ha mencionado, guarda igualmente sin subject_name. " +
+      "Cuando el usuario dice que va a estudiar o hacer algo concreto (\"hoy voy a estudiar dibujo técnico\", \"quiero estudiar geografía\"), ese algo ES la asignatura: pásalo en subject_name aunque no exista todavía en el contexto (se creará), con mayúscula inicial. " +
+      "Nunca guardes una sesión de estudio con el tema solo en el título y sin subject_name. " +
       "La hora de inicio (start_time) es OPCIONAL: nunca preguntes por ella ni dejes de guardar por no tenerla.",
     inputSchema: z.object({
       tasks: z

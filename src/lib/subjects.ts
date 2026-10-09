@@ -136,3 +136,240 @@ export function findSubjectByName<T extends { name: string }>(
   if (strict) return strict;
   return subjects.find((s) => subjectNamesMatch(s.name, name ?? ""));
 }
+
+// ─── Deducir la asignatura del título ────────────────────────────────────────
+//
+// El caso que arregla esto: "añade que hoy voy a estudiar dibujo técnico". El
+// asistente escribía la tarea "Estudiar dibujo técnico" SIN asignatura (o
+// preguntaba de qué asignatura era), así que el trabajo quedaba suelto en
+// "General". Aquí se deduce del propio texto: si ya existe una asignatura que
+// aparece en el título, se usa esa; si no, se propone el nombre que el usuario
+// ha escrito ("dibujo técnico").
+
+/** Asignatura deducida: la de la lista (`exists`) o una nueva propuesta. */
+export interface SubjectGuess {
+  name: string;
+  /** true si corresponde a una asignatura que el usuario ya tiene creada. */
+  exists: boolean;
+}
+
+/** Palabras que introducen el trabajo: "estudiar", "examen", "trabajo"… */
+const LEAD_WORDS = [
+  "estudiar",
+  "estudio",
+  "repasar",
+  "repaso",
+  "trabajar",
+  "trabajo",
+  "preparar",
+  "practicar",
+  "examen",
+  "examenes",
+  "control",
+  "parcial",
+  "recuperacion",
+  "practica",
+  "practicas",
+  "deberes",
+  "ejercicio",
+  "ejercicios",
+  "entrega",
+  "proyecto",
+  "presentacion",
+  "tarea",
+  "temario",
+  "tema",
+];
+
+/** Palabras de enlace que se saltan al leer el trabajo ("examen DE mates"). */
+const CONNECTORS = new Set([
+  "de",
+  "del",
+  "para",
+  "el",
+  "la",
+  "los",
+  "las",
+  "en",
+  "sobre",
+  "mi",
+  "su",
+  "un",
+  "una",
+  "al",
+]);
+
+/** Palabras que no son una asignatura: "2 horas", "mañana", "los deberes"… */
+const NOT_A_SUBJECT = new Set([
+  "hoy",
+  "manana",
+  "ayer",
+  "pasado",
+  "proxima",
+  "proximo",
+  "lunes",
+  "martes",
+  "miercoles",
+  "jueves",
+  "viernes",
+  "sabado",
+  "domingo",
+  "semana",
+  "finde",
+  "mes",
+  "dia",
+  "dias",
+  "noche",
+  "tarde",
+  "manana",
+  "madrugada",
+  "hora",
+  "horas",
+  "minuto",
+  "minutos",
+  "rato",
+  "bloque",
+  "clase",
+  "clases",
+  "algo",
+  "cosas",
+  "todo",
+  "nada",
+  "general",
+  "libre",
+]);
+
+/** Tokens en minúsculas sin puntuación, conservando los acentos. */
+function tokenize(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9áéíóúüñ]+/)
+    .filter(Boolean);
+}
+
+/** Los mismos tokens, sin acentos: la forma comparable. */
+function tokenizeKey(value: string): string[] {
+  return tokenize(value).map((word) => normalizeKey(word));
+}
+
+/** ¿`phrase` aparece como palabras seguidas dentro de `list`? */
+function containsPhrase(list: string[], phrase: string[]): boolean {
+  if (phrase.length === 0 || phrase.length > list.length) return false;
+  for (let i = 0; i + phrase.length <= list.length; i += 1) {
+    let matches = true;
+    for (let j = 0; j < phrase.length; j += 1) {
+      if (list[i + j] !== phrase[j]) {
+        matches = false;
+        break;
+      }
+    }
+    if (matches) return true;
+  }
+  return false;
+}
+
+/**
+ * Posiciones (sobre los tokens de `tokenizeKey`) del trabajo dentro del título.
+ * "Estudiar para el examen de dibujo técnico" → [5, 6]; "estudiar para mañana"
+ * → [] (no queda ningún trabajo).
+ */
+function workIndexes(keys: string[]): number[] {
+  let index = 0;
+  let sawLead = false;
+  while (index < keys.length) {
+    const word = keys[index];
+    if (LEAD_WORDS.includes(word)) {
+      sawLead = true;
+      index += 1;
+      continue;
+    }
+    if (sawLead && CONNECTORS.has(word)) {
+      index += 1;
+      continue;
+    }
+    break;
+  }
+  if (!sawLead) return [];
+
+  const kept: number[] = [];
+  for (let i = index; i < keys.length; i += 1) {
+    if (NOT_A_SUBJECT.has(keys[i])) continue;
+    kept.push(i);
+  }
+  return kept;
+}
+
+/** ¿Los tokens son un nombre de asignatura razonable? */
+function isValidSubjectWords(keys: string[]): boolean {
+  if (keys.length === 0 || keys.length > 4) return false;
+  return keys.every(
+    (word) => word.length >= 3 && !NOT_A_SUBJECT.has(word) && !Number.isFinite(Number(word)),
+  );
+}
+
+function capitalize(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+/**
+ * Deduce la asignatura del texto: del título de una tarea ("Estudiar dibujo
+ * técnico") o de lo que el usuario escribe al empezar un pomodoro.
+ *
+ * Orden de preferencia:
+ *  1. Una asignatura que ya existe y aparece en el texto ("... de Historia de
+ *     España" → Historia de España, "... mates" → Matemáticas).
+ *  2. Un diminutivo del candidato que corresponde a una asignatura existente.
+ *  3. El propio candidato como asignatura nueva ("dibujo técnico"), siempre que
+ *     parezca un nombre de asignatura: ni genérico ("deberes"), ni de tiempo
+ *     ("mañana"), ni un número ("2 horas").
+ *
+ * `allowWholeTitle` deja usar el título entero como candidato cuando no hay
+ * ninguna palabra guía. Se usa en sesiones de estudio y exámenes ("Dibujo
+ * técnico"), no en tareas sueltas ("Comprar pan"), que no son asignaturas.
+ * Devuelve `null` cuando no hay nada fiable que deducir.
+ */
+export function inferSubjectFromTitle(
+  title: string,
+  subjects: readonly { name: string }[],
+  options: { allowWholeTitle?: boolean } = {},
+): SubjectGuess | null {
+  const keys = tokenizeKey(title);
+  if (keys.length === 0) return null;
+
+  // 1) Una asignatura existente que aparece en el texto: nunca se inventa otra.
+  const byLength = [...subjects].sort((a, b) => b.name.length - a.name.length);
+  for (const subject of byLength) {
+    const phrase = tokenizeKey(subject.name);
+    if (containsPhrase(keys, phrase)) return { name: subject.name, exists: true };
+  }
+
+  const indexes = workIndexes(keys);
+  const words = tokenize(title);
+  const keepAccents = words.length === keys.length;
+  const candidateKeys = indexes.map((i) => keys[i]);
+  const candidateWords = indexes.map((i) => (keepAccents ? words[i] : keys[i]));
+  const candidate = candidateWords.join(" ");
+
+  // 2) El candidato (diminutivos incluidos) ya es una asignatura del usuario:
+  //    "estudiar mates" con Matemáticas creada no inventa una asignatura nueva.
+  const known = candidate
+    ? findSubjectByName(candidate, subjects)
+    : options.allowWholeTitle
+      ? findSubjectByName(title, subjects)
+      : undefined;
+  if (known) return { name: known.name, exists: true };
+
+  // 3) Asignatura nueva, solo si el texto parece de verdad una asignatura.
+  if (candidateKeys.length > 0) {
+    return isValidSubjectWords(candidateKeys)
+      ? { name: capitalize(candidate), exists: false }
+      : null;
+  }
+  if (options.allowWholeTitle && isValidSubjectWords(keys)) {
+    return {
+      name: capitalize(keepAccents ? words.join(" ") : keys.join(" ")),
+      exists: false,
+    };
+  }
+  return null;
+}

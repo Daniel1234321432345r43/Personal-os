@@ -44,6 +44,7 @@ function TaskItem({
   subjectById,
   actions,
   studiedMinutes = 0,
+  studiedToday = 0,
 }: {
   task: Task;
   subjectById: Map<string, Subject>;
@@ -51,8 +52,10 @@ function TaskItem({
     toggleTaskDone: (id: string) => void;
     deleteTask: (id: string) => void;
   };
-  /** Minutos dedicados a esta tarea con el Pomodoro. */
+  /** Minutos dedicados a esta tarea con el Pomodoro (todos los días). */
   studiedMinutes?: number;
+  /** De esos minutos, los dedicados hoy. */
+  studiedToday?: number;
 }) {
   const subject = task.subject_id ? subjectById.get(task.subject_id) : null;
   const done = task.status === "done";
@@ -118,14 +121,19 @@ function TaskItem({
         </p>
       </div>
 
-      {studiedMinutes > 0 && (
+      {(studiedMinutes > 0 || studiedToday > 0) && (
         <Badge
           variant="outline"
           className="hidden shrink-0 items-center gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 sm:inline-flex"
-          title="Tiempo dedicado con el Pomodoro"
+          title={`Con el Pomodoro: hoy ${formatDuration(studiedToday)} · en total ${formatDuration(studiedMinutes)}`}
         >
           <BookOpen className="h-3 w-3" />
-          {formatDuration(studiedMinutes)}
+          {studiedToday > 0
+            ? `Hoy ${formatDuration(studiedToday)}`
+            : formatDuration(studiedMinutes)}
+          {studiedToday > 0 && studiedMinutes > studiedToday && (
+            <>{" · "}Total {formatDuration(studiedMinutes)}</>
+          )}
         </Badge>
       )}
 
@@ -206,6 +214,7 @@ function TaskCard({
       subjectById={subjectById}
       actions={actions}
       studiedMinutes={study.byTask.get(task.id) ?? 0}
+      studiedToday={study.byTaskToday.get(task.id) ?? 0}
     />
   );
 
