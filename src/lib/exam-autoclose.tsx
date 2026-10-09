@@ -19,6 +19,13 @@ import type { Task } from "@/lib/types";
  * cierra los exámenes que pasaron mientras la app estaba cerrada. Se monta una
  * vez en AppShell. Si el usuario vuelve a desmarcar un examen a mano, no se
  * vuelve a completar solo: solo se tocan los que siguen pendientes.
+ *
+ * Esto es la red de seguridad para cuando nadie abre la app el día del examen.
+ * El examen del propio día lo cierra antes la Edge Function send-reminders a
+ * las 17:00 locales (supabase/functions/_shared/exam-done.js), así que el aviso
+ * llega al móvil sin necesidad de abrir nada. Empiezan los dos por el mismo
+ * camino —el examen queda hecho y se avisa— y solo actúan sobre los pendientes,
+ * así que no se pisan ni avisan dos veces.
  */
 
 /** Exámenes de los que ya se avisó al sistema (para no repetir el aviso). */

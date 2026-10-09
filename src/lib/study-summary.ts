@@ -50,6 +50,16 @@ export interface StudyWorkItem {
 /** Palabras que ya dicen por sí solas que el elemento es un examen. */
 const EXAM_WORD = /^(examen|ex[aá]menes|control|parcial|recuperaci[oó]n|test|prueba)\b/i;
 
+/**
+ * Artículo de cada palabra de examen. «Recuperación» y «prueba» son femeninas:
+ * con un "el" fijo salía «Has completado el recuperación de mates».
+ */
+const EXAM_ARTICLES: Record<string, string> = {
+  "recuperación": "la",
+  recuperacion: "la",
+  prueba: "la",
+};
+
 /** Títulos que ya están escritos como un trabajo: no se les añade prefijo. */
 const WORK_PHRASE = /^(estudiar|trabajar|repasar|preparar|hacer|practicar)\b/i;
 
@@ -112,9 +122,10 @@ export function composeWorkTitle(kind: string, name: string): string {
  */
 export function examCompletedMessage(title: string): string {
   const clean = title.trim() || "tu examen";
-  return EXAM_WORD.test(clean)
-    ? `Has completado el ${lowerFirst(clean)}`
-    : `Has completado el examen de ${clean}`;
+  const match = clean.match(EXAM_WORD);
+  if (!match) return `Has completado el examen de ${clean}`;
+  const article = EXAM_ARTICLES[match[1].toLowerCase()] ?? "el";
+  return `Has completado ${article} ${lowerFirst(clean)}`;
 }
 
 /**

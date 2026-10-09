@@ -1,6 +1,15 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { sendWebPush } from "../_shared/web_push.js";
 import { dateKeyInTz, normalizeDate, normalizeTime, zonedDateTime } from "../_shared/reminder-time.js";
+import {
+  EXAM_DONE_LOCAL_TIME,
+  EXAM_DONE_SOURCE,
+  EXAM_DONE_XP,
+  examDoneMessage,
+  examDoneTarget,
+  isExamDoneWindow,
+  selectExamsToComplete,
+} from "../_shared/exam-done.js";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -294,6 +303,111 @@ Deno.serve(async () => {
 
         sentCount += 1;
         console.log(`[send-reminders] Aviso de sueño enviado (${candidate.dateKey}, ${remindAtIso}).`);
+      }
+    }
+
+    // ── Exámenes: a las 17:00 locales, el examen del día queda hecho ────────
+    // El aviso "Examen completado" tiene que llegar aunque el usuario no abra
+    // la app, así que el cierre y la notificación los hace el cron. La app hace
+    // lo mismo al abrirse cuando el día ya pasó (src/lib/exam-autoclose.tsx).
+    const { dateKey: localDateKey, target: examTarget } = examDoneTarget(now, tz);
+
+    if (isExamDoneWindow(now, examTarget)) {
+      const yesterdayKey = dateKeyInTz(new Date(now.getTime() - 86400000), tz);
+      const tomorrowKey = dateKeyInTz(new Date(now.getTime() + 86400000), tz);
+
+      const { data: examRows, error: examError } = await supabase
+        .from("tasks")
+        .select("id, title, type, due_date, start_time, status")
+        .eq("user_id", userId)
+        .eq("type", "exam")
+        .neq("status", "done")
+        .gte("due_date", yesterdayKey)
+        .lte("due_date", tomorrowKey);
+
+      if (examError) {
+        console.error(`[send-reminders] error leyendo exámenes de ${userId}:`, examError.message);
+      }
+
+      const examsToClose = selectExamsToComplete(examRows ?? [], localDateKey, now, tz);
+      const remindAtIso = examTarget ? examTarget.toISOString() : "";
+
+      for (const exam of examsToClose) {
+        // Sin repetir el aviso: una fila por (usuario, examen, momento previsto).
+        const { data: alreadyLogged, error: logReadError } = await supabase
+          .from("reminder_log")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("entity_type", "exam_done")
+          .eq("entity_id", exam.id)
+          .eq("remind_at", remindAtIso)
+          .maybeSingle();
+
+        if (logReadError) {
+          console.error("[send-reminders] error consultando reminder_log (examen):", logReadError.message);
+        }
+        if (alreadyLogged) continue;
+
+        // 1) El examen queda hecho: deja de aparecer como pendiente. La app
+        //    cuenta el día como terminado a las 17:00, no a medianoche.
+        const { error: doneError } = await supabase
+          .from("tasks")
+          .update({ status: "done", updated_at: now.toISOString(), reminder_sent: false })
+          .eq("id", exam.id);
+        if (doneError) {
+          console.error(`[send-reminders] no se pudo completar el examen ${exam.id}:`, doneError.message);
+          continue;
+        }
+
+        // 2) Su XP, con el mismo RPC idempotente que usa la app. Al dejar el
+        //    evento en tree_xp_events, el resto de dispositivos ve el aviso al
+        //    abrir la app (es el mismo camino que "tarea completada").
+        const { error: xpError } = await supabase.rpc("award_tree_xp", {
+          p_source: EXAM_DONE_SOURCE,
+          p_source_id: exam.id,
+          p_xp: EXAM_DONE_XP,
+        });
+        if (xpError) {
+          console.error(`[send-reminders] no se pudo dar el XP del examen ${exam.id}:`, xpError.message);
+        }
+
+        // 3) El aviso al móvil, con el mismo texto que muestra la app.
+        const message = examDoneMessage(exam.title);
+        const payload = JSON.stringify({
+          title: "Examen completado ✅",
+          body: `${message}. Ya está marcado como hecho.`,
+          url: "/academic",
+          tag: `exam-done-${exam.id}`,
+        });
+
+        let examSent = false;
+        for (const sub of userSubs) {
+          try {
+            await sendWebPush(
+              { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+              payload,
+              { subject: vapidSubject, publicKey: vapidPublicKey, privateKey: vapidPrivateKey },
+            );
+            examSent = true;
+          } catch (err) {
+            console.error(`[send-reminders] error web push (examen):`, err);
+          }
+        }
+
+        const { error: logInsertError } = await supabase.from("reminder_log").insert({
+          user_id: userId,
+          entity_type: "exam_done",
+          entity_id: exam.id,
+          remind_at: remindAtIso,
+        });
+        if (logInsertError) {
+          console.error("[send-reminders] no se pudo registrar el cierre del examen:", logInsertError.message);
+        }
+
+        if (examSent) sentCount += 1;
+        console.log(
+          `[send-reminders] Examen ${exam.id} cerrado a las ${EXAM_DONE_LOCAL_TIME} locales (${remindAtIso}); push: ${examSent}.`,
+        );
       }
     }
   }
