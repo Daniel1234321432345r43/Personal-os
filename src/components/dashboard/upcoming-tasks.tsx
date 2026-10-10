@@ -1,11 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { CalendarClock, Check, GraduationCap, ListTodo, Trash2 } from "lucide-react";
+import {
+  BookOpen,
+  CalendarClock,
+  Check,
+  GraduationCap,
+  ListTodo,
+  Trash2,
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { formatDate } from "@/lib/format";
+import { formatDate, formatDuration } from "@/lib/format";
 import { useData } from "@/components/providers/data-provider";
+import { useStudyLog } from "@/lib/study-log";
 import type { DashboardData } from "@/lib/data";
 import type { Task, TaskPriority } from "@/lib/types";
 
@@ -79,6 +87,9 @@ export function UpcomingTasks({
   kind: UpcomingKind;
 }) {
   const { actions } = useData();
+  // Minutos de Pomodoro dedicados a cada elemento: en un examen, el dato que
+  // dice de verdad si lo llevas preparado ("2 h dedicadas").
+  const study = useStudyLog();
   const subjectById = new Map(data.subjects.map((s) => [s.id, s]));
   const { title, empty, limit, icon: Icon } = kindMeta[kind];
   const isExam = (t: Task) => t.type === "exam";
@@ -112,6 +123,7 @@ export function UpcomingTasks({
             const subject = task.subject_id
               ? subjectById.get(task.subject_id)
               : null;
+            const studiedMinutes = study.byTask.get(task.id) ?? 0;
             return (
               <li
                 key={task.id}
@@ -154,6 +166,20 @@ export function UpcomingTasks({
                     className={`shrink-0 ${priorityBadge[task.priority]}`}
                   >
                     {priorityLabel[task.priority]}
+                  </Badge>
+                )}
+                {/* Tiempo dedicado con el Pomodoro. En un examen es el dato que
+                    de verdad dice cómo lo llevas ("2 h"), y en el subtítulo se
+                    cortaba con «…». Va en su propio badge, con el icono de
+                    libro para no confundirlo con la fecha. */}
+                {studiedMinutes > 0 && (
+                  <Badge
+                    variant="outline"
+                    className="hidden shrink-0 items-center gap-1 border-emerald-500/40 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 sm:inline-flex"
+                    title={`Tiempo dedicado con el Pomodoro: ${formatDuration(studiedMinutes)}`}
+                  >
+                    <BookOpen className="h-3 w-3" />
+                    {formatDuration(studiedMinutes)}
                   </Badge>
                 )}
                 {/* Acciones en el propio widget: sin esto había tareas que solo

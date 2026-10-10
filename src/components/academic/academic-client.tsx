@@ -204,8 +204,10 @@ function TaskCard({
   study: ReturnType<typeof useStudyLog>;
 }) {
   const [showForm, setShowForm] = useState(false);
+  // Las completadas nacen comprimidas en TODOS los tamaños: en escritorio se
+  // mostraban siempre abiertas y una lista larga de tareas ya hechas empujaba
+  // fuera de pantalla lo pendiente. El botón las despliega con su animación.
   const [showCompleted, setShowCompleted] = useState(false);
-  const isDesktop = useIsDesktop();
 
   const renderTask = (task: Task) => (
     <TaskItem
@@ -266,8 +268,8 @@ function TaskCard({
             <button
               type="button"
               onClick={() => setShowCompleted((v) => !v)}
-              aria-expanded={isDesktop || showCompleted}
-              className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60 lg:hidden"
+              aria-expanded={showCompleted}
+              className="flex w-full items-center justify-between rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60"
             >
               <span className="flex items-center gap-2">
                 <Check className="h-4 w-4" />
@@ -282,7 +284,7 @@ function TaskCard({
             </button>
 
             <AnimatePresence initial={false}>
-              {(isDesktop || showCompleted) && (
+              {showCompleted && (
                 <motion.div
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: "auto", opacity: 1 }}

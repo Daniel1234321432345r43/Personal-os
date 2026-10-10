@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
-import { BookOpen, ChevronDown, Timer } from "lucide-react";
+import { BookOpen, ChevronDown, History, Timer } from "lucide-react";
 import { useData } from "@/components/providers/data-provider";
 import { useStudyLog } from "@/lib/study-log";
 import { summarizeStudy, type StudyWorkItem } from "@/lib/study-summary";
@@ -12,16 +12,18 @@ import { cn } from "@/lib/utils";
 
 /** Cuántos días del desglose se muestran al desplegar un trabajo. */
 const DAYS_SHOWN = 6;
-/** Cuántos trabajos sin tiempo hoy se listan (para poder ver su total). */
-const IDLE_SHOWN = 3;
 
 /**
  * Tiempo de estudio de hoy, sacado del registro de Pomodoros.
  *
- * Cada pomodoro de trabajo deja sus minutos en la tarea elegida, así que aquí
- * se ve a qué se ha dedicado el día y cuánto: "Estudiar para el examen de
- * Dibujo Técnico — 50 min". Al desplegar un trabajo se ve TODO el tiempo que
- * lleva acumulado (no solo el de hoy) y el desglose de los últimos días.
+ * Arriba, lo único que importa al entrar: a qué has dedicado el día y cuánto
+ * ("Estudiar para el examen de Dibujo Técnico — hoy 50 min"). Si todavía no has
+ * estudiado, lo dice y punto.
+ *
+ * Todo el tiempo acumulado —lo de días pasados y los trabajos que ya has dado
+ * por terminados— va debajo, en un apartado COMPRIMIDO (`Todo el tiempo
+ * acumulado`): sigue estando, pero sin ocupar la tarjeta. Cada trabajo se
+ * despliega para ver sus minutos día a día.
  *
  * Las sesiones sin tarea (o de una tarea borrada) se agrupan en "Estudio
  * general", así que su tiempo nunca desaparece de los totales.
@@ -30,21 +32,22 @@ export function StudyToday() {
   const { data } = useData();
   const study = useStudyLog();
   const today = todayKey();
+  /** Trabajo desplegado (la clave, no el nombre: hay nombres repetidos). */
   const [openKey, setOpenKey] = useState<string | null>(null);
+  /** El acumulado nace comprimido: solo se abre si lo pides. */
+  const [showTotal, setShowTotal] = useState(false);
 
   const items = useMemo(
     () => summarizeStudy(study.sessions, data.tasks, today),
     [study.sessions, data.tasks, today],
   );
-  const workedToday = items.filter((item) => item.minutesToday > 0);
-  const idle = items.filter((item) => item.minutesToday === 0).slice(0, IDLE_SHOWN);
+  const todayItems = items.filter((item) => item.minutesToday > 0);
+  const totalToday = todayItems.reduce((acc, item) => acc + item.minutesToday, 0);
 
-  const totalToday = workedToday.reduce((acc, item) => acc + item.minutesToday, 0);
-
-  const renderRow = (item: StudyWorkItem) => {
+  const renderRow = (item: StudyWorkItem, variant: "today" | "total") => {
     const open = openKey === item.key;
     return (
-      <li key={item.key} className="rounded-lg border bg-card">
+      <li key={`${variant}-${item.key}`} className="rounded-lg border bg-card">
         <button
           type="button"
           onClick={() => setOpenKey(open ? null : item.key)}
@@ -54,19 +57,23 @@ export function StudyToday() {
           <span className="min-w-0 flex-1">
             <span className="block truncate text-sm font-medium">{item.title}</span>
             <span className="block truncate text-xs text-muted-foreground">
-              Total: {formatDuration(item.totalMinutes)} ·{" "}
               {item.byDate.length === 1 ? "1 día" : `${item.byDate.length} días`}
+              {variant === "today"
+                ? ` · total ${formatDuration(item.totalMinutes)}`
+                : ` · último ${formatDate(item.byDate[0].date)}`}
             </span>
           </span>
           <span
             className={cn(
               "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold",
-              item.minutesToday > 0
+              variant === "today"
                 ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400"
                 : "bg-muted text-muted-foreground",
             )}
           >
-            {item.minutesToday > 0 ? `Hoy ${formatDuration(item.minutesToday)}` : "Sin tiempo hoy"}
+            {variant === "today"
+              ? `Hoy ${formatDuration(item.minutesToday)}`
+              : formatDuration(item.totalMinutes)}
           </span>
           <motion.span
             animate={{ rotate: open ? 180 : 0 }}
@@ -140,33 +147,66 @@ export function StudyToday() {
         </Link>
       </div>
 
-      {workedToday.length === 0 && idle.length === 0 ? (
+      {totalToday === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Aún no has hecho ningún pomodoro. Empieza uno en{" "}
+          Hoy todavía no has estudiado. Empieza un{" "}
           <Link href="/pomodoro" className="font-medium text-primary">
-            Pomodoro
+            pomodoro
           </Link>{" "}
           y aquí verás a qué has dedicado el tiempo.
         </p>
       ) : (
-        <>
-          {workedToday.length > 0 ? (
-            <ul className="space-y-1.5">{workedToday.map(renderRow)}</ul>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              Hoy todavía no has estudiado. Lo que lleves en total sigue aquí abajo.
-            </p>
-          )}
+        <ul className="space-y-1.5">{todayItems.map((item) => renderRow(item, "today"))}</ul>
+      )}
 
-          {idle.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">
-                Sin tiempo hoy
-              </p>
-              <ul className="space-y-1.5">{idle.map(renderRow)}</ul>
-            </div>
-          )}
-        </>
+      {/* Acumulado (días pasados y trabajos ya terminados): comprimido por
+          defecto, se abre con una animación como el resto de acordeones. */}
+      {items.length > 0 && (
+        <div className="border-t pt-2">
+          <button
+            type="button"
+            onClick={() => setShowTotal((v) => !v)}
+            aria-expanded={showTotal}
+            className="flex w-full items-center justify-between gap-2 rounded-lg px-2 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted/60"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <History className="h-4 w-4 shrink-0" />
+              <span className="truncate">
+                Todo el tiempo acumulado ({items.length})
+              </span>
+            </span>
+            <span className="flex shrink-0 items-center gap-2">
+              <span className="text-xs font-semibold text-foreground">
+                {formatDuration(study.totalMinutes)}
+              </span>
+              <motion.span
+                animate={{ rotate: showTotal ? 180 : 0 }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+              >
+                <ChevronDown className="h-4 w-4" />
+              </motion.span>
+            </span>
+          </button>
+
+          <AnimatePresence initial={false}>
+            {showTotal && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{
+                  height: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] },
+                  opacity: { duration: 0.25 },
+                }}
+                className="overflow-hidden"
+              >
+                <ul className="space-y-1.5 pt-2">
+                  {items.map((item) => renderRow(item, "total"))}
+                </ul>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       )}
     </div>
   );

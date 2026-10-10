@@ -706,9 +706,13 @@ export function SecretaryChat() {
                 todo ese alto y la caja de escribir queda pegada abajo del todo
                 en vez de quedarse a media altura con un hueco debajo. */}
             <div className="flex h-[min(420px,55dvh)] flex-col lg:h-auto lg:min-h-[min(420px,55dvh)] lg:flex-1">
+              {/* En escritorio la tarjeta se estira a lo alto y el historial se
+                  ordena DETRÁS de la entrada de texto (`lg:order-2`), así que la
+                  barra de escribir queda arriba del todo, pegada a la cabecera
+                  y sin tener que bajar para verla. En móvil sigue abajo. */}
               <div
                 ref={scrollAreaRef}
-                className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain pr-3"
+                className="min-h-0 flex-1 touch-pan-y overflow-y-auto overscroll-contain pr-3 lg:order-2 lg:pt-3"
               >
         {!configured && (
           <div className="mb-4 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-800 dark:text-amber-200">
@@ -791,10 +795,10 @@ export function SecretaryChat() {
 
               </div>
 
-              {/* Entrada: siempre fija abajo */}
+              {/* Entrada: abajo en móvil (fija), arriba en escritorio */}
               <form
                 onSubmit={handleSubmit}
-                className="flex shrink-0 items-center gap-2 border-t pt-3"
+                className="flex shrink-0 items-center gap-2 border-t pt-3 lg:order-1 lg:border-b lg:border-t-0 lg:pb-3 lg:pt-0"
               >
         <Input
           value={input}

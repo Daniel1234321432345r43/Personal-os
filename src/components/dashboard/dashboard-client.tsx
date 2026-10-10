@@ -10,7 +10,6 @@ import { StatCards } from "./stat-cards";
 import { SleepCard } from "./sleep-card";
 import { SecretaryChat } from "./secretary-chat";
 import { UpcomingTasks } from "./upcoming-tasks";
-import { TodayRoutines } from "./today-routines";
 import { StudyToday } from "./study-today";
 
 function greeting(): string {
@@ -68,14 +67,8 @@ export function DashboardClient() {
 
         {/* Columna derecha */}
         <div className="min-w-0 space-y-6">
-          {/* Sueño: entre el Secretario y las rutinas de hoy */}
+          {/* Sueño (las antiguas «Rutinas de hoy» se han quitado: no se usaban) */}
           <SleepCard data={data} />
-
-          <Card className="bg-muted/40">
-            <CardContent className="pt-4">
-              <TodayRoutines />
-            </CardContent>
-          </Card>
 
           {/* Exámenes y tareas van en tarjetas distintas: mezclados, los
               exámenes de la próxima semana escondían las entregas. */}

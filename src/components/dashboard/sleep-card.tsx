@@ -21,8 +21,8 @@ const MotionLink = motion.create(Link);
 const WEEKDAY_INITIALS = ["L", "M", "X", "J", "V", "S", "D"];
 
 /**
- * Tarjeta de Sueño del panel "Hoy". Va entre el Secretario IA y las rutinas:
- * resume la última noche, el objetivo y la semana en curso, y lleva al módulo
+ * Tarjeta de Sueño del panel "Hoy". Va bajo el Secretario IA: resume la última
+ * noche, el objetivo y la semana en curso, y lleva al módulo
  * completo (/sueno) al pulsarla.
  */
 export function SleepCard({ data }: { data: DashboardData }) {
