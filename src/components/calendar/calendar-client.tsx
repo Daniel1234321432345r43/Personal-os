@@ -235,6 +235,7 @@ export function CalendarClient() {
     let income = 0;
     let expenses = 0;
     let workouts = 0;
+    let workoutMinutes = 0;
 
     data.tasks.forEach((t) => {
       if (t.due_date?.startsWith(prefix)) {
@@ -254,6 +255,7 @@ export function CalendarClient() {
     data.workouts.forEach((w) => {
       if (w.date.startsWith(prefix)) {
         workouts++;
+        workoutMinutes += w.duration_minutes;
       }
     });
 
@@ -265,6 +267,8 @@ export function CalendarClient() {
       expenses,
       net: income - expenses,
       workouts,
+      // El entreno se cuenta en HORAS (lo que has entrenado), no en sesiones.
+      workoutMinutes,
       totalEvents: exams + assignments + tasks + (income > 0 || expenses > 0 ? 1 : 0) + workouts,
     };
   }, [data.tasks, data.transactions, data.workouts, currentDate.year, currentDate.month]);
@@ -501,7 +505,14 @@ export function CalendarClient() {
             </div>
             <div className="min-w-0">
               <p className="text-xs text-muted-foreground">Entrenamientos</p>
-              <p className="text-base font-semibold">{monthStats.workouts} ses.</p>
+              <p
+                className="text-base font-semibold"
+                title={`${monthStats.workouts} entrenamiento(s) este mes`}
+              >
+                {monthStats.workoutMinutes > 0
+                  ? formatDuration(monthStats.workoutMinutes)
+                  : "—"}
+              </p>
             </div>
           </div>
         </Card>
@@ -720,7 +731,7 @@ export function CalendarClient() {
                             >
                               <Dumbbell className="h-3 w-3 shrink-0" />
                               <span className="truncate">
-                                {w.activity_type} ({w.duration_minutes}m)
+                                {w.activity_type} ({formatDuration(w.duration_minutes)})
                               </span>
                             </div>
                           ))}
@@ -832,7 +843,9 @@ export function CalendarClient() {
                               <Dumbbell className="h-3 w-3 text-blue-500" />
                               <span className="font-medium">{w.activity_type}</span>
                               {w.duration_minutes && (
-                                <span className="text-muted-foreground">{w.duration_minutes} min</span>
+                                <span className="text-muted-foreground">
+                                  {formatDuration(w.duration_minutes)}
+                                </span>
                               )}
                             </div>
                           ))}
@@ -967,7 +980,7 @@ export function CalendarClient() {
                               <Dumbbell className="h-3.5 w-3.5" />
                               {w.activity_type}
                             </span>
-                            <span>{w.duration_minutes} min</span>
+                            <span>{formatDuration(w.duration_minutes)}</span>
                           </div>
                         ))}
                       </div>
@@ -1335,7 +1348,9 @@ export function CalendarClient() {
                               {w.notes && <p className="text-[11px] opacity-80">{w.notes}</p>}
                             </div>
                             <div className="flex min-w-0 items-center gap-2">
-                              <span className="font-semibold">{w.duration_minutes} min</span>
+                              <span className="font-semibold">
+                                {formatDuration(w.duration_minutes)}
+                              </span>
                               <Button
                                 variant="ghost"
                                 size="icon"

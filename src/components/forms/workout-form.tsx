@@ -6,6 +6,13 @@ import { Button } from "@/components/ui/button";
 import { fieldClass, inputClass, labelClass } from "./ui";
 import { todayKey } from "@/lib/format";
 
+/**
+ * Duración con la que se propone un entreno. La mayoría de sesiones duran una
+ * hora, así que el campo viene relleno y solo hay que cambiarlo si fue otra
+ * cosa (en vez de tener que escribirlo siempre).
+ */
+const DEFAULT_DURATION_MINUTES = 60;
+
 const ACTIVITIES = [
   "Gimnasio",
   "Fútbol",
@@ -31,7 +38,7 @@ export function WorkoutForm({
   const [title, setTitle] = useState("");
   const [date, setDate] = useState(initialDate || todayKey());
   const [startTime, setStartTime] = useState("");
-  const [duration, setDuration] = useState("");
+  const [duration, setDuration] = useState(String(DEFAULT_DURATION_MINUTES));
   const [notes, setNotes] = useState("");
 
   function submit(e: React.FormEvent) {
@@ -50,7 +57,7 @@ export function WorkoutForm({
     setActivity("");
     setTitle("");
     setStartTime("");
-    setDuration("");
+    setDuration(String(DEFAULT_DURATION_MINUTES));
     setNotes("");
     setDate(todayKey());
     onDone?.();
@@ -91,9 +98,13 @@ export function WorkoutForm({
             required
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
-            placeholder="60"
+            placeholder={String(DEFAULT_DURATION_MINUTES)}
             className={inputClass}
           />
+          <p className="text-[11px] text-muted-foreground">
+            Se propone {DEFAULT_DURATION_MINUTES} min: cámbialo solo si entrenaste
+            otra cosa.
+          </p>
         </div>
       </div>
 
