@@ -24,8 +24,8 @@
 export const SYNC_TABLES = [
   "subjects",
   "tasks",
-  "notes",
   "workouts",
+  "workout_schedule",
   "habits",
   "habit_completions",
   "transactions",
@@ -44,8 +44,8 @@ export type SyncTable = (typeof SYNC_TABLES)[number];
 export const TABLE_KEY_COLUMN: Record<SyncTable, string> = {
   subjects: "id",
   tasks: "id",
-  notes: "id",
   workouts: "id",
+  workout_schedule: "id",
   habits: "id",
   habit_completions: "id",
   transactions: "id",
@@ -65,8 +65,8 @@ export function isSyncTable(value: unknown): value is SyncTable {
 export const STATE_FIELD_OF_TABLE: Record<SyncTable, string> = {
   subjects: "subjects",
   tasks: "tasks",
-  notes: "notes",
   workouts: "workouts",
+  workout_schedule: "workoutSchedule",
   habits: "habits",
   habit_completions: "habitCompletions",
   transactions: "transactions",

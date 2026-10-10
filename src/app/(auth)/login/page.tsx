@@ -25,7 +25,7 @@ import {
 
 const features = [
   { icon: Sparkles, label: "Secretario IA", desc: "Asistente inteligente" },
-  { icon: GraduationCap, label: "Estudios", desc: "Classroom + entregas" },
+  { icon: GraduationCap, label: "Estudios", desc: "Entregas y exámenes" },
   { icon: Dumbbell, label: "Deporte", desc: "Rutinas y hábitos" },
   { icon: Wallet, label: "Finanzas", desc: "Balance mensual" },
 ];
@@ -40,8 +40,8 @@ export default function LoginPage() {
   // el "flashazo" (mostrar el formulario un instante y saltar a /dashboard).
   const [checkingSession, setCheckingSession] = useState(configured);
 
-  // Leer a dónde volver tras iniciar sesión (p. ej. /academic?classroom=login
-  // cuando vienes del flujo de conectar Google Classroom).
+  // Leer a dónde volver tras iniciar sesión (p. ej. /academic cuando el flujo
+  // de conexión envía al login).
   useEffect(() => {
     const n = new URLSearchParams(window.location.search).get("next");
     // Patrón intencional: leer el parámetro solo en el cliente tras hidratar.

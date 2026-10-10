@@ -2,9 +2,6 @@ import type { DashboardData } from "@/lib/data";
 import type { SecretaryContext } from "@/lib/ai/types";
 import { todayKey } from "@/lib/format";
 
-const NOTE_EXCERPT = 500;
-const MAX_NOTES = 5;
-
 /** Construye el contexto que se envía a la IA a partir de los datos del usuario. */
 export function buildSecretaryContext(data: DashboardData): SecretaryContext {
   const today = todayKey();
@@ -35,11 +32,6 @@ export function buildSecretaryContext(data: DashboardData): SecretaryContext {
       weight_percentage: g.weight_percentage,
       date: g.date,
       notes: g.notes,
-    })),
-    notes: data.notes.slice(0, MAX_NOTES).map((n) => ({
-      id: n.id,
-      title: n.title,
-      content: n.content.slice(0, NOTE_EXCERPT),
     })),
     habits: data.habits.map((h) => ({ name: h.name, emoji: h.emoji })),
     workouts: data.workouts
@@ -101,13 +93,6 @@ export function buildContextText(ctx: SecretaryContext): string {
       lines.push(
         `- [${subName}] ${g.title}: nota ${g.score}/${g.max_score ?? 10} (${weightInfo})${g.date ? ` [fecha: ${g.date}]` : ""}`,
       );
-    }
-  }
-
-  if (ctx.notes.length) {
-    lines.push("\nNotas/apuntes del usuario:");
-    for (const n of ctx.notes) {
-      lines.push(`- ${n.title}: ${n.content}`);
     }
   }
 

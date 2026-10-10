@@ -1,4 +1,4 @@
-import type { Task, Habit, Workout, Subject, Note, Grade } from "@/lib/types";
+import type { Task, Habit, Workout, Subject, Grade } from "@/lib/types";
 
 /** Contexto que el Secretario IA recibe para planificar el día y responder. */
 export interface SecretaryContext {
@@ -26,7 +26,6 @@ export interface SecretaryContext {
     | "date"
     | "notes"
   > & { subject_name?: string })[];
-  notes: Pick<Note, "id" | "title" | "content">[];
   habits: Pick<Habit, "name" | "emoji">[];
   workouts: Pick<Workout, "activity_type" | "duration_minutes">[];
   finance: {

@@ -31,7 +31,6 @@ export async function POST() {
     const TABLES = [
       "subjects",
       "tasks",
-      "notes",
       "workouts",
       "habits",
       "habit_completions",

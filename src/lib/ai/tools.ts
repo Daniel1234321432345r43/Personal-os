@@ -289,10 +289,17 @@ export const secretaryTools = {
 
   addPlannedExpenses: tool({
     description:
-      "Añade gastos futuros previstos o planificados al presupuesto mensual (compras futuras, recibos, etc.).",
+      "Añade movimientos futuros previstos o planificados al presupuesto mensual: gastos que se van a tener (compras futuras, recibos, mensualidades) o ingresos que se esperan cobrar (nómina, trabajo puntual).",
     inputSchema: z.object({
       plannedExpenses: z.array(
         z.object({
+          kind: z
+            .enum(["expense", "income"])
+            .optional()
+            .default("expense")
+            .describe(
+              "'expense' si es dinero que sale (por defecto) o 'income' si es dinero que entra",
+            ),
           amount: z.number().describe("Importe previsto en euros"),
           category: z
             .string()
@@ -315,28 +322,6 @@ export const secretaryTools = {
         action: "addPlannedExpenses",
         count: plannedExpenses.length,
         plannedExpenses,
-      };
-    },
-  }),
-
-  addNotes: tool({
-    description: "Añade una o más notas o apuntes.",
-    inputSchema: z.object({
-      notes: z.array(
-        z.object({
-          title: z.string().describe("Título del apunte o nota"),
-          content: z
-            .string()
-            .describe("Contenido en texto o formato markdown"),
-        }),
-      ),
-    }),
-    execute: async ({ notes }) => {
-      return {
-        success: true,
-        action: "addNotes",
-        count: notes.length,
-        notes,
       };
     },
   }),

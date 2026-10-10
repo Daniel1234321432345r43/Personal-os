@@ -9,12 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
+import { ExpandablePanel } from "@/components/ui/expandable-panel";
 import { formatDate, formatDuration } from "@/lib/format";
 import { useStudyLog } from "@/lib/study-log";
 import { useIsDesktop } from "@/lib/use-is-mobile";
 import { SubjectForm } from "@/components/forms/subject-form";
 import { TaskForm } from "@/components/forms/task-form";
-import { ClassroomConnect } from "./classroom-connect";
 import { SubjectGradesSheet } from "./subject-grades-sheet";
 import { SyncErrorBanner } from "@/components/layout/sync-error-banner";
 import { Check, Plus, Trash2, Award, ChevronRight, ChevronDown, BookOpen } from "lucide-react";
@@ -362,8 +362,9 @@ export function AcademicClient() {
 
       <SyncErrorBanner />
 
-      {/* Asignaturas (van debajo de exámenes y tareas, en todos los tamaños) */}
-      <Card className="order-3">
+      {/* Asignaturas (van debajo de exámenes y tareas, en todos los tamaños).
+          `overflow-visible`: la tarjeta NO debe recortar el panel desplegado. */}
+      <Card className="order-3 overflow-visible">
         <CardHeader className="pb-3">
           <div className="hidden lg:block">
             <CardTitle className="text-base">Asignaturas</CardTitle>
@@ -394,18 +395,7 @@ export function AcademicClient() {
         </CardHeader>
 
         <CardContent>
-          <AnimatePresence initial={false}>
-            {(isDesktop || subjectsOpen) && (
-              <motion.div
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: "auto", opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{
-                  height: { duration: 0.5, ease: [0.25, 0.1, 0.25, 1] },
-                  opacity: { duration: 0.3 },
-                }}
-                className="overflow-hidden"
-              >
+          <ExpandablePanel open={isDesktop || subjectsOpen}>
           {/* Gestión de asignaturas: el botón solo aparece al expandir (o en escritorio, siempre visible porque la sección no se colapsa) */}
           <div className="mb-4 flex justify-end">
             <Button size="sm" onClick={() => setShowSubject((v) => !v)}>
@@ -535,9 +525,7 @@ export function AcademicClient() {
               })}
             </motion.div>
           )}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </ExpandablePanel>
         </CardContent>
       </Card>
 
@@ -580,16 +568,6 @@ export function AcademicClient() {
         actions={actions}
         study={study}
       />
-
-      {/* Sincronización con Classroom */}
-      <Card className="order-4">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Google Classroom</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ClassroomConnect />
-        </CardContent>
-      </Card>
     </div>
   );
 }

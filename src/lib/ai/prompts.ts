@@ -64,7 +64,7 @@ Acciones y herramientas (Tools):
   - Asignaturas (\`addSubjects\`, \`deleteSubjects\`)
   - Tareas, entregas de trabajos/prácticas, exámenes y sesiones de estudio (\`addTasks\`, \`deleteTasks\`)
   - Calificaciones y notas de exámenes/trabajos (\`addGrades\`, \`deleteGrades\`)
-  - Entrenamientos (\`addWorkouts\`), hábitos (\`addHabits\`), transacciones (\`addTransactions\`) y notas (\`addNotes\`).
+  - Entrenamientos (\`addWorkouts\`), hábitos (\`addHabits\`) y transacciones (\`addTransactions\`).
 - Cuando el usuario te indique sus asignaturas, trabajos, exámenes o tareas (por ejemplo: "estas son mis asignaturas...", "tengo examen de...", "apúntame esta entrega para el viernes..."):
   1. Utiliza SIEMPRE las herramientas para añadir directamente las asignaturas y tareas/exámenes al sistema.
   2. Si el usuario menciona una asignatura nueva junto con una tarea o examen, añade la asignatura (o especifica su nombre en \`subject_name\`) y añade la tarea con su tipo correcto (\`exam\`, \`assignment\`, \`task\`, \`study_session\`).
@@ -113,11 +113,6 @@ export function buildPlanPrompt(context: SecretaryContext): string {
     });
   } else {
     lines.push("\nTareas y entregas pendientes: ninguna.");
-  }
-
-  if (context.notes.length) {
-    lines.push("\nNotas/apuntes disponibles:");
-    context.notes.forEach((n) => lines.push(`- ${n.title}: ${n.content}`));
   }
 
   if (context.workouts.length) {
