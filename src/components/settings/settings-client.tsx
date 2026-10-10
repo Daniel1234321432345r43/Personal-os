@@ -10,11 +10,12 @@ import { PROVIDERS, getProvider } from "@/lib/ai/models";
 import type { AiProviderId } from "@/lib/ai/settings";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PushManager } from "@/components/settings/push-manager";
+import { WorkoutScheduleCard } from "@/components/settings/workout-schedule-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Trash2, AlertTriangle, ChevronDown, Leaf, RotateCcw, LogOut, UserX, MoonStar } from "lucide-react";
+import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Dumbbell, Trash2, AlertTriangle, ChevronDown, Leaf, RotateCcw, LogOut, UserX, MoonStar } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { isXpCapDisabled, setXpCapDisabled } from "@/lib/xp-cap";
@@ -77,7 +78,7 @@ export function SettingsClient() {
       </div>
       <div className="border-t pt-4"><div className={fieldClass}><label className={labelClass} htmlFor="ai-provider">Proveedor</label><select id="ai-provider" value={settings.provider} onChange={(e) => changeProvider(e.target.value as AiProviderId)} className={selectClass}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></div></div>
       {provider.models.length > 0 && <div className={fieldClass}><label className={labelClass} htmlFor="ai-model">Modelo</label><select id="ai-model" value={settings.model} onChange={(e) => update({ model: e.target.value })} className={selectClass}>{provider.models.map((m) => <option key={m.id} value={m.id}>{m.label} ({m.id})</option>)}</select></div>}
-      <div className={fieldClass}><label className={labelClass} htmlFor="ai-model-custom">Modelo personalizado (opcional)</label><input id="ai-model-custom" value={settings.model} onChange={(e) => update({ model: e.target.value })} placeholder={provider.defaultModel || "ej. nombre-del-modelo"} className={inputClass} /><p className="text-xs text-muted-foreground">Puedes escribir cualquier ID de modelo válido para el proveedor.</p></div>
+      <div className={fieldClass}><label className={labelClass} htmlFor="ai-model-custom">Modelo personalizado (opcional)</label><input id="ai-model-custom" value={settings.model} onChange={(e) => update({ model: e.target.value })} placeholder={provider.defaultModel || "ej. nombre-del-modelo"} className={inputClass} /></div>
       {provider.needsBaseURL && <div className={fieldClass}><label className={labelClass} htmlFor="ai-baseurl">Base URL (API compatible con OpenAI)</label><input id="ai-baseurl" value={settings.baseURL} onChange={(e) => update({ baseURL: e.target.value })} placeholder={provider.baseURLPlaceholder} className={inputClass} /><div className="flex flex-wrap gap-2 pt-1">{provider.presets.map((preset) => <Button key={preset.label} type="button" variant="outline" size="sm" className="rounded-full text-xs" onClick={() => update({ baseURL: preset.baseURL })}>{preset.label}</Button>)}</div></div>}
       <div className={fieldClass}><label className={labelClass} htmlFor="ai-key">{provider.apiKeyLabel}</label><div className="relative"><input id="ai-key" type={showKey ? "text" : "password"} value={settings.apiKey} onChange={(e) => update({ apiKey: e.target.value })} placeholder={provider.apiKeyPlaceholder} autoComplete="off" spellCheck={false} className={`${inputClass} pr-9`} /><button type="button" onClick={() => setShowKey((v) => !v)} className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground" aria-label={showKey ? "Ocultar clave" : "Mostrar clave"}>{showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div>{!settings.apiKey && envConfigured && <p className="text-xs text-muted-foreground">Sin clave escrita: se usará la configurada en el servidor (.env.local).</p>}</div>
       <div className="flex items-center gap-2"><Button type="button" onClick={testConnection} disabled={testing}>{testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}Probar conexión</Button></div>
@@ -163,7 +164,7 @@ export function SettingsClient() {
           ? {
               ok: true,
               message:
-                "Todo restablecido. Se han borrado tus asignaturas, tareas, notas, entrenamientos, hábitos, transacciones y calificaciones. La API key de la IA se ha conservado.",
+                "Todo restablecido. Se han borrado tus asignaturas, tareas, entrenamientos, hábitos, transacciones y calificaciones. La API key de la IA se ha conservado.",
             }
           : {
               ok: false,
@@ -360,9 +361,18 @@ export function SettingsClient() {
                   className={inputClass}
                 />
               </div>
-              <p className="text-xs text-muted-foreground">
-                Por defecto: 25 minutos de trabajo y 5 de descanso.
-              </p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-1.5">
+                <Dumbbell className="h-4 w-4 text-primary" />
+                Entrenamientos
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WorkoutScheduleCard />
             </CardContent>
           </Card>
 
@@ -375,8 +385,8 @@ export function SettingsClient() {
             </CardHeader>
             <CardContent className="space-y-3">
               <p className="text-sm text-muted-foreground">
-                El bosque limita el XP diario a 120 para fomentar constancia.
-                Puedes desactivarlo para probar el crecimiento sin tope.
+                El bosque limita el XP diario a 120. Con el límite desactivado,
+                el árbol crece sin tope.
               </p>
               <Button
                 type="button"
@@ -414,19 +424,6 @@ export function SettingsClient() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Consejos</CardTitle>
-            </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              <ul className="list-disc space-y-1 pl-5">
-                <li>Elige un modelo y pulsa “Probar conexión”.</li>
-                <li>Los cambios se guardan automáticamente.</li>
-                <li>“Omniroute” permite enrutar tus modelos locales o remotos (puerto 20128).</li>
-                <li>“Compatible con OpenAI” sirve para OpenRouter, Groq, DeepSeek, Ollama, Mistral, xAI…</li>
-              </ul>
-            </CardContent>
-          </Card>
         </div>
       </div>
 
@@ -543,7 +540,7 @@ export function SettingsClient() {
         <CardContent className="space-y-3">
           <p className="text-sm text-muted-foreground">
             Restablece la app de fábrica: borra <strong>todas</strong> tus
-            asignaturas, tareas, notas, entrenamientos, hábitos, transacciones
+            asignaturas, tareas, entrenamientos, hábitos, transacciones
             y calificaciones — tanto de este navegador como de tu cuenta en la
             nube. Se conserva la <strong>API key de la IA</strong> y la
             configuración del Secretario.

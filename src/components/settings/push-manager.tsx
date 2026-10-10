@@ -73,7 +73,6 @@ export function PushManager() {
           `Service Worker: registrado`,
           `Suscripción local: ${subscription ? "sí" : "no"}`,
           `Clave VAPID pública: ${keyResponse.ok && keyData?.publicKey ? "disponible" : "ERROR"}`,
-          "Para comprobar el cron y la función send-reminders, revisa Supabase → Edge Functions → Logs.",
         ].join("\n"),
       );
     } catch {
@@ -113,7 +112,6 @@ export function PushManager() {
         <p>
           Recibe notificaciones <strong>aunque la app esté cerrada</strong> cuando
           empiece una sesión de estudio, un examen o un entrenamiento con hora.
-          Requiere iniciar sesión con Supabase y tener la Edge Function desplegada.
         </p>
       </div>
 

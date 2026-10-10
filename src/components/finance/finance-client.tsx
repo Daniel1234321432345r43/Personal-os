@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { MobileCollapsible } from "@/components/ui/mobile-collapsible";
 import { formatCurrency, formatDate } from "@/lib/format";
+import { cn } from "@/lib/utils";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { BudgetForm } from "@/components/forms/budget-form";
 import { PlannedExpenseForm } from "@/components/forms/planned-expense-form";
@@ -23,6 +24,7 @@ import {
   TrendingUp,
   Wallet,
 } from "lucide-react";
+import type { PlannedExpense } from "@/lib/types";
 
 type BalanceHistoryPoint = {
   date: string | null;
@@ -204,6 +206,7 @@ export function FinanceClient() {
     totalBalance,
     budget,
     plannedExpenses,
+    plannedIncome,
     committedExpenses,
     remainingBudget,
     projectedRemaining,
@@ -259,18 +262,92 @@ export function FinanceClient() {
     { label: "Resultado neto", value: balance, positive: balance >= 0 },
   ];
 
+  // Lo programado se separa por dirección: dinero que entra y dinero que sale.
+  const plannedIncomeItems = data.plannedExpenses.filter((p) => p.kind === "income");
+  const plannedExpenseItems = data.plannedExpenses.filter((p) => p.kind !== "income");
+
+  const renderPlannedItem = (p: PlannedExpense) => {
+    const isIncome = p.kind === "income";
+    return (
+      <motion.li
+        key={p.id}
+        layout
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, x: 20 }}
+        className="flex items-center gap-3 p-3 text-sm"
+      >
+        <div
+          className={cn(
+            "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+            isIncome
+              ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+              : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+          )}
+        >
+          <Clock className="h-4 w-4" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-medium">{p.description || p.category}</p>
+          <p className="text-xs text-muted-foreground">
+            {p.category}
+            {p.date ? ` · Previsto: ${formatDate(p.date)}` : ""}
+          </p>
+        </div>
+        <span
+          className={cn(
+            "shrink-0 font-semibold",
+            isIncome
+              ? "text-emerald-600 dark:text-emerald-400"
+              : "text-amber-600 dark:text-amber-400",
+          )}
+        >
+          {isIncome ? "+" : "~"}
+          {formatCurrency(Number(p.amount))}
+        </span>
+        <div className="flex items-center gap-1 shrink-0">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-8 gap-1 px-2 text-xs font-medium text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
+            onClick={() => actions.convertPlannedExpenseToTransaction(p.id)}
+            title={
+              isIncome
+                ? "Convertir a ingreso real (ya lo he cobrado)"
+                : "Convertir a gasto real (ya lo he pagado)"
+            }
+          >
+            <Check className="h-3.5 w-3.5" />
+            <span className="hidden md:inline">{isIncome ? "Ya cobrado" : "Ya realizado"}</span>
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+            onClick={() => actions.deletePlannedExpense(p.id)}
+            title={isIncome ? "Descartar ingreso previsto" : "Descartar gasto previsto"}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
+      </motion.li>
+    );
+  };
+
   if (!hydrated) return <LoadingState />;
 
   return (
-    <div className="space-y-6 p-4 md:p-6 lg:p-8">
-      <header>
+    // Flex en columna con `order-*`: deja el presupuesto y los movimientos
+    // previstos al final, por debajo de la gráfica, sin mover el JSX.
+    <div className="flex flex-col gap-6 p-4 md:p-6 lg:p-8">
+      <header className="order-1">
         <h1 className="text-2xl font-semibold tracking-tight">Finanzas</h1>
         <p className="text-sm text-muted-foreground">
           Registra tus ingresos y gastos y controla tu balance mensual.
         </p>
       </header>
 
-      <Card className="border-primary/25 bg-primary/10 shadow-sm">
+      <Card className="order-2 border-primary/25 bg-primary/10 shadow-sm">
         <CardContent className="flex flex-wrap items-center justify-between gap-4 p-5 sm:p-6">
           <div className="flex items-center gap-3">
             <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-primary-foreground">
@@ -288,7 +365,7 @@ export function FinanceClient() {
       </Card>
 
       {/* Resumen: escritorio en cuadrícula (como antes) */}
-      <div className="hidden grid-cols-3 gap-3 sm:grid">
+      <div className="order-3 hidden grid-cols-3 gap-3 sm:grid">
         {summary.map((s) => (
           <Card key={s.label}>
             <CardContent className="p-4">
@@ -308,7 +385,7 @@ export function FinanceClient() {
       </div>
 
       {/* Resumen en móvil: tarjeta colapsable con animación de despliegue */}
-      <div className="sm:hidden">
+      <div className="order-3 sm:hidden">
         <MobileCollapsible
           title="Resumen del mes"
           subtitle="Ingresos, gastos y balance"
@@ -337,7 +414,7 @@ export function FinanceClient() {
       </div>
 
       {/* Presupuesto */}
-      <Card>
+      <Card className="order-6">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">Presupuesto mensual</CardTitle>
           <Button
@@ -368,6 +445,11 @@ export function FinanceClient() {
                     {plannedExpenses > 0 && (
                       <span className="font-medium text-amber-600 dark:text-amber-400">
                         + {formatCurrency(plannedExpenses)} previstos
+                      </span>
+                    )}
+                    {plannedIncome > 0 && (
+                      <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                        + {formatCurrency(plannedIncome)} por cobrar
                       </span>
                     )}
                     <span className="text-muted-foreground">
@@ -407,14 +489,18 @@ export function FinanceClient() {
                         <strong className="text-foreground">
                           {formatCurrency(projectedRemaining)}
                         </strong>{" "}
-                        disponibles tras los gastos previstos
+                        disponibles tras lo que ya tienes programado
                         {plannedExpenses > 0 && remainingBudget != null
                           ? ` (disponible actual: ${formatCurrency(remainingBudget)})`
-                          : ""}.
+                          : ""}
+                        {plannedIncome > 0
+                          ? `, contando ${formatCurrency(plannedIncome)} de ingresos previstos`
+                          : ""}
+                        .
                       </span>
                     ) : projectedRemaining != null ? (
                       <span className="font-medium text-red-600 dark:text-red-400">
-                        ⚠️ Los gastos previstos superan tu presupuesto en{" "}
+                        ⚠️ Lo que tienes programado supera tu presupuesto en{" "}
                         {formatCurrency(Math.abs(projectedRemaining))}.
                       </span>
                     ) : null}
@@ -448,20 +534,14 @@ export function FinanceClient() {
             <BudgetForm onDone={() => setShowBudget(false)} />
           </ResponsiveFormSheet>
 
-          {/* Subapartado de Gastos Previstos / Planificados */}
+          {/* Subapartado de movimientos previstos: ingresos y gastos */}
           <div className="border-t pt-5">
             <div className="flex items-center justify-between gap-2 pb-3">
               <div>
-                <div className="flex items-center gap-2">
-                  <h3 className="text-sm font-semibold tracking-tight">Gastos previstos</h3>
-                  {data.plannedExpenses.length > 0 && (
-                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300">
-                      {data.plannedExpenses.length} · {formatCurrency(plannedExpenses)}
-                    </span>
-                  )}
-                </div>
+                <h3 className="text-sm font-semibold tracking-tight">Movimientos previstos</h3>
                 <p className="text-xs text-muted-foreground">
-                  Planifica compras o recibos que tienes pensado hacer antes de que ocurran.
+                  Programa los ingresos que esperas cobrar y los gastos recurrentes
+                  o puntuales que vas a tener, antes de que ocurran.
                 </p>
               </div>
               <Button
@@ -471,8 +551,7 @@ export function FinanceClient() {
                 className="gap-1.5 shrink-0"
               >
                 <Plus className="h-3.5 w-3.5" />
-                <span className="hidden sm:inline">Planificar gasto</span>
-                <span className="sm:hidden">Planificar</span>
+                Programar
               </Button>
             </div>
 
@@ -482,81 +561,73 @@ export function FinanceClient() {
                 <PlannedExpenseForm onDone={() => setShowPlanned(false)} />
               </div>
             )}
-            {/* Móvil: bottom sheet de gasto previsto */}
+            {/* Móvil: bottom sheet de movimiento previsto */}
             <ResponsiveFormSheet
               open={showPlanned}
               onOpenChange={setShowPlanned}
-              title="Planificar gasto futuro"
+              title="Programar ingreso o gasto"
             >
               <PlannedExpenseForm onDone={() => setShowPlanned(false)} />
             </ResponsiveFormSheet>
 
-            {/* Lista de gastos previstos */}
-            {data.plannedExpenses.length > 0 ? (
-              <ul className="divide-y rounded-lg border bg-muted/10">
-                <AnimatePresence>
-                  {data.plannedExpenses.map((p) => (
-                    <motion.li
-                      key={p.id}
-                      layout
-                      initial={{ opacity: 0, y: -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, x: 20 }}
-                      className="flex items-center gap-3 p-3 text-sm"
-                    >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
-                        <Clock className="h-4 w-4" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate font-medium">
-                          {p.description || p.category}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {p.category}
-                          {p.date ? ` · Previsto: ${formatDate(p.date)}` : ""}
-                        </p>
-                      </div>
-                      <span className="shrink-0 font-semibold text-amber-600 dark:text-amber-400">
-                        ~{formatCurrency(Number(p.amount))}
+            {/* Listas separadas: lo que entra y lo que sale */}
+            <div className="space-y-4">
+              {[
+                {
+                  key: "income",
+                  title: "Ingresos previstos",
+                  items: plannedIncomeItems,
+                  total: plannedIncome,
+                  badge: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
+                  empty:
+                    "No has programado ingresos. Añade una nómina o un trabajo que esperas cobrar.",
+                },
+                {
+                  key: "expense",
+                  title: "Gastos previstos",
+                  items: plannedExpenseItems,
+                  total: plannedExpenses,
+                  badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+                  empty:
+                    "No tienes gastos previstos añadidos. Programa las mensualidades y compras futuras para saber de cuánto dinero dispondrás en realidad.",
+                },
+              ].map((group) => (
+                <div key={group.key} className="space-y-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h4 className="text-sm font-semibold tracking-tight">
+                      {group.title}
+                    </h4>
+                    {group.items.length > 0 && (
+                      <span
+                        className={cn(
+                          "rounded-full px-2 py-0.5 text-xs font-medium",
+                          group.badge,
+                        )}
+                      >
+                        {group.items.length} · {formatCurrency(group.total)}
                       </span>
-                      <div className="flex items-center gap-1 shrink-0">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 gap-1 px-2 text-xs font-medium text-emerald-600 hover:bg-emerald-500/10 hover:text-emerald-700 dark:text-emerald-400 dark:hover:bg-emerald-500/20"
-                          onClick={() => actions.convertPlannedExpenseToTransaction(p.id)}
-                          title="Convertir a gasto real (ya lo he pagado)"
-                        >
-                          <Check className="h-3.5 w-3.5" />
-                          <span className="hidden md:inline">Ya realizado</span>
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                          onClick={() => actions.deletePlannedExpense(p.id)}
-                          title="Descartar gasto previsto"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </motion.li>
-                  ))}
-                </AnimatePresence>
-              </ul>
-            ) : (
-              <div className="rounded-lg border border-dashed p-4 text-center">
-                <p className="text-xs text-muted-foreground">
-                  No tienes gastos previstos añadidos. Planifica compras futuras para saber de cuánto dinero dispondrás en realidad.
-                </p>
-              </div>
-            )}
+                    )}
+                  </div>
+                  {group.items.length > 0 ? (
+                    <ul className="divide-y rounded-lg border bg-muted/10">
+                      <AnimatePresence>
+                        {group.items.map(renderPlannedItem)}
+                      </AnimatePresence>
+                    </ul>
+                  ) : (
+                    <div className="rounded-lg border border-dashed p-3 text-center">
+                      <p className="text-xs text-muted-foreground">{group.empty}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>
 
       {/* Movimientos */}
-      <Card>
+      <Card className="order-4">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">Movimientos</CardTitle>
           <Button size="sm" onClick={() => setShowTx((v) => !v)}>
@@ -650,7 +721,7 @@ export function FinanceClient() {
       </Card>
 
       {/* Evolución del saldo */}
-      <Card>
+      <Card className="order-5">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <div>
             <CardTitle className="text-base">Evolución del saldo</CardTitle>

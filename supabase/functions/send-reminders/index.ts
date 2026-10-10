@@ -10,6 +10,23 @@ import {
   isExamDoneWindow,
   selectExamsToComplete,
 } from "../_shared/exam-done.js";
+import {
+  buildStudyAlert,
+  isStudyAlertWindow,
+  selectStudyAlertItems,
+  studyAlertTarget,
+  STUDY_ALERT_HORIZON_DAYS,
+} from "../_shared/study-alert.js";
+import {
+  hasLoggedWorkout,
+  isWorkoutCheckWindow,
+  schedulesForDay,
+  weekdayOfKey,
+  workoutCheckEntityId,
+  workoutCheckMessage,
+  workoutCheckTarget,
+  workoutCheckUrl,
+} from "../_shared/workout-check.js";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -28,6 +45,32 @@ const TASK_WINDOW_AFTER_MS = 30 * 60 * 1000;
 
 /** Minutos de antelación del aviso "hora de dormir" (módulo de Sueño). */
 const SLEEP_REMINDER_MINUTES = 15;
+
+/**
+ * Manda el mismo payload a todas las suscripciones del usuario. Devuelve si al
+ * menos una lo recibió, para poder decidir si se registra el aviso o se deja
+ * pendiente para el siguiente tick del cron.
+ */
+async function sendPushToSubscriptions(
+  subs: Array<{ endpoint: string; p256dh: string; auth: string }>,
+  payload: string,
+  logLabel: string,
+): Promise<boolean> {
+  let sent = false;
+  for (const sub of subs) {
+    try {
+      await sendWebPush(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload,
+        { subject: vapidSubject, publicKey: vapidPublicKey, privateKey: vapidPrivateKey },
+      );
+      sent = true;
+    } catch (err) {
+      console.error(`[send-reminders] error web push (${logLabel}):`, err);
+    }
+  }
+  return sent;
+}
 
 interface ReminderItem {
   entityType: "task" | "workout";
@@ -408,6 +451,149 @@ Deno.serve(async () => {
         console.log(
           `[send-reminders] Examen ${exam.id} cerrado a las ${EXAM_DONE_LOCAL_TIME} locales (${remindAtIso}); push: ${examSent}.`,
         );
+      }
+    }
+
+    // ── Estudio: a las 15:00 locales, repaso de exámenes y entregas ─────────
+    // El empujón para empezar a estudiar con lo que se acerca. Solo se manda si
+    // hay algo pendiente dentro del horizonte; si no hay nada, no se molesta.
+    const { dateKey: studyDateKey, target: studyTarget } = studyAlertTarget(now, tz);
+
+    if (studyTarget && isStudyAlertWindow(now, studyTarget)) {
+      const horizonKey = dateKeyInTz(
+        new Date(now.getTime() + STUDY_ALERT_HORIZON_DAYS * 86400000),
+        tz,
+      );
+      const { data: pendingTasks, error: pendingError } = await supabase
+        .from("tasks")
+        .select("id, title, type, due_date, status")
+        .eq("user_id", userId)
+        .neq("status", "done")
+        .gte("due_date", studyDateKey)
+        .lte("due_date", horizonKey);
+
+      if (pendingError) {
+        console.error(`[send-reminders] error leyendo plazos de ${userId}:`, pendingError.message);
+      }
+
+      const items = selectStudyAlertItems(pendingTasks ?? [], studyDateKey);
+      const message = buildStudyAlert(items);
+      const remindAtIso = studyTarget.toISOString();
+
+      if (message) {
+        // Un aviso por día: la clave es la propia fecha local.
+        const { data: alreadySent, error: logReadError } = await supabase
+          .from("reminder_log")
+          .select("id")
+          .eq("user_id", userId)
+          .eq("entity_type", "study_alert")
+          .eq("entity_id", studyDateKey)
+          .eq("remind_at", remindAtIso)
+          .maybeSingle();
+
+        if (logReadError) {
+          console.error("[send-reminders] error consultando reminder_log (estudio):", logReadError.message);
+        }
+
+        if (!alreadySent) {
+          const payload = JSON.stringify({
+            title: "Núcleo 📚",
+            body: message,
+            url: "/academic",
+            tag: `study-alert-${studyDateKey}`,
+          });
+          const sent = await sendPushToSubscriptions(userSubs, payload, "estudio");
+
+          if (sent) {
+            const { error: insertError } = await supabase.from("reminder_log").insert({
+              user_id: userId,
+              entity_type: "study_alert",
+              entity_id: studyDateKey,
+              remind_at: remindAtIso,
+            });
+            if (insertError) {
+              console.error("[send-reminders] no se pudo registrar el aviso de estudio:", insertError.message);
+            }
+            sentCount += 1;
+            console.log(`[send-reminders] Aviso de estudio enviado (${studyDateKey}): ${message}`);
+          }
+        }
+      }
+    }
+
+    // ── Entrenamientos: «Hoy deberías haber ido a X, ¿has ido?» ─────────────
+    // Sale cuando el entreno programado para hoy ya ha terminado (hora +
+    // duración) y aún no hay un entreno apuntado ese día. La notificación abre
+    // la app en el modal de confirmación (WorkoutCheckDialog).
+    const { data: scheduleRows, error: scheduleError } = await supabase
+      .from("workout_schedule")
+      .select("id, weekday, activity_type, title, time, duration_minutes, enabled")
+      .eq("user_id", userId);
+
+    if (scheduleError) {
+      console.error(`[send-reminders] error leyendo workout_schedule de ${userId}:`, scheduleError.message);
+    }
+
+    if (scheduleRows && scheduleRows.length > 0) {
+      const localDateKey = dateKeyInTz(now, tz);
+      const weekday = weekdayOfKey(localDateKey);
+      const todaySchedules = schedulesForDay(scheduleRows, weekday);
+
+      if (todaySchedules.length > 0) {
+        const { data: todayWorkouts } = await supabase
+          .from("workouts")
+          .select("activity_type, title, date")
+          .eq("user_id", userId)
+          .eq("date", localDateKey);
+
+        for (const schedule of todaySchedules) {
+          const target = workoutCheckTarget(schedule, localDateKey, tz);
+          if (!isWorkoutCheckWindow(now, target) || !target) continue;
+
+          // Si ya hay un entreno de ese tipo apuntado hoy, no se pregunta.
+          if (hasLoggedWorkout(todayWorkouts ?? [], schedule, localDateKey)) {
+            console.log(`[send-reminders] entreno ${schedule.id} ya apuntado hoy: sin pregunta.`);
+            continue;
+          }
+
+          const entityId = workoutCheckEntityId(schedule, localDateKey);
+          const remindAtIso = target.toISOString();
+          const { data: alreadySent, error: logReadError } = await supabase
+            .from("reminder_log")
+            .select("id")
+            .eq("user_id", userId)
+            .eq("entity_type", "workout_check")
+            .eq("entity_id", entityId)
+            .eq("remind_at", remindAtIso)
+            .maybeSingle();
+
+          if (logReadError) {
+            console.error("[send-reminders] error consultando reminder_log (entreno):", logReadError.message);
+          }
+          if (alreadySent) continue;
+
+          const payload = JSON.stringify({
+            title: "Núcleo 🏋️",
+            body: workoutCheckMessage(schedule),
+            url: workoutCheckUrl(schedule, localDateKey),
+            tag: `workout-check-${entityId}`,
+          });
+          const sent = await sendPushToSubscriptions(userSubs, payload, "entreno");
+
+          if (!sent) continue;
+
+          const { error: insertError } = await supabase.from("reminder_log").insert({
+            user_id: userId,
+            entity_type: "workout_check",
+            entity_id: entityId,
+            remind_at: remindAtIso,
+          });
+          if (insertError) {
+            console.error("[send-reminders] no se pudo registrar la pregunta del entreno:", insertError.message);
+          }
+          sentCount += 1;
+          console.log(`[send-reminders] Pregunta de entreno enviada (${entityId}).`);
+        }
       }
     }
   }

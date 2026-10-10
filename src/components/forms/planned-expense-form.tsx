@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useData } from "@/components/providers/data-provider";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { fieldClass, inputClass, labelClass } from "./ui";
 
 const CATEGORIES = [
@@ -27,10 +28,13 @@ export function PlannedExpenseForm({
   initialDate?: string;
 }) {
   const { actions } = useData();
+  const [kind, setKind] = useState<"expense" | "income">("expense");
   const [amount, setAmount] = useState("");
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(initialDate || "");
+
+  const isIncome = kind === "income";
 
   function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -38,6 +42,7 @@ export function PlannedExpenseForm({
     if (!value || value <= 0) return;
     if (!category.trim()) return;
     actions.addPlannedExpense({
+      kind,
       amount: value,
       category: category.trim(),
       description: description.trim() || null,
@@ -52,6 +57,33 @@ export function PlannedExpenseForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
+      {/* Gasto o ingreso: la misma tabla sirve para las dos direcciones. */}
+      <div className="grid grid-cols-2 gap-2 rounded-lg border p-1">
+        {(
+          [
+            { value: "expense", label: "Gasto previsto" },
+            { value: "income", label: "Ingreso previsto" },
+          ] as const
+        ).map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => setKind(option.value)}
+            aria-pressed={kind === option.value}
+            className={cn(
+              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              kind === option.value
+                ? option.value === "income"
+                  ? "bg-emerald-600 text-white"
+                  : "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
       <div className="grid gap-3 sm:grid-cols-2">
         <div className={fieldClass}>
           <label className={labelClass} htmlFor="planned-desc">
@@ -62,14 +94,18 @@ export function PlannedExpenseForm({
             required
             value={description}
             onChange={(e) => setDescription(e.target.value)}
-            placeholder="Ej. Seguro de coche, Compra semanal..."
+            placeholder={
+              isIncome
+                ? "Ej. Nómina de octubre, Clase particular..."
+                : "Ej. Seguro de coche, Compra semanal..."
+            }
             className={inputClass}
           />
         </div>
 
         <div className={fieldClass}>
           <label className={labelClass} htmlFor="planned-amount">
-            Importe previsto (€)
+            {isIncome ? "Importe previsto a cobrar (€)" : "Importe previsto (€)"}
           </label>
           <input
             id="planned-amount"
@@ -127,7 +163,9 @@ export function PlannedExpenseForm({
             Cancelar
           </Button>
         )}
-        <Button type="submit">Planificar gasto</Button>
+        <Button type="submit">
+          {isIncome ? "Programar ingreso" : "Planificar gasto"}
+        </Button>
       </div>
     </form>
   );

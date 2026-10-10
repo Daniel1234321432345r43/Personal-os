@@ -20,6 +20,7 @@ import { ProgressTree } from "@/components/layout/progress-tree";
 import { XpToast } from "@/components/layout/xp-toast";
 import { XpPenalizer } from "@/lib/xp-penalizer";
 import { ExamAutoClose } from "@/lib/exam-autoclose";
+import { WorkoutCheckDialog } from "@/components/sport/workout-check-dialog";
 import { useData } from "@/components/providers/data-provider";
 import { startXpSync } from "@/lib/xp-system";
 import { startStudyLogSync } from "@/lib/study-log";
@@ -31,7 +32,6 @@ import {
   Timer,
   Dumbbell,
   Wallet,
-  StickyNote,
   Moon,
   Settings,
   LogOut,
@@ -43,7 +43,6 @@ const navItems = [
   { href: "/calendar", label: "Calendario", icon: Calendar },
   { href: "/academic", label: "Estudios", icon: GraduationCap },
   { href: "/pomodoro", label: "Pomodoro", icon: Timer },
-  { href: "/notes", label: "Notas", icon: StickyNote },
   { href: "/sport", label: "Deporte", icon: Dumbbell },
   // Sueño se abre desde aquí (sidebar de escritorio) y desde su tarjeta de
   // "Hoy". A propósito NO está en BOTTOM_NAV_ROUTES: no aparece en la barra
@@ -112,7 +111,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pullRefresh = usePullRefresh(handleRefresh, isMobile);
 
   // El swipe solo navega entre las pestañas de la Bottom Bar: en rutas fuera
-  // de la lista (Pomodoro, Notas) no se adjunta el gesto horizontal.
+  // de la lista (Pomodoro, Sueño) no se adjunta el gesto horizontal.
   const isSwipeRoute = BOTTOM_NAV_ROUTES.some((r) => pathname.startsWith(r));
   const swipeEnabled = isMobile && isSwipeRoute;
   const swipeNav = useSwipeNav(
@@ -333,6 +332,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       {bottomBar}
       <XpPenalizer />
       <ExamAutoClose />
+      {/* «¿Has ido al entreno?» al pulsar su notificación */}
+      <WorkoutCheckDialog />
       <XpToast />
     </div>
   );

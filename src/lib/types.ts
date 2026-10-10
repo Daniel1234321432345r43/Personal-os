@@ -16,7 +16,7 @@ export interface Profile {
   updated_at: string;
 }
 
-/** Asignatura o curso. `classroom_course_id` enlaza con Google Classroom. */
+/** Asignatura o curso. */
 export interface Subject {
   id: string;
   user_id: string;
@@ -24,15 +24,12 @@ export interface Subject {
   color: string;
   /** Autoevaluación del 1 al 10 de cómo se lleva la asignatura. */
   self_rating: number | null;
-  classroom_course_id: string | null;
-  classroom_name: string | null;
   created_at: string;
 }
 
 /**
  * Tarea genérica. También representa entregas, exámenes y sesiones de estudio
- * mediante el campo `type`. `classroom_id` es el ID del coursework en Google
- * Classroom para sincronizar sin duplicar.
+ * mediante el campo `type`.
  */
 export interface Task {
   id: string;
@@ -53,7 +50,6 @@ export interface Task {
   remind_before_minutes: number | null;
   estimated_minutes: number | null;
   subject_id: string | null;
-  classroom_id: string | null;
   session_index?: number | null;
   total_sessions?: number | null;
   parent_task_id?: string | null;
@@ -73,6 +69,26 @@ export interface Workout {
   duration_minutes: number;
   notes: string | null;
   created_at: string;
+}
+
+/**
+ * Entreno programado de la semana (Ajustes → Entrenamientos). El plan lo lee
+ * el cron de recordatorios para preguntar si fuiste a entrenar en los días y
+ * a las horas que hayas configurado.
+ */
+export interface WorkoutSchedule {
+  id: string;
+  user_id: string;
+  /** Día de la semana: 0 = domingo … 6 = sábado. */
+  weekday: number;
+  activity_type: string;
+  title: string | null;
+  /** Hora de inicio en formato HH:MM. */
+  time: string;
+  duration_minutes: number;
+  enabled: boolean;
+  created_at: string;
+  updated_at?: string;
 }
 
 export interface Habit {
@@ -111,12 +127,16 @@ export interface Budget {
 }
 
 /**
- * Gasto futuro planificado/previsto pero aún no realizado.
- * Permite proyectar el presupuesto mensual antes de desembolsar el dinero.
+ * Movimiento futuro planificado/previsto pero aún no realizado: un gasto que
+ * sabes que vas a tener (una mensualidad, un recibo) o un ingreso que esperas
+ * cobrar (una nómina, un trabajo puntual). Permite proyectar el presupuesto
+ * mensual antes de que el dinero se mueva.
  */
 export interface PlannedExpense {
   id: string;
   user_id: string;
+  /** Si es dinero que sale (gasto) o que entra (ingreso). */
+  kind: "income" | "expense";
   amount: number;
   category: string;
   description: string | null;

@@ -39,10 +39,10 @@ import type {
   TaskPriority,
   TaskType,
   Workout,
+  WorkoutSchedule,
   Habit,
   HabitCompletion,
   Transaction,
-  Note,
   Grade,
   PlannedExpense,
   SleepLog,
@@ -68,8 +68,8 @@ const _supabase = createClient();
 export interface DataState {
   subjects: Subject[];
   tasks: Task[];
-  notes: Note[];
   workouts: Workout[];
+  workoutSchedule: WorkoutSchedule[];
   habits: Habit[];
   habitCompletions: HabitCompletion[];
   transactions: Transaction[];
@@ -111,6 +111,16 @@ export type WorkoutInput = {
   title?: string | null;
   notes?: string | null;
 };
+export type WorkoutScheduleInput = {
+  /** Día de la semana: 0 = domingo … 6 = sábado. */
+  weekday: number;
+  activity_type: string;
+  title?: string | null;
+  /** Hora de inicio (HH:MM). */
+  time: string;
+  duration_minutes?: number;
+  enabled?: boolean;
+};
 export type HabitInput = { name: string; emoji?: string };
 export type TransactionInput = {
   type: "income" | "expense";
@@ -120,17 +130,12 @@ export type TransactionInput = {
   description?: string | null;
 };
 export type PlannedExpenseInput = {
+  /** Gasto (por defecto) o ingreso previsto. */
+  kind?: "income" | "expense";
   amount: number | string;
   category: string;
   description?: string | null;
   date?: string | null;
-};
-export type NoteInput = {
-  title: string;
-  content: string;
-  file_name?: string | null;
-  file_type?: string | null;
-  file_data?: string | null;
 };
 export type GradeInput = {
   subject_id?: string | null;
@@ -175,11 +180,10 @@ export interface DataActions {
    * dice "Has completado el examen de X" en vez de "Tarea completada").
    */
   toggleTaskDone: (id: string, options?: { xpLabel?: string }) => void;
-  addNote: (input: NoteInput) => void;
-  addNotes: (inputs: NoteInput[]) => void;
-  updateNote: (id: string, input: NoteInput) => void;
-  deleteNote: (id: string) => void;
   addWorkout: (input: WorkoutInput) => void;
+  addWorkoutSchedule: (input: WorkoutScheduleInput) => void;
+  updateWorkoutSchedule: (id: string, input: Partial<WorkoutScheduleInput>) => void;
+  deleteWorkoutSchedule: (id: string) => void;
   addWorkouts: (inputs: WorkoutInput[]) => void;
   deleteWorkout: (id: string) => void;
   addHabit: (input: HabitInput) => void;
@@ -240,8 +244,8 @@ function emptyState(): DataState {
   return {
     subjects: [],
     tasks: [],
-    notes: [],
     workouts: [],
+    workoutSchedule: [],
     habits: [],
     habitCompletions: [],
     transactions: [],
@@ -384,8 +388,8 @@ function mergeRemote(local: DataState, remote: DataState): DataState {
   return {
     subjects: merge(local.subjects, remote.subjects),
     tasks: merge(local.tasks, remote.tasks),
-    notes: merge(local.notes, remote.notes),
     workouts: merge(local.workouts, remote.workouts),
+    workoutSchedule: merge(local.workoutSchedule, remote.workoutSchedule),
     habits: merge(local.habits, remote.habits),
     habitCompletions: merge(local.habitCompletions, remote.habitCompletions),
     transactions: merge(local.transactions, remote.transactions),
@@ -464,8 +468,8 @@ function localOnly(state: DataState): DataState {
   return {
     subjects: filter(state.subjects),
     tasks: filter(state.tasks),
-    notes: filter(state.notes),
     workouts: filter(state.workouts),
+    workoutSchedule: filter(state.workoutSchedule),
     habits: filter(state.habits),
     habitCompletions: filter(state.habitCompletions),
     transactions: filter(state.transactions),
@@ -481,8 +485,8 @@ function hasRecords(state: DataState): boolean {
   return [
     state.subjects,
     state.tasks,
-    state.notes,
     state.workouts,
+    state.workoutSchedule,
     state.habits,
     state.habitCompletions,
     state.transactions,
@@ -504,16 +508,16 @@ async function syncStateToSupabase(
     filterTombstonedRows(table, rows, tombstones);
 
   const operations: Array<[string, unknown]> = [
-    ["subjects", keep("subjects", state.subjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at })))],
+    ["subjects", keep("subjects", state.subjects.map(({ id, name, color, self_rating, created_at }) => ({ id, user_id: userId, name, color, self_rating, created_at })))],
     ["habits", keep("habits", state.habits.map(({ id, name, emoji, frequency, created_at }) => ({ id, user_id: userId, name, emoji, frequency, created_at })))],
-    ["tasks", keep("tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, start_time, remind_before_minutes, estimated_minutes, subject_id, classroom_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, start_time: start_time ?? null, remind_before_minutes: remind_before_minutes ?? null, estimated_minutes, subject_id, classroom_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at })))],
-    ["notes", keep("notes", state.notes.map(({ id, title, content, file_name, file_type, file_data, created_at, updated_at }) => ({ id, user_id: userId, title, content, file_name, file_type, file_data, created_at, updated_at })))],
+    ["tasks", keep("tasks", state.tasks.map(({ id, title, description, status, priority, type, category, due_date, start_time, remind_before_minutes, estimated_minutes, subject_id, session_index, total_sessions, parent_task_id, created_at, updated_at }) => ({ id, user_id: userId, title, description, status, priority, type, category, due_date, start_time: start_time ?? null, remind_before_minutes: remind_before_minutes ?? null, estimated_minutes, subject_id, session_index: session_index ?? null, total_sessions: total_sessions ?? null, parent_task_id: parent_task_id ?? null, created_at, updated_at })))],
     ["workouts", keep("workouts", state.workouts.map(({ id, activity_type, title, date, start_time, duration_minutes, notes, created_at }) => ({ id, user_id: userId, activity_type, title, date, start_time: start_time ?? null, duration_minutes, notes, created_at })))],
+    ["workout_schedule", keep("workout_schedule", state.workoutSchedule.map(({ id, weekday, activity_type, title, time, duration_minutes, enabled, created_at }) => ({ id, user_id: userId, weekday, activity_type, title: title ?? null, time, duration_minutes, enabled, created_at })))],
     ["transactions", keep("transactions", state.transactions.map(({ id, type, amount, category, description, date, created_at }) => ({ id, user_id: userId, type, amount, category, description, date, created_at })))],
     ["habit_completions", keep("habit_completions", state.habitCompletions.map(({ id, habit_id, completed_on }) => ({ id, user_id: userId, habit_id, completed_on })))],
     ["grades", keep("grades", state.grades.map(({ id, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at }) => ({ id, user_id: userId, subject_id, task_id, title, score, max_score, weight_percentage, date, notes, created_at, updated_at })))],
     ["budgets", state.budget == null ? [] : [{ user_id: userId, month: `${todayKey().slice(0, 7)}-01`, amount: state.budget }]],
-    ["planned_expenses", keep("planned_expenses", state.plannedExpenses.map(({ id, amount, category, description, date, is_completed, created_at }) => ({ id, user_id: userId, amount: Number(amount), category, description: description ?? null, date: date ?? null, is_completed: Boolean(is_completed), created_at })))],
+    ["planned_expenses", keep("planned_expenses", state.plannedExpenses.map(({ id, kind, amount, category, description, date, is_completed, created_at }) => ({ id, user_id: userId, kind: kind ?? "expense", amount: Number(amount), category, description: description ?? null, date: date ?? null, is_completed: Boolean(is_completed), created_at })))],
     // El id NO se envía: la fila se identifica por (user_id, date) y así el
     // upsert no reescribe la clave primaria de la fila que ya existía.
     // `updated_at` sí viaja (la fila tiene esa columna): así la fusión sabe cuál
@@ -834,8 +838,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const results = await Promise.all([
           _supabase.from("subjects").select("*").eq("user_id", userId),
           _supabase.from("tasks").select("*").eq("user_id", userId),
-          _supabase.from("notes").select("*").eq("user_id", userId),
           _supabase.from("workouts").select("*").eq("user_id", userId),
+          _supabase.from("workout_schedule").select("*").eq("user_id", userId),
           _supabase.from("habits").select("*").eq("user_id", userId),
           _supabase.from("habit_completions").select("*").eq("user_id", userId),
           _supabase.from("transactions").select("*").eq("user_id", userId),
@@ -846,14 +850,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
           _supabase.from("sleep_settings").select("*").eq("user_id", userId).maybeSingle(),
         ]);
 
-        const labels = ["subjects", "tasks", "notes", "workouts", "habits", "habit_completions", "transactions", "grades", "budgets", "planned_expenses", "sleep_logs", "sleep_settings"];
+        const labels = ["subjects", "tasks", "workouts", "workout_schedule", "habits", "habit_completions", "transactions", "grades", "budgets", "planned_expenses", "sleep_logs", "sleep_settings"];
         results.forEach((result, index) => {
           if (result.error) {
             console.error(`[Supabase] cargar ${labels[index]}: ${result.error.message}`);
           }
         });
 
-        const [subjects, tasks, notes, workouts, habits, habitCompletions, transactions, grades, budgetRow, plannedExpensesRows, sleepLogRows, sleepSettingsRow] = results.map(
+        const [subjects, tasks, workouts, workoutScheduleRows, habits, habitCompletions, transactions, grades, budgetRow, plannedExpensesRows, sleepLogRows, sleepSettingsRow] = results.map(
           (result) => result.data || [],
         );
         const normDate = (v: unknown): string | null =>
@@ -870,7 +874,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             total_sessions: t.total_sessions ?? null,
             parent_task_id: t.parent_task_id ?? null,
           } as unknown as Task)),
-          notes: notes as Note[],
           workouts: (workouts as Record<string, unknown>[]).map((w) => ({
             ...w,
             date: normDate(w.date),
@@ -878,6 +881,13 @@ export function DataProvider({ children }: { children: ReactNode }) {
               ? w.start_time.slice(0, 5)
               : null,
           } as unknown as Workout)),
+          workoutSchedule: (workoutScheduleRows as Record<string, unknown>[]).map((s) => ({
+            ...s,
+            weekday: Number(s.weekday),
+            duration_minutes: Number(s.duration_minutes) || 60,
+            time: typeof s.time === "string" && s.time.length >= 5 ? s.time.slice(0, 5) : "18:00",
+            enabled: s.enabled !== false,
+          } as unknown as WorkoutSchedule)),
           habits: habits as Habit[],
           habitCompletions: (habitCompletions as Record<string, unknown>[]).map((h) => ({ ...h, completed_on: normDate(h.completed_on) } as unknown as HabitCompletion)),
           transactions: (transactions as Record<string, unknown>[]).map((t) => ({ ...t, date: normDate(t.date) } as unknown as Transaction)),
@@ -887,6 +897,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             : null,
           plannedExpenses: (plannedExpensesRows as Record<string, unknown>[]).map((p) => ({
             ...p,
+            kind: p.kind === "income" ? "income" : "expense",
             amount: Number(p.amount),
             date: normDate(p.date),
             is_completed: Boolean(p.is_completed),
@@ -1085,7 +1096,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             ...prev,
             subjects: [
               ...prev.subjects,
-              { id, user_id: userId, name: input.name.trim(), color, self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso } as Subject,
+              { id, user_id: userId, name: input.name.trim(), color, self_rating: null, created_at: iso } as Subject,
             ],
           };
         });
@@ -1117,7 +1128,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               newSubjects.push({
                 id, user_id: userId, name: trimmed,
                 color: input.color || DEFAULT_COLORS[colorIndex],
-                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, created_at: iso,
               } as Subject);
             }
           });
@@ -1127,7 +1138,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         });
         if (userId !== "local" && createdSubjects.length > 0) {
           void syncSupabase(
-            _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))),
+            _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, created_at }) => ({ id, user_id: userId, name, color, self_rating, created_at }))),
             "guardar asignaturas",
           );
         }
@@ -1210,7 +1221,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               const sub: Subject = {
                 id, user_id: userId, name: trimmed,
                 color: DEFAULT_COLORS[colorIndex],
-                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, created_at: iso,
               };
               newSubjects.push(sub);
               resolvedSubjectId = sub.id;
@@ -1237,7 +1248,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 start_time: input.start_time ?? null,
                 remind_before_minutes: input.remind_before_minutes ?? null,
                 estimated_minutes: input.estimated_minutes ?? null,
-                subject_id: resolvedSubjectId, classroom_id: null,
+                subject_id: resolvedSubjectId,
                 session_index: idx + 1, total_sessions: total, parent_task_id: parentId,
                 created_at: iso, updated_at: iso,
               } as Task);
@@ -1255,7 +1266,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               start_time: input.start_time ?? null,
               remind_before_minutes: input.remind_before_minutes ?? null,
               estimated_minutes: input.estimated_minutes ?? null,
-              subject_id: resolvedSubjectId, classroom_id: null,
+              subject_id: resolvedSubjectId,
               session_index: input.session_index ?? null,
               total_sessions: input.total_sessions ?? null,
               parent_task_id: input.parent_task_id ?? null,
@@ -1287,7 +1298,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             remind_before_minutes: t.remind_before_minutes ?? null,
             estimated_minutes: t.estimated_minutes,
             subject_id: t.subject_id,
-            classroom_id: t.classroom_id,
             session_index: t.session_index,
             total_sessions: t.total_sessions,
             parent_task_id: t.parent_task_id,
@@ -1297,7 +1307,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           void (async () => {
             if (newSubjects.length > 0) {
               const subjectResult = await syncSupabase(
-                _supabase.from("subjects").insert(newSubjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))),
+                _supabase.from("subjects").insert(newSubjects.map(({ id, name, color, self_rating, created_at }) => ({ id, user_id: userId, name, color, self_rating, created_at }))),
                 "guardar asignatura de tarea",
               );
               if (!subjectResult) return;
@@ -1336,7 +1346,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               const createdSub: Subject = {
                 id, user_id: userId, name: trimmed,
                 color: DEFAULT_COLORS[colorIndex],
-                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, created_at: iso,
               };
               allSubjects.push(createdSub);
               newSubjects.push(createdSub);
@@ -1370,7 +1380,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                   start_time: input.start_time ?? null,
                   remind_before_minutes: input.remind_before_minutes ?? null,
                   estimated_minutes: input.estimated_minutes ?? null,
-                  subject_id: resolvedSubjectId, classroom_id: null,
+                  subject_id: resolvedSubjectId,
                   session_index: idx + 1, total_sessions: total, parent_task_id: parentId,
                   created_at: iso, updated_at: iso,
                 } as Task);
@@ -1387,7 +1397,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
                 start_time: input.start_time ?? null,
                 remind_before_minutes: input.remind_before_minutes ?? null,
                 estimated_minutes: input.estimated_minutes ?? null,
-                subject_id: resolvedSubjectId, classroom_id: null,
+                subject_id: resolvedSubjectId,
                 session_index: input.session_index ?? null,
                 total_sessions: input.total_sessions ?? null,
                 parent_task_id: input.parent_task_id ?? null,
@@ -1421,7 +1431,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
             remind_before_minutes: t.remind_before_minutes ?? null,
             estimated_minutes: t.estimated_minutes,
             subject_id: t.subject_id,
-            classroom_id: t.classroom_id,
             session_index: t.session_index,
             total_sessions: t.total_sessions,
             parent_task_id: t.parent_task_id,
@@ -1431,7 +1440,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           void (async () => {
             if (createdSubjects.length > 0) {
               const subjectResult = await syncSupabase(
-                _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))),
+                _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, created_at }) => ({ id, user_id: userId, name, color, self_rating, created_at }))),
                 "guardar asignaturas de tareas",
               );
               if (!subjectResult) return;
@@ -1490,51 +1499,6 @@ export function DataProvider({ children }: { children: ReactNode }) {
         if (completing) awardXp("task", id, options?.xpLabel ? { label: options.xpLabel } : {});
       },
 
-      addNote: (input) => {
-        const iso = nowIso();
-        const id = newId();
-        const userId = uid();
-        setState((prev) => ({
-          ...prev,
-          notes: [
-            ...prev.notes,
-            { id, user_id: userId, title: input.title.trim(), content: input.content, file_name: input.file_name ?? null, file_type: input.file_type ?? null, file_data: input.file_data ?? null, created_at: iso, updated_at: iso } as Note,
-          ],
-        }));
-        if (userId !== "local") {
-          syncSupabase(_supabase.from("notes").insert({ id, user_id: userId, title: input.title.trim(), content: input.content, created_at: iso, updated_at: iso }));
-        }
-      },
-
-      addNotes: (inputs) => {
-        const iso = nowIso();
-        const userId = uid();
-        const newNotes = inputs.map((input) => ({ id: newId(), user_id: userId, title: input.title.trim(), content: input.content, file_name: input.file_name ?? null, file_type: input.file_type ?? null, file_data: input.file_data ?? null, created_at: iso, updated_at: iso } as Note));
-        setState((prev) => ({ ...prev, notes: [...prev.notes, ...newNotes] }));
-        if (userId !== "local" && newNotes.length > 0) {
-          void syncSupabase(_supabase.from("notes").insert(newNotes), "guardar notas");
-        }
-      },
-
-      updateNote: (id, input) => {
-        setState((prev) => ({
-          ...prev,
-          notes: prev.notes.map((n) =>
-            n.id === id
-              ? { ...n, title: input.title.trim(), content: input.content, file_name: input.file_name ?? null, file_type: input.file_type ?? null, file_data: input.file_data ?? null, updated_at: nowIso() }
-              : n,
-          ),
-        }));
-        syncSupabase(
-          _supabase.from("notes").update({ title: input.title.trim(), content: input.content, updated_at: new Date().toISOString() }).eq("id", id)
-        );
-      },
-
-      deleteNote: (id) => {
-        setState((prev) => ({ ...prev, notes: prev.notes.filter((n) => n.id !== id) }));
-        markDeleted([{ table: "notes", key: id }]);
-      },
-
       addWorkout: (input) => {
         const iso = nowIso();
         const id = newId();
@@ -1565,6 +1529,65 @@ export function DataProvider({ children }: { children: ReactNode }) {
       deleteWorkout: (id) => {
         setState((prev) => ({ ...prev, workouts: prev.workouts.filter((w) => w.id !== id) }));
         markDeleted([{ table: "workouts", key: id }]);
+      },
+
+      addWorkoutSchedule: (input) => {
+        const iso = nowIso();
+        const id = newId();
+        const userId = uid();
+        const newEntry: WorkoutSchedule = {
+          id,
+          user_id: userId,
+          weekday: Math.min(6, Math.max(0, Math.round(input.weekday))),
+          activity_type: input.activity_type.trim(),
+          title: input.title?.trim() || null,
+          time: input.time,
+          duration_minutes: input.duration_minutes ?? 60,
+          enabled: input.enabled ?? true,
+          created_at: iso,
+        };
+        setState((prev) => ({
+          ...prev,
+          workoutSchedule: [...prev.workoutSchedule, newEntry],
+        }));
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase.from("workout_schedule").insert({ ...newEntry, updated_at: iso }),
+            "guardar plan de entrenamientos",
+          );
+        }
+      },
+
+      updateWorkoutSchedule: (id, input) => {
+        const iso = nowIso();
+        const patch: Partial<WorkoutSchedule> = { updated_at: iso };
+        if (input.weekday != null) patch.weekday = Math.min(6, Math.max(0, Math.round(input.weekday)));
+        if (input.activity_type != null) patch.activity_type = input.activity_type.trim();
+        if (input.title !== undefined) patch.title = input.title?.trim() || null;
+        if (input.time != null) patch.time = input.time;
+        if (input.duration_minutes != null) patch.duration_minutes = input.duration_minutes;
+        if (input.enabled != null) patch.enabled = input.enabled;
+        setState((prev) => ({
+          ...prev,
+          workoutSchedule: prev.workoutSchedule.map((s) =>
+            s.id === id ? { ...s, ...patch } : s,
+          ),
+        }));
+        const userId = uid();
+        if (userId !== "local") {
+          void syncSupabase(
+            _supabase.from("workout_schedule").update(patch).eq("id", id),
+            "actualizar plan de entrenamientos",
+          );
+        }
+      },
+
+      deleteWorkoutSchedule: (id) => {
+        setState((prev) => ({
+          ...prev,
+          workoutSchedule: prev.workoutSchedule.filter((s) => s.id !== id),
+        }));
+        markDeleted([{ table: "workout_schedule", key: id }]);
       },
 
       addHabit: (input) => {
@@ -1706,6 +1729,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const newPlanned: PlannedExpense = {
           id,
           user_id: userId,
+          kind: input.kind ?? "expense",
           amount: Number(input.amount),
           category: input.category.trim(),
           description: input.description?.trim() || null,
@@ -1731,6 +1755,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const newPlannedList: PlannedExpense[] = inputs.map((input) => ({
           id: newId(),
           user_id: userId,
+          kind: input.kind ?? "expense",
           amount: Number(input.amount),
           category: input.category.trim(),
           description: input.description?.trim() || null,
@@ -1768,7 +1793,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const newTx: Transaction = {
           id: txId,
           user_id: userId,
-          type: "expense",
+          type: target.kind === "income" ? "income" : "expense",
           amount: target.amount,
           category: target.category,
           description: target.description,
@@ -1786,7 +1811,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             "guardar transacción",
           );
         }
-        // El gasto planificado pasa a ser un gasto real: su fila se borra (con
+        // Lo planificado pasa a ser un movimiento real: su fila se borra (con
         // lápida) para que el otro dispositivo no la devuelva.
         markDeleted([{ table: "planned_expenses", key: id }]);
       },
@@ -1811,7 +1836,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               const createdSub: Subject = {
                 id, user_id: userId, name: trimmed,
                 color: DEFAULT_COLORS[colorIndex],
-                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, created_at: iso,
               };
               newSubjects.push(createdSub);
               resolvedSubjectId = createdSub.id;
@@ -1826,7 +1851,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const id = newId();
             const createdSub: Subject = {
               id, user_id: userId, name: "General",color: DEFAULT_COLORS[0],
-                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, created_at: iso,
             };
             newSubjects.push(createdSub);
             resolvedSubjectId = createdSub.id;
@@ -1916,7 +1941,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
               const createdSub: Subject = {
                 id, user_id: userId, name: trimmed,
                 color: DEFAULT_COLORS[colorIndex],
-                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, created_at: iso,
               };
               allSubjects.push(createdSub);
               newSubjects.push(createdSub);
@@ -1927,7 +1952,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
             const id = newId();
             const createdSub: Subject = {
               id, user_id: userId, name: "General",color: DEFAULT_COLORS[0],
-                self_rating: null, classroom_course_id: null, classroom_name: null, created_at: iso,
+                self_rating: null, created_at: iso,
             };
             allSubjects.push(createdSub);
             newSubjects.push(createdSub);
@@ -1981,7 +2006,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           void (async () => {
             if (createdSubjects.length > 0) {
               const subjectResult = await syncSupabase(
-                _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, classroom_course_id, classroom_name, created_at }) => ({ id, user_id: userId, name, color, self_rating, classroom_course_id, classroom_name, created_at }))),
+                _supabase.from("subjects").insert(createdSubjects.map(({ id, name, color, self_rating, created_at }) => ({ id, user_id: userId, name, color, self_rating, created_at }))),
                 "guardar asignaturas",
               );
               if (!subjectResult) return;
@@ -2212,8 +2237,8 @@ export function DataProvider({ children }: { children: ReactNode }) {
         const TABLES = [
           "subjects",
           "tasks",
-          "notes",
           "workouts",
+          "workout_schedule",
           "habits",
           "habit_completions",
           "transactions",

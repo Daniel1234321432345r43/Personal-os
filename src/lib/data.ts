@@ -5,9 +5,9 @@ import type {
   HabitCompletion,
   Transaction,
   Subject,
-  Note,
   Grade,
   PlannedExpense,
+  WorkoutSchedule,
   SleepLog,
   SleepSettings,
 } from "@/lib/types";
@@ -21,6 +21,8 @@ export interface FinanceSummary {
   budget: number | null;
   /** Total de gastos futuros planificados aún no ejecutados */
   plannedExpenses: number;
+  /** Total de ingresos futuros planificados aún no cobrados */
+  plannedIncome: number;
   /** Total comprometido: gastos reales + gastos planificados */
   committedExpenses: number;
   /** Presupuesto restante respecto al gasto real actual */
@@ -32,8 +34,9 @@ export interface FinanceSummary {
 export interface DashboardData {
   subjects: Subject[];
   tasks: Task[];
-  notes: Note[];
   workouts: Workout[];
+  /** Entrenos programados de la semana (Ajustes → Entrenamientos). */
+  workoutSchedule: WorkoutSchedule[];
   habits: Habit[];
   habitCompletions: HabitCompletion[];
   transactions: Transaction[];
@@ -60,10 +63,11 @@ export function computeFinance(
   }
 
   let planned = 0;
+  let plannedIncome = 0;
   for (const p of plannedExpenses) {
-    if (!p.is_completed) {
-      planned += Number(p.amount);
-    }
+    if (p.is_completed) continue;
+    if (p.kind === "income") plannedIncome += Number(p.amount);
+    else planned += Number(p.amount);
   }
 
   const committed = expenses + planned;
@@ -75,9 +79,13 @@ export function computeFinance(
     totalBalance: income - expenses,
     budget,
     plannedExpenses: planned,
+    plannedIncome,
     committedExpenses: committed,
     remainingBudget: budget != null ? Math.max(0, budget - expenses) : null,
-    projectedRemaining: budget != null ? Math.max(0, budget - committed) : null,
+    // El dinero que esperas cobrar también cuenta: si te falta para un recibo,
+    // un ingreso previsto puede cubrirlo.
+    projectedRemaining:
+      budget != null ? Math.max(0, budget - committed + plannedIncome) : null,
   };
 }
 

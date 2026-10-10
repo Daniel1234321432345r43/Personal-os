@@ -8,12 +8,11 @@ PWA (Progressive Web App) que funciona como un **Sistema Operativo Personal** co
 | --- | --- |
 | **Dashboard / Secretario IA** | Panel central con chat, KPIs, tareas y rutinas del día. |
 | **Calendario** | Vista mensual y agenda con tareas, exámenes, entrenamientos e ingresos/gastos. |
-| **Estudios** | Asignaturas, tareas, sesiones de estudio y conexión opcional con Google Classroom. |
+| **Estudios** | Asignaturas, notas de exámenes y trabajos, ponderaciones, entregas y exámenes. |
 | **Pomodoro** | Temporizador de la técnica Pomodoro con selector de tarea, notificación persistente en pantalla de bloqueo (tipo Symetry) y aviso sonoro al completar cada sesión (tiempos configurables en Ajustes). |
-| **Deporte** | Registro de entrenamientos y seguimiento de hábitos diarios. |
+| **Deporte** | Registro de entrenamientos, seguimiento de hábitos diarios y plan semanal de entrenamientos (día, hora y duración) que dispara la pregunta «¿has ido?» al terminar. |
 | **Sueño** | Registro de cada noche con un **selector circular** arrastrable (estilo Apple Salud: arco de hora de dormir → hora de despertar), horas dormidas calculadas en tiempo real, valoración con emojis, gráfica semanal, mapa de calor anual y aviso push 15 min antes de dormir. El objetivo (horario y horas) se configura en **Ajustes → Mi objetivo de sueño**. Puntúa cada noche con XP: +15 si cumple el objetivo, +5 si se queda cerca, 0 si es insuficiente y −5 si es muy corta. |
-| **Finanzas** | Ingresos, gastos, categorías y presupuesto mensual. |
-| **Notas** | Apuntes con contenido de texto y archivos adjuntos opcionales. |
+| **Finanzas** | Ingresos y gastos, categorías, presupuesto mensual y movimientos previstos (gastos e ingresos programados). |
 
 ## Stack
 
@@ -22,7 +21,7 @@ PWA (Progressive Web App) que funciona como un **Sistema Operativo Personal** co
 - **Supabase** para PostgreSQL, autenticación y sincronización de datos
 - **Vercel AI SDK v7** con proveedores configurables
 - **Framer Motion** para animaciones e interacciones
-- **Google OAuth 2.0** para login y, opcionalmente, Google Classroom
+- **Google OAuth 2.0** para el login
 - PWA instalable mediante Web App Manifest
 
 ## Primeros pasos
@@ -72,11 +71,17 @@ Ejecuta las migraciones desde **Supabase Dashboard → SQL Editor**, en este ord
 ...
 15. `supabase/migrations/00015_planned_expenses.sql`
 16. `supabase/migrations/00016_sleep.sql`
+17. `supabase/migrations/00017_deleted_records.sql`
+18. `supabase/migrations/00018_study_sessions.sql`
+19. `supabase/migrations/00019_exam_done.sql`
+20. `supabase/migrations/00020_remove_notes_and_classroom.sql` (borra notas y Classroom)
+21. `supabase/migrations/00021_planned_income.sql` (ingresos previstos)
+22. `supabase/migrations/00022_workout_schedule.sql` (plan semanal de entrenamientos)
 
 El esquema incluye:
 
 - Perfil público en `public.users`, enlazado con `auth.users`.
-- Tablas de asignaturas, tareas, entrenamientos, hábitos, finanzas, presupuestos, gastos planificados, notas y calificaciones.
+- Tablas de asignaturas, tareas, entrenamientos, plan semanal de entrenamientos, hábitos, finanzas, presupuestos, movimientos previstos y calificaciones.
 - Trigger para crear automáticamente el perfil público al registrarse.
 - Políticas RLS para que cada usuario solo acceda a sus propios datos.
 - Columnas de sesiones multi-día para tareas.
@@ -146,41 +151,6 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=tu-anon-key
 5. Ejecuta un nuevo deploy después de cambiar cualquier variable `NEXT_PUBLIC_*`.
 
 Estas variables se incorporan al JavaScript durante el build. Guardarlas en Netlify sin volver a desplegar no actualiza la aplicación que ya está publicada.
-
-## Google Classroom opcional
-
-Google Classroom es independiente del login de Google. Para activarlo:
-
-1. En [Google Cloud Console](https://console.cloud.google.com/apis/credentials), crea credenciales OAuth 2.0 para una aplicación web.
-2. Habilita la **Google Classroom API**.
-3. Añade la URI de callback local:
-
-```text
-http://localhost:3000/api/classroom/oauth/callback
-```
-
-4. En producción añade:
-
-```text
-https://tu-sitio.netlify.app/api/classroom/oauth/callback
-```
-
-5. Configura las variables:
-
-```env
-GOOGLE_CLASSROOM_CLIENT_ID=tu-client-id
-GOOGLE_CLASSROOM_CLIENT_SECRET=tu-client-secret
-GOOGLE_CLASSROOM_REDIRECT_URI=http://localhost:3000/api/classroom/oauth/callback
-```
-
-En Netlify, cambia `GOOGLE_CLASSROOM_REDIRECT_URI` por la URL de producción. Los scopes usados son de solo lectura:
-
-```text
-https://www.googleapis.com/auth/classroom.courses.readonly
-https://www.googleapis.com/auth/classroom.coursework.me.readonly
-```
-
-Los tokens se guardan en `public.google_tokens` asociados al usuario autenticado.
 
 ## Configuración de IA
 
@@ -253,6 +223,10 @@ La función consulta las tareas con `start_time` y envía la notificación. En e
 
 La misma función envía el **aviso de Sueño**: 15 minutos antes de la *hora de ir a dormir* configurada en el módulo de Sueño ("En 15 min tienes que dormirte para cumplir tu hábito de sueño"). Se activa con el interruptor de **Ajustes → Mi objetivo de sueño**, se deduplica con `reminder_log` (una fila por usuario, noche y momento programado, migración `00016`) y el aviso abre `/sueno`. La implementación del protocolo Web Push está en `supabase/functions/_shared/web_push.js` usando solo WebCrypto (sin dependencias npm); `scripts/test-web-push.mjs` la verifica contra una implementación independiente (`http_ece`) para garantizar que los navegadores reales puedan descifrar el payload.
 
+La misma función envía el **aviso de estudio de las 15:00** (hora local del usuario): revisa exámenes y entregas de los próximos días y manda un solo resumen del estilo «Tienes un examen pasado mañana y otro al día siguiente, deberías empezar a estudiar». Se deduplica con `reminder_log` por día (`study-alert-<fecha>`) y el cálculo del horizonte y del texto vive en `supabase/functions/_shared/study-alert.js` (`scripts/test-study-alert.mjs`).
+
+También envía la **pregunta de entreno**: al terminar el entreno programado en **Ajustes → Entrenamientos** (plan semanal con día, hora y duración, migración `00022`), llega el aviso «Hoy deberías haber ido a [entreno], ¿has ido?». Al pulsarlo se abre la app en Hoy con un modal («Entreno [Nombre] [X] minutos» + **Sí lo he hecho** / **No lo he hecho**); «Sí» registra el entrenamiento y si ya apuntaste ese entreno hoy no se vuelve a preguntar. Los cálculos viven en `supabase/functions/_shared/workout-check.js` (`scripts/test-workout-check.mjs`).
+
 **Zona horaria:** la app guarda la hora de inicio como hora local (HH:MM) y `due_date` como instante UTC (`timestamptz`). Al iniciar sesión, la app escribe la zona horaria real del navegador en `public.users`, y la Edge Function la usa para convertir cada tarea a su instante UTC exacto (con horario de verano incluido), comparando siempre en milisegundos UTC sin desfases manuales. Si la zona del perfil no está definida, la función avisa por logs en vez de fallar en silencio.
 
 4. **En la app**: inicia sesión, ve a **Ajustes → Notificaciones** y pulsa **Activar notificaciones**. Usa **Enviar notificación de prueba** para comprobar que todo funciona.
@@ -315,12 +289,11 @@ src/
     api/
       chat/                  # Chat del Secretario IA
       plan/                  # Plan estructurado del día
-      classroom/             # OAuth e importación de Classroom
     auth/callback/           # Callback del login de Supabase
   components/
     dashboard/               # Dashboard, chat, plan, tareas y tarjeta de Sueño
     sleep/                   # Módulo de Sueño (dial circular, registro, semana y heatmap anual)
-    academic/                # Estudios y Classroom
+    academic/                # Estudios: asignaturas, entregas y exámenes
     forms/                   # Formularios de datos
     layout/                  # Shell de la aplicación
     providers/               # DataProvider y configuración
@@ -329,7 +302,6 @@ src/
     supabase/                # Clientes browser, server y admin
     sleep.ts                 # Niveles de sueño, horas entre horarios y fechas
     ai/                      # Proveedores y prompts de IA
-    classroom/               # Cliente de Google Classroom
     data.ts                  # Cálculos y datos del dashboard
 supabase/migrations/         # Esquema SQL, RLS y reparación de perfiles
 supabase/functions/          # Edge Functions (send-reminders + _shared/)
@@ -346,6 +318,9 @@ npm run lint         # ESLint
 npm run vapid:keys   # Generar claves VAPID para notificaciones push
 node scripts/test-web-push.mjs  # Prueba end-to-end del protocolo Web Push
 node scripts/test-reminder-time.mjs  # Pruebas de las utilidades de fecha/hora de recordatorios
+node scripts/test-study-alert.mjs  # Pruebas del aviso de estudio de las 15:00
+node scripts/test-workout-check.mjs  # Pruebas de la pregunta de entreno
+node scripts/test-exam-done.mjs  # Pruebas del cierre automático de exámenes
 ```
 
 ## Animaciones e interacción
