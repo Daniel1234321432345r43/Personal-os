@@ -75,78 +75,90 @@ export function SleepWeekChart({
       {/* Área de la gráfica: las barras y la línea del objetivo usan el mismo eje.
           En móvil es algo más baja para que quepan también las demás tarjetas. */}
       <div className="relative h-36 w-full sm:h-44 lg:h-48">
-        <div className="absolute inset-x-0 bottom-6 top-5 flex items-end gap-1 sm:gap-2">
-          {/* Línea del objetivo (misma escala que la altura de las barras) */}
-          <div
-            className="pointer-events-none absolute inset-x-0 z-10 border-t border-dashed border-emerald-600/70"
-            style={{ bottom: `${percent(target)}%` }}
-          />
-          <span
-            className="pointer-events-none absolute right-0 z-10 -translate-y-full rounded bg-background/80 px-1 text-[10px] font-medium text-emerald-700 dark:text-emerald-300"
-            style={{ bottom: `${percent(target)}%` }}
-          >
-            {target} h
-          </span>
+        <div className="absolute inset-x-0 bottom-6 top-5 flex items-stretch gap-1.5 sm:gap-2">
+          {/* Área de barras: la línea del objetivo comparte su escala. */}
+          <div className="relative flex min-w-0 flex-1 items-end gap-1 sm:gap-2">
+            {/* Línea del objetivo (misma escala que la altura de las barras) */}
+            <div
+              className="pointer-events-none absolute inset-x-0 z-10 border-t border-dashed border-emerald-600/70"
+              style={{ bottom: `${percent(target)}%` }}
+            />
 
-          {days.map((day) => {
-            const level = day.hours != null ? sleepLevel(day.hours, target) : null;
-            const heightPercent = day.hours != null ? percent(day.hours) : 0;
-            const isSelected = day.key === selectedDate;
-            return (
-              <button
-                key={day.key}
-                type="button"
-                onClick={() => onSelectDate(day.key)}
-                title={
-                  day.hours != null
-                    ? `${day.label}: ${formatDuration(Math.round(day.hours * 60))} · ${SLEEP_LEVEL_LABEL[level ?? "bad"]}`
-                    : `${day.label}: sin registro`
-                }
-                aria-label={
-                  day.hours != null
-                    ? `${day.label}: ${day.hours} horas`
-                    : `${day.label}: sin registro`
-                }
-                className={`group relative h-full min-w-0 flex-1 rounded-md transition-colors ${
-                  isSelected ? "bg-primary/5 ring-1 ring-primary/40" : "hover:bg-muted/60"
-                }`}
-              >
-                <span
-                  className={`absolute inset-x-1 bottom-0 rounded-t-md transition-[height] duration-300 ${
-                    day.hours == null ? "bg-muted-foreground/20" : ""
-                  } ${day.isFuture ? "opacity-40" : ""}`}
-                  style={{
-                    height: `${day.hours != null ? Math.max(3, heightPercent) : 3}%`,
-                    backgroundColor:
-                      day.hours == null ? undefined : SLEEP_BANDS[sleepBand(day.hours)].hex,
-                  }}
-                />
-                {day.hours != null && (
+            {days.map((day) => {
+              const level = day.hours != null ? sleepLevel(day.hours, target) : null;
+              const heightPercent = day.hours != null ? percent(day.hours) : 0;
+              const isSelected = day.key === selectedDate;
+              return (
+                <button
+                  key={day.key}
+                  type="button"
+                  onClick={() => onSelectDate(day.key)}
+                  title={
+                    day.hours != null
+                      ? `${day.label}: ${formatDuration(Math.round(day.hours * 60))} · ${SLEEP_LEVEL_LABEL[level ?? "bad"]}`
+                      : `${day.label}: sin registro`
+                  }
+                  aria-label={
+                    day.hours != null
+                      ? `${day.label}: ${day.hours} horas`
+                      : `${day.label}: sin registro`
+                  }
+                  className={`group relative h-full min-w-0 flex-1 rounded-md transition-colors ${
+                    isSelected ? "bg-primary/5 ring-1 ring-primary/40" : "hover:bg-muted/60"
+                  }`}
+                >
                   <span
-                    className="absolute inset-x-0 text-center text-[10px] font-medium text-muted-foreground"
-                    style={{ bottom: `calc(${heightPercent}% + 2px)` }}
-                  >
-                    {day.hours} h
-                  </span>
-                )}
-              </button>
-            );
-          })}
+                    className={`absolute inset-x-1 bottom-0 rounded-t-md transition-[height] duration-300 ${
+                      day.hours == null ? "bg-muted-foreground/20" : ""
+                    } ${day.isFuture ? "opacity-40" : ""}`}
+                    style={{
+                      height: `${day.hours != null ? Math.max(3, heightPercent) : 3}%`,
+                      backgroundColor:
+                        day.hours == null ? undefined : SLEEP_BANDS[sleepBand(day.hours)].hex,
+                    }}
+                  />
+                  {day.hours != null && (
+                    <span
+                      className="absolute inset-x-0 text-center text-[10px] font-medium text-muted-foreground"
+                      style={{ bottom: `calc(${heightPercent}% + 2px)` }}
+                    >
+                      {day.hours} h
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Canaleta del objetivo: el chip «8 h» vive aquí, fuera de las barras.
+              Anclado dentro de la última columna (Domingo) tapaba su número en
+              el móvil, que es justo el día que más se mira. */}
+          <div className="relative w-6 shrink-0 sm:w-7">
+            <span
+              className="pointer-events-none absolute inset-x-0 translate-y-1/2 text-center text-[10px] font-medium text-emerald-700 dark:text-emerald-300"
+              style={{ bottom: `${percent(target)}%` }}
+            >
+              {target} h
+            </span>
+          </div>
         </div>
 
-        {/* Etiquetas de los días */}
-        <div className="absolute inset-x-0 bottom-0 flex h-6 items-center gap-1 sm:gap-2">
-          {days.map((day) => (
-            <span
-              key={day.key}
-              className={`min-w-0 flex-1 text-center text-[10px] font-medium sm:text-xs ${
-                day.isToday ? "text-primary" : "text-muted-foreground"
-              }`}
-            >
-              <span className="sm:hidden">{day.short}</span>
-              <span className="hidden sm:inline">{day.label.slice(0, 3)}</span>
-            </span>
-          ))}
+        {/* Etiquetas de los días (alineadas con las barras, no con la canaleta) */}
+        <div className="absolute inset-x-0 bottom-0 flex h-6 items-center gap-1.5 sm:gap-2">
+          <div className="flex min-w-0 flex-1 items-center gap-1 sm:gap-2">
+            {days.map((day) => (
+              <span
+                key={day.key}
+                className={`min-w-0 flex-1 text-center text-[10px] font-medium sm:text-xs ${
+                  day.isToday ? "text-primary" : "text-muted-foreground"
+                }`}
+              >
+                <span className="sm:hidden">{day.short}</span>
+                <span className="hidden sm:inline">{day.label.slice(0, 3)}</span>
+              </span>
+            ))}
+          </div>
+          <span className="w-6 shrink-0 sm:w-7" aria-hidden />
         </div>
       </div>
 
