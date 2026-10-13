@@ -12,6 +12,7 @@ import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { ExpandablePanel } from "@/components/ui/expandable-panel";
 import { formatDate, formatDuration } from "@/lib/format";
 import { useStudyLog } from "@/lib/study-log";
+import { studyMinutesForTask } from "@/lib/study-summary";
 import { useIsDesktop } from "@/lib/use-is-mobile";
 import { SubjectForm } from "@/components/forms/subject-form";
 import { TaskForm } from "@/components/forms/task-form";
@@ -182,6 +183,7 @@ function TaskCard({
   initialType,
   tasks,
   completed,
+  allTasks,
   subjectById,
   actions,
   study,
@@ -196,6 +198,8 @@ function TaskCard({
   tasks: Task[];
   /** Completadas, ya ordenadas por fecha. */
   completed: Task[];
+  /** Todas las tareas: hace falta para sumar los bloques de estudio de un examen. */
+  allTasks: Task[];
   subjectById: Map<string, Subject>;
   actions: {
     toggleTaskDone: (id: string) => void;
@@ -215,8 +219,10 @@ function TaskCard({
       task={task}
       subjectById={subjectById}
       actions={actions}
-      studiedMinutes={study.byTask.get(task.id) ?? 0}
-      studiedToday={study.byTaskToday.get(task.id) ?? 0}
+      // Las horas de un examen incluyen sus bloques de estudio del día
+      // («Estudiar para el examen de X»), no solo lo apuntado directamente.
+      studiedMinutes={studyMinutesForTask(study.byTask, task, allTasks)}
+      studiedToday={studyMinutesForTask(study.byTaskToday, task, allTasks)}
     />
   );
 
@@ -425,7 +431,7 @@ export function AcademicClient() {
             </p>
           ) : (
             <motion.div
-              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4"
+              className="grid min-w-0 gap-3 sm:grid-cols-2 lg:grid-cols-4"
               initial="hidden"
               animate="visible"
               variants={{ visible: { transition: { staggerChildren: 0.08 } } }}
@@ -440,6 +446,9 @@ export function AcademicClient() {
                 const stats = computeSubjectGradeStats(subjectGrades);
 
                 return (
+                  // `min-w-0`: sin él, el título con `line-clamp` marca el ancho
+                  // mínimo de la celda y el recuadro se sale de la tarjeta (en un
+                  // móvil de 360 px llegó a medir 495 px dentro de 282).
                   <motion.div
                     key={subject.id}
                     onClick={() => setSelectedSubject(subject)}
@@ -451,7 +460,7 @@ export function AcademicClient() {
                         transition: { duration: 0.45, ease: "easeOut" },
                       },
                     }}
-                    className="group relative flex flex-col justify-between rounded-xl border bg-card p-3.5 shadow-xs transition-all hover:border-primary/50 hover:shadow-sm cursor-pointer active:scale-[0.98]"
+                    className="group relative flex min-w-0 flex-col justify-between rounded-xl border bg-card p-3.5 shadow-xs transition-all hover:border-primary/50 hover:shadow-sm cursor-pointer active:scale-[0.98]"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -466,7 +475,10 @@ export function AcademicClient() {
                           {subject.name.charAt(0).toUpperCase()}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold group-hover:text-primary transition-colors">
+                          {/* Dos líneas en vez de una con puntos suspensivos: los
+                              nombres largos («Tecnología e ingeniería») caben
+                              dentro del recuadro en lugar de estirarlo. */}
+                          <p className="line-clamp-2 text-sm font-semibold group-hover:text-primary transition-colors">
                             {subject.name}
                           </p>
                           <p className="text-xs text-muted-foreground">
@@ -550,6 +562,7 @@ export function AcademicClient() {
         initialType="assignment"
         tasks={pendingTasks}
         completed={completedTasks}
+        allTasks={allTasks}
         subjectById={subjectById}
         actions={actions}
         study={study}
@@ -564,6 +577,7 @@ export function AcademicClient() {
         initialType="exam"
         tasks={pendingExams}
         completed={completedExams}
+        allTasks={allTasks}
         subjectById={subjectById}
         actions={actions}
         study={study}

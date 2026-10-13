@@ -26,6 +26,17 @@ export interface StudyTaskLike {
   type?: string | null;
 }
 
+/**
+ * Tarea mínima para las estadísticas por tarea. `parent_task_id` enlaza el bloque
+ * de estudio que crea el Pomodoro con el examen o la entrega para la que se
+ * estudió (ver `studyMinutesForTask`).
+ */
+export interface StudyTaskWithParent extends StudyTaskLike {
+  parent_task_id?: string | null;
+  status?: string | null;
+  due_date?: string | null;
+}
+
 /** Un día con los minutos dedicados a un trabajo. */
 export interface StudyWorkDay {
   date: string;
@@ -114,6 +125,74 @@ export function composeWorkTitle(kind: string, name: string): string {
   }
   if (kind === "assignment") return `Trabajar en ${clean}`;
   return `Estudiar ${clean}`;
+}
+
+/**
+ * Minutos dedicados a un elemento: los suyos más los de los bloques de estudio
+ * creados para él.
+ *
+ * Al hacer un Pomodoro centrado en un examen o una entrega, el tiempo no se
+ * apunta al examen —no deja de ser un examen— sino al bloque del día
+ * ("Estudiar para el examen de X", "Trabajar en Y"), que queda enlazado al
+ * examen con `parent_task_id`. Sin esta suma el examen parecería no haber
+ * tenido nunca tiempo dedicado, que es justo el dato que dice si lo llevas
+ * preparado.
+ */
+export function studyMinutesForTask(
+  minutesByTask: ReadonlyMap<string, number>,
+  task: StudyTaskWithParent,
+  tasks: readonly StudyTaskWithParent[],
+): number {
+  let total = minutesByTask.get(task.id) ?? 0;
+  for (const candidate of tasks) {
+    if (candidate.parent_task_id === task.id) {
+      total += minutesByTask.get(candidate.id) ?? 0;
+    }
+  }
+  return total;
+}
+
+/** Clave de comparación de títulos: sin acentos, sin mayúsculas ni dobles espacios. */
+function titleKey(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/**
+ * Título del bloque de estudio que corresponde a una tarea, si esa tarea es un
+ * examen o una entrega ("Estudiar para el examen de X", "Trabajar en Y"). En
+ * cualquier otro caso devuelve cadena vacía: una tarea normal no genera bloque.
+ */
+export function studyBlockTitle(task: StudyTaskLike | null | undefined): string {
+  if (!task) return "";
+  if (task.type !== "exam" && task.type !== "assignment") return "";
+  return studyWorkTitle(task);
+}
+
+/**
+ * Id del bloque de estudio del día, si ya existe y sigue pendiente.
+ *
+ * Evita crear un bloque por cada pomodoro: los de la misma jornada suman en el
+ * mismo sitio ("Estudiar para el examen de X" de hoy). Pasado el día, el
+ * siguiente pomodoro crea el bloque de esa nueva jornada, para que el calendario
+ * conserve el trabajo de cada día.
+ */
+export function findStudyBlockId(
+  tasks: readonly StudyTaskWithParent[],
+  title: string,
+  date: string,
+): string | null {
+  const wanted = titleKey(title);
+  if (!wanted) return null;
+  for (const task of tasks) {
+    if (task.status === "done" || task.due_date !== date) continue;
+    if (titleKey(studyWorkTitle(task)) === wanted) return task.id;
+  }
+  return null;
 }
 
 /**

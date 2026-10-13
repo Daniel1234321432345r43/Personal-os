@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { formatDate, formatDuration } from "@/lib/format";
 import { useData } from "@/components/providers/data-provider";
 import { useStudyLog } from "@/lib/study-log";
+import { studyMinutesForTask } from "@/lib/study-summary";
 import type { DashboardData } from "@/lib/data";
 import type { Task, TaskPriority } from "@/lib/types";
 
@@ -123,7 +124,9 @@ export function UpcomingTasks({
             const subject = task.subject_id
               ? subjectById.get(task.subject_id)
               : null;
-            const studiedMinutes = study.byTask.get(task.id) ?? 0;
+            // El tiempo de un examen incluye los bloques de estudio creados para
+            // él («Estudiar para el examen de X»), no solo lo apuntado directamente.
+            const studiedMinutes = studyMinutesForTask(study.byTask, task, data.tasks);
             return (
               <li
                 key={task.id}

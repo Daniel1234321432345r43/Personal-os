@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { formatCurrency, formatDateLong, formatDuration, todayKey } from "@/lib/format";
 import { useStudyLog } from "@/lib/study-log";
+import { studyMinutesForTask } from "@/lib/study-summary";
 import { TaskForm } from "@/components/forms/task-form";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { WorkoutForm } from "@/components/forms/workout-form";
@@ -1156,6 +1157,13 @@ export function CalendarClient() {
                         ].map((t) => {
                           const sub = t.subject_id ? subjectById.get(t.subject_id) : null;
                           const isDone = t.status === "done";
+                          // Las horas de un examen incluyen los bloques de estudio
+                          // del día («Estudiar para el examen de X»).
+                          const studiedMinutes = studyMinutesForTask(
+                            study.byTask,
+                            t,
+                            data.tasks,
+                          );
                           return (
                             <motion.li
                               key={t.id}
@@ -1221,10 +1229,10 @@ export function CalendarClient() {
                                         <Clock className="h-3 w-3" /> {t.estimated_minutes} min
                                       </span>
                                     )}
-                                    {(study.byTask.get(t.id) ?? 0) > 0 && (
+                                    {studiedMinutes > 0 && (
                                       <span className="flex items-center gap-1 font-medium text-emerald-600 dark:text-emerald-400">
                                         <BookOpen className="h-3 w-3" />
-                                        {formatDuration(study.byTask.get(t.id) ?? 0)} dedicados
+                                        {formatDuration(studiedMinutes)} dedicados
                                       </span>
                                     )}
                                   </div>

@@ -6,6 +6,9 @@
 import {
   composeWorkTitle,
   examCompletedMessage,
+  findStudyBlockId,
+  studyBlockTitle,
+  studyMinutesForTask,
   summarizeStudy,
   studyWorkTitle,
 } from "../src/lib/study-summary.ts";
@@ -82,6 +85,90 @@ assert(
 assert(
   examCompletedMessage("Dibujo Técnico") === "Has completado el examen de Dibujo Técnico",
   "el aviso del examen añade «examen de» cuando hace falta",
+);
+
+// --- studyBlockTitle / findStudyBlockId (bloque del día del Pomodoro) --------
+assert(
+  studyBlockTitle({ id: "e1", title: "Examen de Dibujo Técnico", type: "exam" }) ===
+    "Estudiar para el examen de Dibujo Técnico",
+  "un examen genera el bloque del día «Estudiar para el examen de …»",
+);
+assert(
+  studyBlockTitle({ id: "e2", title: "Práctica 3 de Redes", type: "assignment" }) ===
+    "Trabajar en Práctica 3 de Redes",
+  "una entrega genera el bloque del día «Trabajar en …»",
+);
+assert(
+  studyBlockTitle({ id: "t1", title: "Comprar pan", type: "task" }) === "",
+  "una tarea normal no genera bloque (no se estudia «Comprar pan»)",
+);
+assert(studyBlockTitle(null) === "", "sin tarea elegida no hay bloque");
+
+const BLOCKS = [
+  {
+    id: "bloque-hoy",
+    title: "Estudiar para el examen de Dibujo Técnico",
+    type: "study_session",
+    status: "pending",
+    due_date: "2026-10-08",
+  },
+  {
+    id: "bloque-ayer",
+    title: "Trabajar en Práctica 3 de Redes",
+    type: "study_session",
+    status: "pending",
+    due_date: "2026-10-07",
+  },
+  {
+    id: "bloque-hecho",
+    title: "Trabajar en Práctica 3 de Redes",
+    type: "study_session",
+    status: "done",
+    due_date: "2026-10-08",
+  },
+];
+assert(
+  findStudyBlockId(BLOCKS, "Estudiar para el examen de dibujo técnico", "2026-10-08") ===
+    "bloque-hoy",
+  "encuentra el bloque de hoy aunque cambien mayúsculas y acentos",
+);
+assert(
+  findStudyBlockId(BLOCKS, "Trabajar en Práctica 3 de Redes", "2026-10-09") === null,
+  "el bloque de ayer no se reutiliza hoy (cada día tiene el suyo)",
+);
+assert(
+  findStudyBlockId(BLOCKS, "Trabajar en Práctica 3 de Redes", "2026-10-08") === null,
+  "un bloque ya hecho no se reutiliza",
+);
+assert(
+  findStudyBlockId(BLOCKS, "Estudiar mates", "2026-10-08") === null,
+  "sin bloque previo devuelve null (se creará uno)",
+);
+
+// --- studyMinutesForTask -----------------------------------------------------
+const MINUTES = new Map([
+  ["e1", 20],
+  ["bloque-1", 25],
+  ["bloque-2", 50],
+  ["otro", 90],
+]);
+const WITH_CHILDREN = [
+  { id: "e1", title: "Examen de Dibujo Técnico", type: "exam" },
+  { id: "bloque-1", title: "Estudiar para el examen de Dibujo Técnico", parent_task_id: "e1" },
+  { id: "bloque-2", title: "Estudiar para el examen de Dibujo Técnico", parent_task_id: "e1" },
+  { id: "otro", title: "Comprar pan", type: "task" },
+];
+assert(
+  studyMinutesForTask(MINUTES, WITH_CHILDREN[0], WITH_CHILDREN) === 95,
+  "las horas de un examen suman sus bloques de estudio (20 + 25 + 50)",
+);
+assert(
+  studyMinutesForTask(MINUTES, WITH_CHILDREN[3], WITH_CHILDREN) === 90,
+  "una tarea sin bloques cuenta solo lo suyo",
+);
+assert(
+  studyMinutesForTask(new Map(), WITH_CHILDREN[0], WITH_CHILDREN) === 0,
+  "sin sesiones dedicadas son 0 minutos",
 );
 
 // --- summarizeStudy ----------------------------------------------------------

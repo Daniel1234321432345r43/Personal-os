@@ -8,8 +8,12 @@ import { showBrowserNotification } from "@/lib/browser-notify";
 import { awardXp } from "@/lib/xp-system";
 import { logStudySession, useStudyLog } from "@/lib/study-log";
 import { formatDuration, todayKey } from "@/lib/format";
-import { composeWorkTitle } from "@/lib/study-summary";
-import { inferSubjectFromTitle, namesMatch } from "@/lib/subjects";
+import {
+  composeWorkTitle,
+  findStudyBlockId,
+  studyBlockTitle,
+} from "@/lib/study-summary";
+import { inferSubjectFromTitle } from "@/lib/subjects";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -307,35 +311,64 @@ export function PomodoroClient() {
 
 
   /**
-   * Tarea del trabajo de este pomodoro. Si lo que vas a hacer no estaba en la
-   * lista ("dibujo técnico"), se crea la tarea del día con ese nombre —así el
-   * tiempo aparece en las tareas del día— y se reutiliza si ya existía una
-   * igual, para que los pomodoros del mismo trabajo sumen en la misma tarea en
-   * lugar de crear una nueva por sesión.
+   * Trabajo de este pomodoro: a qué tarea se apunta el tiempo y cómo se llama el
+   * bloque. El bloque es la tarea del día que aparece en el calendario; se
+   * reutiliza el de hoy si ya existe, para que los pomodoros de la misma jornada
+   * sumen ahí en lugar de crear uno por sesión.
+   *
+   *   · Examen o entrega de la lista → bloque «Estudiar para el examen de X» /
+   *     «Trabajar en X», enlazado al examen con `parent_task_id` (así el examen
+   *     conserva sus horas dedicadas, ver `studyMinutesForTask`).
+   *   · Algo escrito a mano → bloque con el nombre elegido ("Estudiar mates").
+   *   · Cualquier otra tarea (o ninguna) → el tiempo va a esa tarea.
    */
-  const resolveWorkTaskId = useCallback((): string | null => {
-    if (!customWork) return taskId || null;
-    const title = composeWorkTitle(newWorkKind, newWork);
-    if (!title) return null;
+  const resolveWork = useCallback((): { id: string | null; title: string } => {
+    const focus = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
+    const date = todayKey();
 
-    const existing = data.tasks.find(
-      (t) => t.status !== "done" && namesMatch(t.title, title),
-    );
-    if (existing) return existing.id;
+    // ── Examen o entrega: el bloque se llama por lo que estás preparando ──
+    const examTitle = studyBlockTitle(focus);
+    if (examTitle) {
+      const existing = findStudyBlockId(data.tasks, examTitle, date);
+      if (existing) return { id: existing, title: examTitle };
 
-    const id = newTaskId();
-    // Si el nombre corresponde a una asignatura que ya existe, la tarea se
-    // enlaza a ella. Una asignatura NUEVA no se crea desde aquí: el pomodoro no
-    // debe llenar la lista de asignaturas por escribir una palabra.
-    const guess = inferSubjectFromTitle(newWork, data.subjects);
-    actions.addTask({
-      id,
-      title,
-      type: "study_session",
-      due_date: todayKey(),
-      subject_name: guess?.exists ? guess.name : null,
-    });
-    return id;
+      const id = newTaskId();
+      actions.addTask({
+        id,
+        title: examTitle,
+        type: "study_session",
+        due_date: date,
+        subject_id: focus?.subject_id ?? null,
+        parent_task_id: focus?.id ?? null,
+      });
+      return { id, title: examTitle };
+    }
+
+    // ── Algo que todavía no estaba en la lista ────────────────────────────
+    if (customWork) {
+      const title = composeWorkTitle(newWorkKind, newWork);
+      if (!title) return { id: null, title: "" };
+
+      const existing = findStudyBlockId(data.tasks, title, date);
+      if (existing) return { id: existing, title };
+
+      const id = newTaskId();
+      // Si el nombre corresponde a una asignatura que ya existe, el bloque se
+      // enlaza a ella. Una asignatura NUEVA no se crea desde aquí: el pomodoro no
+      // debe llenar la lista de asignaturas por escribir una palabra.
+      const guess = inferSubjectFromTitle(newWork, data.subjects);
+      actions.addTask({
+        id,
+        title,
+        type: "study_session",
+        due_date: date,
+        subject_name: guess?.exists ? guess.name : null,
+      });
+      return { id, title };
+    }
+
+    // ── Una tarea cualquiera (o ninguna) ─────────────────────────────────
+    return { id: taskId || null, title: focus?.title ?? "" };
   }, [actions, customWork, data.subjects, data.tasks, newWork, newWorkKind, taskId]);
 
   // Cuenta atrás cada segundo mientras corre.
@@ -360,13 +393,11 @@ export function PomodoroClient() {
 
 
     const wasWork = mode === "work";
-    const chosenTask = taskId ? data.tasks.find((t) => t.id === taskId) : undefined;
-    // El trabajo de este pomodoro: la tarea elegida o la que se acaba de crear
-    // con lo que el usuario ha escrito (se enlaza la sesión a esa tarea nueva).
-    const workTaskId = wasWork ? resolveWorkTaskId() : null;
-    const workName =
-      chosenTask?.title ?? (customWork ? composeWorkTitle(newWorkKind, newWork) : "");
-    const taskLabel = workName ? ` Estabas con: ${workName}.` : "";
+    // El trabajo de este pomodoro: la tarea elegida o el bloque que se acaba de
+    // crear (la sesión de estudio se enlaza a él).
+    const work = wasWork ? resolveWork() : { id: null, title: "" };
+    const workTaskId = work.id;
+    const taskLabel = work.title ? ` Estabas con: ${work.title}.` : "";
 
     playChime();
     if (wasWork) {
@@ -388,7 +419,7 @@ export function PomodoroClient() {
         setShowStudySummary(true);
         setMode("break");
         setSecondsLeft(breakMinutes * 60);
-        // El siguiente pomodoro sigue en el mismo trabajo, ya como tarea real.
+        // El siguiente pomodoro sigue en el mismo trabajo (ya el bloque del día).
         setTaskId(workTaskId ?? "");
         setCustomWork(false);
         setNewWork("");
@@ -412,10 +443,7 @@ export function PomodoroClient() {
     breakMinutes,
     workMinutes,
     data.tasks,
-    resolveWorkTaskId,
-    customWork,
-    newWork,
-    newWorkKind,
+    resolveWork,
   ]);
 
   // ── Media Session: pantalla de bloqueo ─────────────────────────────────
@@ -519,6 +547,11 @@ export function PomodoroClient() {
   /** Lo que se muestra como trabajo en curso: la tarea elegida o lo escrito a mano. */
   const selectedLabel = selectedTask?.title ?? (customWork ? newWork.trim() : "");
   const newWorkTitle = composeWorkTitle(newWorkKind, newWork);
+  /**
+   * Si lo elegido es un examen o una entrega, al terminar el pomodoro se creará
+   * este bloque del día en el calendario.
+   */
+  const selectedBlockTitle = customWork ? "" : studyBlockTitle(selectedTask);
 
   const notifGranted =
     typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted";
@@ -603,6 +636,16 @@ export function PomodoroClient() {
           <option value={NEW_WORK_VALUE}>＋ Algo nuevo (se añade a las tareas del día)…</option>
         </select>
 
+        {/* Estudiar un examen o una entrega crea solo el bloque del día: se
+            avisa ANTES de empezar, para que no sorprenda al terminar. */}
+        {selectedBlockTitle && (
+          <p className="text-xs text-muted-foreground">
+            Al terminar el pomodoro se creará hoy{" "}
+            <span className="font-medium text-foreground">«{selectedBlockTitle}»</span> en el
+            calendario, con el tiempo que le dediques.
+          </p>
+        )}
+
         {customWork && (
           <div className="mt-2 space-y-2 rounded-xl border border-dashed p-3">
             <Input
@@ -628,7 +671,7 @@ export function PomodoroClient() {
             <p className="text-xs text-muted-foreground">
               {newWorkTitle ? (
                 <>
-                  Al terminar el pomodoro se añadirá la tarea{" "}
+                  Al terminar el pomodoro se añadirá la tarea del día{" "}
                   <span className="font-medium text-foreground">«{newWorkTitle}»</span> con el
                   tiempo de hoy. Los pomodoros siguientes seguirán sumando ahí.
                 </>
@@ -795,6 +838,12 @@ export function PomodoroClient() {
                   Descansa <strong className="text-foreground">{breakMinutes} min</strong>.
                 </li>
                 <li>Repite el ciclo; cada bloque de trabajo cuenta como un pomodoro.</li>
+                <li>
+                  Si eliges un <strong className="text-foreground">examen</strong> o una{" "}
+                  <strong className="text-foreground">entrega</strong>, al terminar se crea el
+                  bloque del día («Estudiar para el examen de X») en el calendario, con el tiempo
+                  dedicado.
+                </li>
                 <li>
                   Cambia los tiempos en <strong className="text-foreground">Ajustes → Pomodoro</strong>.
                 </li>
