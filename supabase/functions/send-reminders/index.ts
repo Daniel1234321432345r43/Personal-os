@@ -27,6 +27,15 @@ import {
   workoutCheckTarget,
   workoutCheckUrl,
 } from "../_shared/workout-check.js";
+import {
+  hasLoggedSleep,
+  isSleepCheckWindow,
+  isWeekdayKey,
+  sleepCheckEntityId,
+  sleepCheckMessage,
+  sleepCheckTarget,
+  sleepCheckUrl,
+} from "../_shared/sleep-check.js";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
 const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
@@ -346,6 +355,83 @@ Deno.serve(async () => {
 
         sentCount += 1;
         console.log(`[send-reminders] Aviso de sueño enviado (${candidate.dateKey}, ${remindAtIso}).`);
+      }
+    }
+
+    // ── Sueño: de lunes a viernes a las 07:15, «¿cuánto has dormido?» ───────
+    // La pregunta por la noche que acaba de terminar. El aviso abre la app en
+    // /sueno con el formulario de la noche ya desplegado, así que se responde en
+    // un par de toques. Si esa noche ya está registrada, no se pregunta nada.
+    const sleepCheckKey = dateKeyInTz(now, tz);
+
+    if (isWeekdayKey(sleepCheckKey)) {
+      const sleepCheckAt = sleepCheckTarget(sleepCheckKey, tz);
+
+      if (sleepCheckAt && isSleepCheckWindow(now, sleepCheckAt)) {
+        const remindAtIso = sleepCheckAt.toISOString();
+        const { data: loggedNight, error: nightError } = await supabase
+          .from("sleep_logs")
+          .select("date")
+          .eq("user_id", userId)
+          .eq("date", sleepCheckKey)
+          .maybeSingle();
+
+        if (nightError) {
+          console.error(`[send-reminders] error leyendo sleep_logs de ${userId}:`, nightError.message);
+        }
+
+        if (hasLoggedSleep(loggedNight ? [loggedNight] : [], sleepCheckKey)) {
+          console.log(`[send-reminders] la noche ${sleepCheckKey} ya está registrada: sin pregunta.`);
+        } else {
+          // Primero se RESERVA el aviso en reminder_log y solo después se envía:
+          // el índice único (usuario, tipo, clave, momento) hace que dos ticks
+          // solapados del cron no manden la pregunta dos veces. Si el envío no
+          // llega a ninguna suscripción, se suelta la reserva y el siguiente
+          // tick lo reintenta dentro del margen.
+          const { error: claimError } = await supabase.from("reminder_log").insert({
+            user_id: userId,
+            entity_type: "sleep_check",
+            entity_id: sleepCheckEntityId(sleepCheckKey),
+            remind_at: remindAtIso,
+          });
+
+          if (claimError) {
+            // 23505 = ya reservado (el aviso de esta mañana ya salió). Cualquier
+            // otro error (p. ej. el check de entity_type sin la migración 00023)
+            // se registra y NO se envía: mejor ninguna pregunta que una repetida
+            // en cada tick del cron.
+            const label = claimError.code === "23505" ? "ya enviada" : "no se pudo reservar";
+            console.error(
+              `[send-reminders] pregunta de sueño ${label} (${sleepCheckKey}, ${remindAtIso}):`,
+              claimError.message,
+            );
+          } else {
+            const payload = JSON.stringify({
+              title: "Núcleo ☀️",
+              body: sleepCheckMessage(sleepSettings?.target_hours ?? 8),
+              url: sleepCheckUrl(sleepCheckKey),
+              tag: `sleep-check-${sleepCheckKey}`,
+            });
+            const sent = await sendPushToSubscriptions(userSubs, payload, "pregunta de sueño");
+
+            if (sent) {
+              sentCount += 1;
+              console.log(`[send-reminders] Pregunta de sueño enviada (${sleepCheckKey}).`);
+            } else {
+              const { error: releaseError } = await supabase
+                .from("reminder_log")
+                .delete()
+                .eq("user_id", userId)
+                .eq("entity_type", "sleep_check")
+                .eq("entity_id", sleepCheckEntityId(sleepCheckKey))
+                .eq("remind_at", remindAtIso);
+              if (releaseError) {
+                console.error("[send-reminders] no se pudo soltar la reserva de sueño:", releaseError.message);
+              }
+              console.log("[send-reminders] nadie recibió la pregunta de sueño: se reintentará.");
+            }
+          }
+        }
       }
     }
 

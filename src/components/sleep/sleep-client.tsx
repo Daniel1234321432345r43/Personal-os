@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import {
   BedDouble,
@@ -20,7 +20,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ResponsiveFormSheet } from "@/components/ui/responsive-form-sheet";
 import { fieldClass, inputClass, labelClass } from "@/components/forms/ui";
-import { useIsMobile } from "@/lib/use-is-mobile";
+import { isMobileViewport, useIsMobile } from "@/lib/use-is-mobile";
 import { useData } from "@/components/providers/data-provider";
 import { formatDate, formatDateLong, formatDuration } from "@/lib/format";
 import {
@@ -324,12 +324,50 @@ function NightEditor({
   );
 }
 
+/**
+ * Parámetros de la notificación de la mañana: `/sueno?registrar=1&fecha=...`.
+ * Solo existen en el cliente (en el servidor no hay URL que leer) y se leen una
+ * vez, al montar el componente.
+ */
+function notificationParams(): { active: boolean; date: string | null } {
+  if (typeof window === "undefined") return { active: false, date: null };
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("registrar") !== "1") return { active: false, date: null };
+  const fecha = params.get("fecha");
+  return {
+    active: true,
+    date: fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? fecha : null,
+  };
+}
+
 export function SleepClient() {
   const { data, hydrated, actions } = useData();
-  const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
+  /**
+   * Aviso de la mañana: «¿cuánto has dormido?».
+   *
+   * El cron (send-reminders) manda de lunes a viernes a las 07:15 una
+   * notificación que abre la app en
+   *
+   *   /sueno?registrar=1&fecha=2026-10-16
+   *
+   * `notification` es la lectura (una sola vez) de esos parámetros, que solo
+   * existen en el cliente. De ella salen la fecha y si la hoja de móvil arranca
+   * abierta, y se leen en el estado inicial —no en un efecto— para que el
+   * registro aparezca listo ya en el primer render: dentro de un efecto,
+   * `useIsMobile` (que responde después del primer render) todavía diría que no
+   * es móvil y la hoja no se abriría.
+   */
+  const [notification] = useState(notificationParams);
+  const [selectedDate, setSelectedDate] = useState(() =>
+    notification.active && notification.date
+      ? notification.date
+      : dateKey(new Date()),
+  );
   const [weekOffset, setWeekOffset] = useState(0);
   const [year, setYear] = useState(() => new Date().getFullYear());
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(
+    () => notification.active && isMobileViewport(),
+  );
   const formRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
@@ -346,6 +384,33 @@ export function SleepClient() {
     }
     formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }
+
+  /**
+   * Al llegar desde la notificación, los parámetros se limpian de la URL nada
+   * más leerlos, para que el registro no se vuelva a abrir al recargar: lo que
+   * cuenta es el aviso, no la pantalla.
+   */
+  useEffect(() => {
+    if (!notification.active || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("registrar");
+    url.searchParams.delete("fecha");
+    window.history.replaceState(
+      {},
+      "",
+      `${url.pathname}${url.searchParams.toString() ? `?${url.searchParams}` : ""}${url.hash}`,
+    );
+  }, [notification.active]);
+
+  /**
+   * En escritorio no hay hoja que abrir, así que la vista se desplaza hasta la
+   * tarjeta «Registrar una noche». Se espera a `hydrated` porque esa tarjeta solo
+   * existe cuando ya hay datos cargados.
+   */
+  useEffect(() => {
+    if (!notification.active || !hydrated || isMobile) return;
+    formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [notification.active, hydrated, isMobile]);
 
   const settings = data.sleepSettings ?? DEFAULT_SLEEP_SETTINGS;
   const target = settings.target_hours;

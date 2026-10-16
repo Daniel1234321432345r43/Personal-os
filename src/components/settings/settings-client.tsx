@@ -448,6 +448,13 @@ export function SettingsClient() {
           </Link>
           .
         </p>
+        <p className="mt-2 text-xs text-muted-foreground">
+          De <strong className="font-medium">lunes a viernes a las 07:15</strong> te
+          preguntamos cuánto has dormido: la notificación abre el registro de esa
+          noche con la fecha ya puesta. Si esa noche ya está registrada, no se
+          pregunta nada. Todos los avisos se apagan desde{" "}
+          <strong className="font-medium">Ajustes → Notificaciones</strong>.
+        </p>
       </MobileCollapsible>
 
       {/* Gestion de cuenta: cerrar sesion y borrar cuenta (movil + escritorio) */}
