@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
@@ -111,10 +112,13 @@ export default function LoginPage() {
         {/* Columna de branding */}
         <div className="hidden lg:block">
           <div className="mb-8 flex items-center gap-3">
-            <img
+            <Image
               src="/icono-nucleo.svg"
               alt="Núcleo"
+              width={44}
+              height={44}
               className="h-11 w-11 shrink-0 object-contain"
+              priority
             />
             <div>
               <p className="text-lg font-semibold tracking-tight">Núcleo</p>
@@ -145,10 +149,13 @@ export default function LoginPage() {
         {/* Tarjeta de login */}
         <Card className="w-full">
           <CardHeader>
-            <img
+            <Image
               src="/icono-nucleo.svg"
               alt="Núcleo"
+              width={44}
+              height={44}
               className="mb-2 h-11 w-11 object-contain lg:hidden"
+              priority
             />
             <CardTitle className="text-xl">Inicia sesión</CardTitle>
             <CardDescription>

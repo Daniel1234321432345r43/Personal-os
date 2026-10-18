@@ -77,6 +77,7 @@ Ejecuta las migraciones desde **Supabase Dashboard → SQL Editor**, en este ord
 20. `supabase/migrations/00020_remove_notes_and_classroom.sql` (borra notas y Classroom)
 21. `supabase/migrations/00021_planned_income.sql` (ingresos previstos)
 22. `supabase/migrations/00022_workout_schedule.sql` (plan semanal de entrenamientos)
+23. `supabase/migrations/00023_sleep_check.sql` (deduplicación de la pregunta matutina de sueño)
 
 El esquema incluye:
 

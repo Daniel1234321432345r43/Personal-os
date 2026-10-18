@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Image from "next/image";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Leaf, Sparkles, Target, X, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -308,9 +309,11 @@ export function ProgressTree() {
               <p className="text-2xl font-black text-green-950">
                 ¡Tu árbol ha crecido! 🎉
               </p>
-              <img
+              <Image
                 src={sceneAsset(tree.level, sceneTime)}
                 alt={`Fase ${LEVELS[tree.level].name}`}
+                width={208}
+                height={112}
                 className="h-20 w-36 rounded-xl object-cover object-bottom shadow-md sm:h-28 sm:w-52"
               />
               <p className="text-lg font-bold text-green-900">

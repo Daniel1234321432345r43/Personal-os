@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
@@ -66,10 +67,13 @@ const pillSpring = { type: "spring", stiffness: 500, damping: 35, mass: 0.9 } as
 function Brand() {
   return (
     <Link href="/dashboard" className="flex items-center gap-2.5">
-      <img
+      <Image
         src="/icono-nucleo.svg"
         alt="Núcleo"
+        width={32}
+        height={32}
         className="h-8 w-8 shrink-0 object-contain"
+        priority
       />
       <span className="text-base font-semibold tracking-tight">Núcleo</span>
     </Link>
