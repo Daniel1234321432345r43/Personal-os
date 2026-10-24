@@ -45,6 +45,79 @@ export function buildSecretaryContext(data: DashboardData): SecretaryContext {
 }
 
 /**
+ * Genera el calendario de referencia de fechas relativas (esta semana, la semana que
+ * viene y en dos semanas) con sus nombres en español y fechas ISO (YYYY-MM-DD).
+ * Elimina cualquier ambigüedad en los modelos de IA respecto a qué día corresponde
+ * "la semana que viene el martes", "el próximo viernes", etc.
+ */
+export function buildCalendarReference(todayStr: string): string {
+  if (!todayStr || !/^\d{4}-\d{2}-\d{2}$/.test(todayStr)) {
+    return `Fecha actual (HOY): ${todayStr}`;
+  }
+
+  const [y, m, d] = todayStr.split("-").map(Number);
+  const today = new Date(y, m - 1, d);
+  const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay(); // 1 = Lunes, 7 = Domingo
+
+  const mondayThisWeek = new Date(today);
+  mondayThisWeek.setDate(today.getDate() - (dayOfWeek - 1));
+
+  const dayNames = [
+    "Lunes",
+    "Martes",
+    "Miércoles",
+    "Jueves",
+    "Viernes",
+    "Sábado",
+    "Domingo",
+  ];
+
+  const formatIso = (date: Date): string => {
+    const dy = date.getFullYear();
+    const dm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${dy}-${dm}-${dd}`;
+  };
+
+  const lines: string[] = [];
+  lines.push(`Fecha actual (HOY): ${dayNames[dayOfWeek - 1]}, ${todayStr}`);
+
+  lines.push("\n• ESTA SEMANA:");
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(mondayThisWeek);
+    dt.setDate(mondayThisWeek.getDate() + i);
+    const iso = formatIso(dt);
+    let tag = "";
+    if (i + 1 === dayOfWeek) tag = " (HOY)";
+    else if (i + 1 === dayOfWeek + 1) tag = " (MAÑANA)";
+    else if (i + 1 < dayOfWeek) tag = " (ya transcurrido)";
+    lines.push(`  - ${dayNames[i]}: ${iso}${tag}`);
+  }
+
+  lines.push("\n• LA SEMANA QUE VIENE (Próxima semana):");
+  const mondayNextWeek = new Date(mondayThisWeek);
+  mondayNextWeek.setDate(mondayThisWeek.getDate() + 7);
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(mondayNextWeek);
+    dt.setDate(mondayNextWeek.getDate() + i);
+    const iso = formatIso(dt);
+    lines.push(`  - ${dayNames[i]} de la semana que viene: ${iso}`);
+  }
+
+  lines.push("\n• EN DOS SEMANAS:");
+  const mondayInTwoWeeks = new Date(mondayThisWeek);
+  mondayInTwoWeeks.setDate(mondayThisWeek.getDate() + 14);
+  for (let i = 0; i < 7; i++) {
+    const dt = new Date(mondayInTwoWeeks);
+    dt.setDate(mondayInTwoWeeks.getDate() + i);
+    const iso = formatIso(dt);
+    lines.push(`  - ${dayNames[i]}: ${iso}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Convierte el contexto en un bloque de texto compacto (español) que se inyecta
  * en el system prompt del chat para que el Secretario conozca los datos reales.
  */
@@ -58,7 +131,7 @@ export function buildContextText(ctx: SecretaryContext): string {
   };
 
   const lines: string[] = [];
-  lines.push(`Fecha de hoy: ${ctx.date}`);
+  lines.push(`## Calendario de referencia de fechas relativas\n${buildCalendarReference(ctx.date)}`);
 
   if (ctx.subjects.length) {
     lines.push(

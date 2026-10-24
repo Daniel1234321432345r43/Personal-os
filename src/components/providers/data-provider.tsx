@@ -178,8 +178,9 @@ export interface DataActions {
    * Marca o desmarca una tarea. `options.xpLabel` cambia el texto del aviso de
    * XP (lo usan los exámenes que se completan solos al pasar su día: el aviso
    * dice "Has completado el examen de X" en vez de "Tarea completada").
+   * `options.skipXp` omite la concesión de XP (usado en el cierre automático a medianoche).
    */
-  toggleTaskDone: (id: string, options?: { xpLabel?: string }) => void;
+  toggleTaskDone: (id: string, options?: { xpLabel?: string; skipXp?: boolean }) => void;
   addWorkout: (input: WorkoutInput) => void;
   addWorkoutSchedule: (input: WorkoutScheduleInput) => void;
   updateWorkoutSchedule: (id: string, input: Partial<WorkoutScheduleInput>) => void;
@@ -1496,7 +1497,9 @@ export function DataProvider({ children }: { children: ReactNode }) {
           };
         });
 
-        if (completing) awardXp("task", id, options?.xpLabel ? { label: options.xpLabel } : {});
+        if (completing && !options?.skipXp) {
+          awardXp("task", id, options?.xpLabel ? { label: options.xpLabel } : {});
+        }
       },
 
       addWorkout: (input) => {

@@ -8,24 +8,15 @@ import { showBrowserNotification } from "@/lib/browser-notify";
 import type { Task } from "@/lib/types";
 
 /**
- * Cierre automático de los exámenes que ya han pasado su día.
+ * Cierre automático de los exámenes y sesiones de estudio que ya han pasado su día.
  *
- * Un examen se apunta con su fecha ("Examen de Dibujo Técnico el 12 de
- * octubre"). Cuando ese día termina, ya no hay nada que marcar: el examen está
- * hecho. Este módulo lo completa solo (con su XP y su aviso, "Has completado el
- * examen de Dibujo Técnico") para que no haya que acordarse de darle al tick.
+ * 1) Exámenes: cuando pasa el día del examen, se completa solo con su XP y aviso.
+ * 2) Sesiones de estudio (pomodoros y bloques de trabajo): cuando llegan a ser las
+ *    12 de la noche de ese mismo día (cambio de fecha local), se completan automáticamente
+ *    para no requerir que el usuario tenga que marcarlas a mano una a una.
  *
- * Se ejecuta al abrir la app y cada vez que cambian las tareas, así que también
- * cierra los exámenes que pasaron mientras la app estaba cerrada. Se monta una
- * vez en AppShell. Si el usuario vuelve a desmarcar un examen a mano, no se
- * vuelve a completar solo: solo se tocan los que siguen pendientes.
- *
- * Esto es la red de seguridad para cuando nadie abre la app el día del examen.
- * El examen del propio día lo cierra antes la Edge Function send-reminders a
- * las 17:00 locales (supabase/functions/_shared/exam-done.js), así que el aviso
- * llega al móvil sin necesidad de abrir nada. Empiezan los dos por el mismo
- * camino —el examen queda hecho y se avisa— y solo actúan sobre los pendientes,
- * así que no se pisan ni avisan dos veces.
+ * Se ejecuta al abrir la app, con visibilidad activa, periódicamente y exactamente al
+ * pasar la medianoche (00:00:01).
  */
 
 /** Exámenes de los que ya se avisó al sistema (para no repetir el aviso). */
@@ -66,9 +57,9 @@ function daysSince(dueDate: string, today: string): number {
 
 export function ExamAutoClose() {
   const { data, actions } = useData();
-  /** Exámenes ya procesados en este montaje: evita repetir mientras se propaga el cambio. */
+  /** Elementos ya procesados en este montaje: evita repetir mientras se propaga el cambio. */
   const handled = useRef<Set<string>>(new Set());
-  /** Revisión extra al volver a la app: si pasa la medianoche con la app abierta. */
+  /** Revisión extra al volver a la app o al pasar la medianoche. */
   const [recheck, setRecheck] = useState(0);
 
   useEffect(() => {
@@ -76,45 +67,91 @@ export function ExamAutoClose() {
       if (document.visibilityState === "visible") setRecheck((n) => n + 1);
     };
     document.addEventListener("visibilitychange", onVisible);
-    return () => document.removeEventListener("visibilitychange", onVisible);
+
+    // Programar comprobación exacta al llegar a las 12 de la noche (00:00:01 de mañana)
+    const scheduleMidnight = () => {
+      const now = new Date();
+      const nextMidnight = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() + 1,
+        0,
+        0,
+        1,
+      );
+      const ms = Math.max(1000, nextMidnight.getTime() - now.getTime());
+      return window.setTimeout(() => {
+        setRecheck((n) => n + 1);
+      }, ms);
+    };
+
+    const midnightTimeout = scheduleMidnight();
+    // Chequeo periódico cada minuto por si el dispositivo estuvo suspendido
+    const intervalId = window.setInterval(() => {
+      setRecheck((n) => n + 1);
+    }, 60_000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      window.clearTimeout(midnightTimeout);
+      window.clearInterval(intervalId);
+    };
   }, []);
 
   useEffect(() => {
     const today = todayKey();
-    const overdue: Task[] = data.tasks.filter(
+
+    // 1. Exámenes vencidos que ya pasaron de fecha
+    const overdueExams: Task[] = data.tasks.filter(
       (t) =>
         t.type === "exam" &&
         t.status !== "done" &&
         !!t.due_date &&
         t.due_date < today,
     );
-    if (overdue.length === 0) return;
 
-    const fresh = overdue.filter((t) => !handled.current.has(t.id));
-    if (fresh.length === 0) return;
+    if (overdueExams.length > 0) {
+      const freshExams = overdueExams.filter((t) => !handled.current.has(t.id));
+      if (freshExams.length > 0) {
+        const notified = readNotified();
+        let notifiedChanged = false;
 
-    const notified = readNotified();
-    let notifiedChanged = false;
+        for (const exam of freshExams) {
+          handled.current.add(exam.id);
+          actions.toggleTaskDone(exam.id, { xpLabel: examCompletedMessage(exam.title) });
 
-    for (const exam of fresh) {
-      handled.current.add(exam.id);
-      actions.toggleTaskDone(exam.id, { xpLabel: examCompletedMessage(exam.title) });
+          const days = daysSince(exam.due_date as string, today);
+          if (days <= NOTIFY_WINDOW_DAYS && !notified.has(exam.id)) {
+            notified.add(exam.id);
+            notifiedChanged = true;
+            void showBrowserNotification(
+              "Examen completado ✅",
+              `${examCompletedMessage(exam.title)}. Ya está marcado como hecho.`,
+              { url: "/academic", tag: `exam-done-${exam.id}` },
+            );
+          }
+        }
 
-      // Aviso del sistema: solo para exámenes recientes. Al abrir la app por
-      // primera vez con un historial largo no debe salir un aluvión de avisos.
-      const days = daysSince(exam.due_date as string, today);
-      if (days <= NOTIFY_WINDOW_DAYS && !notified.has(exam.id)) {
-        notified.add(exam.id);
-        notifiedChanged = true;
-        void showBrowserNotification(
-          "Examen completado ✅",
-          `${examCompletedMessage(exam.title)}. Ya está marcado como hecho.`,
-          { url: "/academic", tag: `exam-done-${exam.id}` },
-        );
+        if (notifiedChanged) writeNotified(notified);
       }
     }
 
-    if (notifiedChanged) writeNotified(notified);
+    // 2. Sesiones de estudio (Pomodoros / bloques) que ya alcanzaron las 12 de la noche de su día
+    const overdueStudySessions: Task[] = data.tasks.filter((t) => {
+      if (t.type !== "study_session" || t.status === "done") return false;
+      const sessionDate = t.due_date || t.created_at?.slice(0, 10);
+      return !!sessionDate && sessionDate < today;
+    });
+
+    if (overdueStudySessions.length > 0) {
+      const freshSessions = overdueStudySessions.filter((t) => !handled.current.has(t.id));
+      for (const session of freshSessions) {
+        handled.current.add(session.id);
+        // Se completa automáticamente sin notificaciones intrusivas ni duplicar XP
+        // (los pomodoros individuales ya premiaron el tiempo estudiado con 10 XP cada uno).
+        actions.toggleTaskDone(session.id, { skipXp: true });
+      }
+    }
   }, [data.tasks, actions, recheck]);
 
   return null;

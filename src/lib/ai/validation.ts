@@ -23,6 +23,104 @@
  *     el cliente descarta la llamada bloqueada y no crea tareas fantasma.
  */
 
+import { todayKey } from "@/lib/format";
+
+/**
+ * Normaliza fechas relativas en español o cadenas con fecha ("2026-10-27 (martes)",
+ * "la semana que viene el martes", "próximo martes", "mañana", "hoy") a formato ISO
+ * YYYY-MM-DD para evitar discrepancias de cálculo en los modelos de IA.
+ */
+export function normalizeRelativeDate(
+  val?: string | null,
+  referenceDateStr?: string,
+): string | null {
+  if (!val || typeof val !== "string") return val ?? null;
+  const trimmed = val.trim();
+  if (!trimmed) return null;
+
+  // 1) Si contiene una fecha ISO YYYY-MM-DD válida, la extraemos directamente
+  const isoMatch = trimmed.match(/\b\d{4}-\d{2}-\d{2}\b/);
+  if (isoMatch) return isoMatch[0];
+
+  const todayStr =
+    referenceDateStr && /^\d{4}-\d{2}-\d{2}$/.test(referenceDateStr)
+      ? referenceDateStr
+      : todayKey();
+
+  const lower = trimmed.toLowerCase();
+  const [y, m, d] = todayStr.split("-").map(Number);
+  const today = new Date(y, m - 1, d);
+  const dayOfWeek = today.getDay() === 0 ? 7 : today.getDay(); // 1 = Lunes ... 7 = Domingo
+  const mondayThisWeek = new Date(today);
+  mondayThisWeek.setDate(today.getDate() - (dayOfWeek - 1));
+
+  const dayMap: Record<string, number> = {
+    lunes: 0,
+    martes: 1,
+    miercoles: 2,
+    miércoles: 2,
+    jueves: 3,
+    viernes: 4,
+    sabado: 5,
+    sábado: 5,
+    domingo: 6,
+  };
+
+  const formatIso = (date: Date): string => {
+    const dy = date.getFullYear();
+    const dm = String(date.getMonth() + 1).padStart(2, "0");
+    const dd = String(date.getDate()).padStart(2, "0");
+    return `${dy}-${dm}-${dd}`;
+  };
+
+  if (lower === "hoy") return todayStr;
+  if (lower === "mañana" || lower === "manana") {
+    const dt = new Date(today);
+    dt.setDate(today.getDate() + 1);
+    return formatIso(dt);
+  }
+  if (lower === "pasado mañana" || lower === "pasado manana") {
+    const dt = new Date(today);
+    dt.setDate(today.getDate() + 2);
+    return formatIso(dt);
+  }
+
+  for (const [dayName, idx] of Object.entries(dayMap)) {
+    if (lower.includes(dayName)) {
+      if (
+        lower.includes("semana que viene") ||
+        lower.includes("proxima semana") ||
+        lower.includes("próxima semana") ||
+        lower.includes("que viene") ||
+        lower.includes("proximo") ||
+        lower.includes("próximo") ||
+        lower.includes("siguiente")
+      ) {
+        const target = new Date(mondayThisWeek);
+        target.setDate(mondayThisWeek.getDate() + 7 + idx);
+        return formatIso(target);
+      }
+      if (lower.includes("este") || lower.includes("esta")) {
+        const target = new Date(mondayThisWeek);
+        target.setDate(mondayThisWeek.getDate() + idx);
+        return formatIso(target);
+      }
+      // Sin calificador: si el día ya pasó esta semana, se entiende el de la semana que viene; si no, el de esta semana
+      if (idx + 1 < dayOfWeek) {
+        const target = new Date(mondayThisWeek);
+        target.setDate(mondayThisWeek.getDate() + 7 + idx);
+        return formatIso(target);
+      } else {
+        const target = new Date(mondayThisWeek);
+        target.setDate(mondayThisWeek.getDate() + idx);
+        return formatIso(target);
+      }
+    }
+  }
+
+  return trimmed;
+}
+
 /** Datos mínimos de una tarea que entran en la validación. */
 export interface TaskGuardItem {
   title: string;

@@ -18,6 +18,7 @@ import type {
 } from "@/components/providers/data-provider";
 import { buildSecretaryContext } from "@/lib/ai/context";
 import { inferSubjectFromTitle } from "@/lib/subjects";
+import { normalizeRelativeDate } from "@/lib/ai/validation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
@@ -96,13 +97,20 @@ function withInferredSubjects(
   subjects: readonly { name: string }[],
 ): TaskInput[] {
   return tasks.map((task) => {
-    if (task.subject_id || task.subject_name?.trim()) return task;
+    const dueDate = normalizeRelativeDate(task.due_date);
+    if (task.subject_id || task.subject_name?.trim()) {
+      return dueDate !== task.due_date ? { ...task, due_date: dueDate } : task;
+    }
     const guess = inferSubjectFromTitle(task.title, subjects, {
       // En una sesión de estudio o un examen, el título entero puede ser la
       // asignatura ("Dibujo técnico"); en una tarea suelta, no ("Comprar pan").
       allowWholeTitle: task.type === "study_session" || task.type === "exam",
     });
-    return guess ? { ...task, subject_name: guess.name } : task;
+    return {
+      ...task,
+      due_date: dueDate,
+      subject_name: guess ? guess.name : task.subject_name,
+    };
   });
 }
 

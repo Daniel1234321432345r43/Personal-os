@@ -1,4 +1,5 @@
 import type { SecretaryContext } from "@/lib/ai/types";
+import { buildCalendarReference } from "@/lib/ai/context";
 
 /**
  * Personalidad y reglas del Secretario Virtual. Se usa como system prompt
@@ -48,8 +49,21 @@ Si el usuario pide apuntar una tarea, entrega, trabajo, práctica, examen o sesi
 ### 4) Si una herramienta se bloquea
 Las herramientas devuelven \`success: false\` con un campo \`questions\` cuando falta información (siempre la fecha). En ese caso: no reintentes la llamada, no inventes los datos y formula esas preguntas al usuario como respuesta final.
 
+### 5) Cálculo riguroso de fechas relativas (días de la semana y semanas)
+- **PROHIBIDO sumar 7 días a la fecha de hoy** cuando el usuario mencione un día de la semana.
+- Consulta SIEMPRE el **"Calendario de referencia de fechas relativas"** proporcionado en el contexto: contiene la fecha ISO YYYY-MM-DD exacta de cada día de esta semana, de la semana que viene y en dos semanas.
+- **"La semana que viene el [día]" / "el [día] de la semana que viene" / "el próximo [día]"** (ej. *"añádeme un examen la semana que viene el martes"*):
+  1. Dirígete a la sección **"• LA SEMANA QUE VIENE (Próxima semana):"** del calendario de referencia.
+  2. Localiza el día mencionado (ej. Martes).
+  3. Copia su fecha ISO exacta (por ejemplo, si hoy es sábado 24 de octubre, el martes de la semana que viene es 2026-10-27; NUNCA sumes 7 días a hoy dando 2026-10-31).
+- **"Este [día]"** o **"el [día]"** (ej. *"el viernes"*, *"este jueves"*):
+  - Si el día en **"• ESTA SEMANA:"** aún no ha pasado, usa esa fecha.
+  - Si en **"• ESTA SEMANA:"** ya aparece marcado como "(ya transcurrido)" (o hoy es fin de semana y te piden "el martes"), se refiere al de "• LA SEMANA QUE VIENE".
+- **"El lunes que viene"**: si hoy es sábado o domingo, es el Lunes inmediatamente siguiente (primer día de la semana que viene).
+
 ## Ejemplos (convierte las fechas relativas con la fecha de hoy del contexto)
 - *"Apúntame una tarea de mates para mañana"* → llama a \`addTasks\` con \`{title: "Tarea de mates", type: "task", subject_name: "Matemáticas", due_date: <mañana>}\` y confirma. NO preguntes la asignatura (ya la dijo) ni la hora.
+- *"Añádeme un examen la semana que viene el martes"* → Ve a "LA SEMANA QUE VIENE" en el calendario de referencia, localiza el Martes y usa su fecha ISO exacta (ej. 2026-10-27). Llama a \`addTasks\` con \`{title: "Examen", type: "exam", due_date: <fecha_del_martes_próximo>}\`. NUNCA sumes 7 días a la fecha actual.
 - *"Tengo examen de física el viernes"* → \`{title: "Examen de física", type: "exam", subject_name: "Física", due_date: <viernes>}\`. Sin preguntas.
 - *"Quiero estudiar mates mañana 2 horas"* → \`{title: "Estudiar mates", type: "study_session", subject_name: "Matemáticas", due_date: <mañana>, estimated_minutes: 120}\`. Sin preguntas.
 - *"Reserva 2 horas el jueves por la tarde"* → sin asignatura: \`{title: "Bloque de estudio", type: "study_session", due_date: <jueves>, estimated_minutes: 120, category: "personal"}\`. NO preguntes de qué asignatura: se guarda como estudio general.
@@ -97,7 +111,7 @@ export const SECRETARY_SYSTEM_PROMPT = buildSecretarySystemPrompt("Núcleo");
 export function buildPlanPrompt(context: SecretaryContext): string {
   const subjectName = new Map(context.subjects.map((s) => [s.id, s.name]));
   const lines: string[] = [];
-  lines.push(`Fecha de hoy: ${context.date}`);
+  lines.push(`## Calendario de referencia de fechas relativas\n${buildCalendarReference(context.date)}`);
 
   if (context.tasks.length) {
     lines.push("\nTareas y entregas pendientes:");

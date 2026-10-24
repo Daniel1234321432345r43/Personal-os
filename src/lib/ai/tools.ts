@@ -1,6 +1,6 @@
 import { tool } from "ai";
 import { z } from "zod";
-import { checkTaskInputs } from "@/lib/ai/validation";
+import { checkTaskInputs, normalizeRelativeDate } from "@/lib/ai/validation";
 
 export const secretaryTools = {
   addSubjects: tool({
@@ -122,9 +122,18 @@ export const secretaryTools = {
         .describe("Lista de tareas, entregas o exámenes a añadir"),
     }),
     execute: async ({ tasks }) => {
+      // Normalizar cualquier expresión relativa de fecha (ej. "la semana que viene el martes")
+      const normalizedTasks = tasks.map((t) => ({
+        ...t,
+        due_date: normalizeRelativeDate(t.due_date),
+        session_dates: t.session_dates
+          ? t.session_dates.map((d) => normalizeRelativeDate(d) ?? d)
+          : undefined,
+      }));
+
       // Guardarraíl: sin fecha (o sin asignatura en sesiones de estudio) no se
       // guarda nada. El modelo recibe las preguntas exactas que debe hacer.
-      const guard = checkTaskInputs(tasks);
+      const guard = checkTaskInputs(normalizedTasks);
       if (!guard.ok) {
         return {
           success: false,
@@ -139,8 +148,8 @@ export const secretaryTools = {
       return {
         success: true,
         action: "addTasks",
-        count: tasks.length,
-        tasks,
+        count: normalizedTasks.length,
+        tasks: normalizedTasks,
       };
     },
   }),
@@ -217,11 +226,15 @@ export const secretaryTools = {
       ),
     }),
     execute: async ({ workouts }) => {
+      const normalizedWorkouts = workouts.map((w) => ({
+        ...w,
+        date: normalizeRelativeDate(w.date) ?? w.date,
+      }));
       return {
         success: true,
         action: "addWorkouts",
-        count: workouts.length,
-        workouts,
+        count: normalizedWorkouts.length,
+        workouts: normalizedWorkouts,
       };
     },
   }),
@@ -278,11 +291,15 @@ export const secretaryTools = {
       ),
     }),
     execute: async ({ transactions }) => {
+      const normalized = transactions.map((tr) => ({
+        ...tr,
+        date: normalizeRelativeDate(tr.date) ?? tr.date,
+      }));
       return {
         success: true,
         action: "addTransactions",
-        count: transactions.length,
-        transactions,
+        count: normalized.length,
+        transactions: normalized,
       };
     },
   }),
@@ -317,11 +334,15 @@ export const secretaryTools = {
       ),
     }),
     execute: async ({ plannedExpenses }) => {
+      const normalized = plannedExpenses.map((pe) => ({
+        ...pe,
+        date: normalizeRelativeDate(pe.date) ?? pe.date,
+      }));
       return {
         success: true,
         action: "addPlannedExpenses",
-        count: plannedExpenses.length,
-        plannedExpenses,
+        count: normalized.length,
+        plannedExpenses: normalized,
       };
     },
   }),
@@ -385,11 +406,15 @@ export const secretaryTools = {
         .describe("Lista de notas/calificaciones a registrar"),
     }),
     execute: async ({ grades }) => {
+      const normalized = grades.map((g) => ({
+        ...g,
+        date: normalizeRelativeDate(g.date) ?? g.date,
+      }));
       return {
         success: true,
         action: "addGrades",
-        count: grades.length,
-        grades,
+        count: normalized.length,
+        grades: normalized,
       };
     },
   }),

@@ -540,6 +540,26 @@ Deno.serve(async () => {
       }
     }
 
+    // ── Sesiones de estudio: se completan automáticamente pasada la medianoche ──
+    const { data: overdueStudySessions } = await supabase
+      .from("tasks")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("type", "study_session")
+      .neq("status", "done")
+      .lt("due_date", localDateKey);
+
+    if (overdueStudySessions && overdueStudySessions.length > 0) {
+      const ids = overdueStudySessions.map((r: { id: string }) => r.id);
+      const { error: studyCloseErr } = await supabase
+        .from("tasks")
+        .update({ status: "done", updated_at: now.toISOString(), reminder_sent: false })
+        .in("id", ids);
+      if (studyCloseErr) {
+        console.error(`[send-reminders] error completando sesiones de estudio de ${userId}:`, studyCloseErr.message);
+      }
+    }
+
     // ── Estudio: a las 15:00 locales, repaso de exámenes y entregas ─────────
     // El empujón para empezar a estudiar con lo que se acerca. Solo se manda si
     // hay algo pendiente dentro del horizonte; si no hay nada, no se molesta.
