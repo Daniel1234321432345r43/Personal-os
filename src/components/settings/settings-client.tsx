@@ -23,6 +23,7 @@ import { resetTree } from "@/lib/xp-system";
 import { MobileCollapsible } from "@/components/ui/mobile-collapsible";
 import { SleepScheduleForm } from "@/components/forms/sleep-schedule-form";
 import { DEFAULT_SLEEP_SETTINGS } from "@/lib/sleep";
+import { AppleWalletCard } from "@/components/settings/apple-wallet-card";
 
 function LoadingState() {
   return (
@@ -426,6 +427,9 @@ export function SettingsClient() {
 
         </div>
       </div>
+
+      {/* Sincronización con Apple Wallet y Atajos de iOS */}
+      <AppleWalletCard />
 
       {/* Mi objetivo de sueño: colapsado por defecto (se despliega al pulsarlo) */}
       <MobileCollapsible

@@ -13,11 +13,11 @@ import { cn } from "@/lib/utils";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { BudgetForm } from "@/components/forms/budget-form";
 import { PlannedExpenseForm } from "@/components/forms/planned-expense-form";
-import { AppleWalletCard } from "@/components/finance/apple-wallet-card";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Check,
+  ChevronDown,
   Clock,
   Plus,
   RotateCw,
@@ -198,6 +198,7 @@ function LoadingState() {
 export function FinanceClient() {
   const { data, hydrated, actions } = useData();
   const [showTx, setShowTx] = useState(false);
+  const [movimientosOpen, setMovimientosOpen] = useState(false);
   const [showBudget, setShowBudget] = useState(false);
   const [showPlanned, setShowPlanned] = useState(false);
 
@@ -636,20 +637,60 @@ export function FinanceClient() {
         </CardContent>
       </Card>
 
-      {/* Sincronización con Apple Wallet y Atajos de iOS */}
-      <div className="order-4">
-        <AppleWalletCard />
-      </div>
-
       {/* Movimientos */}
-      <Card className="order-5">
+      <Card className="order-4 overflow-hidden">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-          <CardTitle className="text-base">Movimientos</CardTitle>
-          <Button size="sm" onClick={() => setShowTx((v) => !v)}>
+          <button
+            type="button"
+            onClick={() => setMovimientosOpen((v) => !v)}
+            aria-expanded={movimientosOpen}
+            className="flex min-w-0 flex-1 items-center gap-3 text-left transition-colors hover:opacity-80"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
+              <Wallet className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <CardTitle className="text-base">Movimientos</CardTitle>
+              <p className="truncate text-xs text-muted-foreground">
+                {sorted.length === 0
+                  ? "Sin movimientos registrados"
+                  : `${sorted.length} ${sorted.length === 1 ? "movimiento" : "movimientos"}`}
+              </p>
+            </div>
+            <motion.span
+              animate={{ rotate: movimientosOpen ? 180 : 0 }}
+              transition={{ duration: 0.3, ease: "easeInOut" }}
+              className="ml-auto mr-2 shrink-0 text-muted-foreground"
+            >
+              <ChevronDown className="h-4 w-4" />
+            </motion.span>
+          </button>
+
+          <Button
+            size="sm"
+            onClick={() => {
+              setShowTx((v) => !v);
+              if (!movimientosOpen) setMovimientosOpen(true);
+            }}
+            className="shrink-0"
+          >
             <Plus className="h-4 w-4" />
             Nuevo
           </Button>
         </CardHeader>
+
+        <AnimatePresence initial={false}>
+          {movimientosOpen && (
+            <motion.div
+              initial={{ height: 0, opacity: 0 }}
+              animate={{ height: "auto", opacity: 1 }}
+              exit={{ height: 0, opacity: 0 }}
+              transition={{
+                height: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] },
+                opacity: { duration: 0.25 },
+              }}
+              className="overflow-hidden"
+            >
         <CardContent>
           {/* Escritorio: formulario inline (como antes) */}
           <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
@@ -733,6 +774,9 @@ export function FinanceClient() {
               </p>
             )}
         </CardContent>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </Card>
 
       {/* Evolución del saldo */}
