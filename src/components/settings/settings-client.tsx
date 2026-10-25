@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
@@ -15,15 +15,57 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fieldClass, inputClass, labelClass, selectClass } from "@/components/forms/ui";
-import { Eye, EyeOff, KeyRound, Loader2, PlugZap, ShieldCheck, Bot, Bell, Timer, Dumbbell, Trash2, AlertTriangle, ChevronDown, Leaf, RotateCcw, LogOut, UserX, MoonStar } from "lucide-react";
+import {
+  Eye,
+  EyeOff,
+  KeyRound,
+  Loader2,
+  PlugZap,
+  ShieldCheck,
+  Bot,
+  Bell,
+  Timer,
+  Dumbbell,
+  Trash2,
+  AlertTriangle,
+  Leaf,
+  RotateCcw,
+  LogOut,
+  UserX,
+  MoonStar,
+  Wallet,
+} from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { isXpCapDisabled, setXpCapDisabled } from "@/lib/xp-cap";
 import { resetTree } from "@/lib/xp-system";
-import { MobileCollapsible } from "@/components/ui/mobile-collapsible";
 import { SleepScheduleForm } from "@/components/forms/sleep-schedule-form";
 import { DEFAULT_SLEEP_SETTINGS } from "@/lib/sleep";
 import { AppleWalletCard } from "@/components/settings/apple-wallet-card";
+import { cn } from "@/lib/utils";
+
+type SettingsModule =
+  | "account"
+  | "ai"
+  | "notifications"
+  | "academic"
+  | "sport"
+  | "finance"
+  | "health";
+
+const MODULES: {
+  id: SettingsModule;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+}[] = [
+  { id: "account", label: "Cuenta", icon: UserX },
+  { id: "ai", label: "Inteligencia Artificial", icon: Bot },
+  { id: "notifications", label: "Notificaciones", icon: Bell },
+  { id: "academic", label: "Estudios", icon: Timer },
+  { id: "sport", label: "Entrenos", icon: Dumbbell },
+  { id: "finance", label: "Finanzas", icon: Wallet },
+  { id: "health", label: "Salud", icon: MoonStar },
+];
 
 function LoadingState() {
   return (
@@ -35,13 +77,12 @@ function LoadingState() {
         </div>
         <Skeleton className="h-6 w-24 rounded-full" />
       </div>
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Skeleton className="h-96 rounded-xl lg:col-span-2" />
-        <div className="space-y-6">
-          <Skeleton className="h-28 rounded-xl" />
-          <Skeleton className="h-36 rounded-xl" />
-        </div>
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {Array.from({ length: 7 }).map((_, i) => (
+          <Skeleton key={i} className="h-10 w-24 shrink-0 rounded-xl" />
+        ))}
       </div>
+      <Skeleton className="h-96 rounded-xl" />
     </div>
   );
 }
@@ -50,6 +91,8 @@ export function SettingsClient() {
   const { settings, setSettings, configured, envConfigured, hydrated } = useSettings();
   const { data, actions } = useData();
   const sleepSettings = data.sleepSettings ?? DEFAULT_SLEEP_SETTINGS;
+
+  const [activeTab, setActiveTab] = useState<SettingsModule>("account");
   const [showKey, setShowKey] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
@@ -58,34 +101,23 @@ export function SettingsClient() {
   const [xpCapDisabled, setXpCapDisabledState] = useState(() => isXpCapDisabled());
   const [resetResult, setResetResult] = useState<{ ok: boolean; message: string } | null>(null);
   const [confirmingTreeReset, setConfirmingTreeReset] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
+
   const router = useRouter();
   const accountEnabled = isSupabaseConfigured();
   const [signingOut, setSigningOut] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteResult, setDeleteResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tabParam = new URLSearchParams(window.location.search).get("tab") as SettingsModule;
+    if (tabParam && MODULES.some((m) => m.id === tabParam)) {
+      setActiveTab(tabParam);
+    }
+  }, []);
+
   const provider = getProvider(settings.provider);
-  const aiContent = (
-    <CardContent className="space-y-5">
-      {/* Nombre del Secretario IA */}
-      <div className={fieldClass}>
-        <label className={`${labelClass} flex items-center gap-1.5`} htmlFor="ai-assistant-name">
-          <Bot className="h-4 w-4 text-primary" />
-          Nombre de tu Secretario IA
-        </label>
-        <input id="ai-assistant-name" value={settings.assistantName ?? "Núcleo"} onChange={(e) => update({ assistantName: e.target.value })} placeholder="ej. Núcleo, Jarvis, Sofía, Alex..." className={inputClass} />
-        <p className="text-xs text-muted-foreground">Nombre con el que se identificará tu asistente en el chat, los saludos y las respuestas.</p>
-      </div>
-      <div className="border-t pt-4"><div className={fieldClass}><label className={labelClass} htmlFor="ai-provider">Proveedor</label><select id="ai-provider" value={settings.provider} onChange={(e) => changeProvider(e.target.value as AiProviderId)} className={selectClass}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select></div></div>
-      {provider.models.length > 0 && <div className={fieldClass}><label className={labelClass} htmlFor="ai-model">Modelo</label><select id="ai-model" value={settings.model} onChange={(e) => update({ model: e.target.value })} className={selectClass}>{provider.models.map((m) => <option key={m.id} value={m.id}>{m.label} ({m.id})</option>)}</select></div>}
-      <div className={fieldClass}><label className={labelClass} htmlFor="ai-model-custom">Modelo personalizado (opcional)</label><input id="ai-model-custom" value={settings.model} onChange={(e) => update({ model: e.target.value })} placeholder={provider.defaultModel || "ej. nombre-del-modelo"} className={inputClass} /></div>
-      {provider.needsBaseURL && <div className={fieldClass}><label className={labelClass} htmlFor="ai-baseurl">Base URL (API compatible con OpenAI)</label><input id="ai-baseurl" value={settings.baseURL} onChange={(e) => update({ baseURL: e.target.value })} placeholder={provider.baseURLPlaceholder} className={inputClass} /><div className="flex flex-wrap gap-2 pt-1">{provider.presets.map((preset) => <Button key={preset.label} type="button" variant="outline" size="sm" className="rounded-full text-xs" onClick={() => update({ baseURL: preset.baseURL })}>{preset.label}</Button>)}</div></div>}
-      <div className={fieldClass}><label className={labelClass} htmlFor="ai-key">{provider.apiKeyLabel}</label><div className="relative"><input id="ai-key" type={showKey ? "text" : "password"} value={settings.apiKey} onChange={(e) => update({ apiKey: e.target.value })} placeholder={provider.apiKeyPlaceholder} autoComplete="off" spellCheck={false} className={`${inputClass} pr-9`} /><button type="button" onClick={() => setShowKey((v) => !v)} className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground" aria-label={showKey ? "Ocultar clave" : "Mostrar clave"}>{showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button></div>{!settings.apiKey && envConfigured && <p className="text-xs text-muted-foreground">Sin clave escrita: se usará la configurada en el servidor (.env.local).</p>}</div>
-      <div className="flex items-center gap-2"><Button type="button" onClick={testConnection} disabled={testing}>{testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}Probar conexión</Button></div>
-      {testResult && <p className={`rounded-lg border p-3 text-sm ${testResult.ok ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300" : "border-destructive/30 bg-destructive/10 text-destructive"}`}>{testResult.message}</p>}
-    </CardContent>
-  );
 
   if (!hydrated) {
     return <LoadingState />;
@@ -137,7 +169,6 @@ export function SettingsClient() {
   }
 
   function handleResetTree() {
-    // Primer clic: pedir confirmación. Segundo clic: reiniciar.
     if (!confirmingTreeReset) {
       setConfirmingTreeReset(true);
       window.setTimeout(() => setConfirmingTreeReset(false), 6000);
@@ -148,7 +179,6 @@ export function SettingsClient() {
   }
 
   async function handleResetAll() {
-    // Primer clic: armar la confirmación. Segundo clic: ejecutar.
     if (!confirmingReset) {
       setConfirmingReset(true);
       setResetResult(null);
@@ -195,7 +225,6 @@ export function SettingsClient() {
   }
 
   async function handleDeleteAccount() {
-    // Primer clic: pedir confirmacion. Segundo clic: ejecutar.
     if (!confirmingDelete) {
       setConfirmingDelete(true);
       setDeleteResult(null);
@@ -206,9 +235,7 @@ export function SettingsClient() {
     setDeleting(true);
     setDeleteResult(null);
     try {
-      // 1. Borrar todos los datos del usuario en las tablas (local + nube).
       await actions.resetAll();
-      // 2. Eliminar el usuario de Supabase Auth (endpoint de servidor).
       const res = await fetch("/api/account/delete", { method: "POST" });
       const data = await res.json().catch(() => null);
       if (!res.ok || !data?.ok) {
@@ -220,7 +247,6 @@ export function SettingsClient() {
         });
         return;
       }
-      // 3. Cerrar sesion y redirigir.
       await createClient().auth.signOut();
       router.push("/login");
       router.refresh();
@@ -236,11 +262,11 @@ export function SettingsClient() {
 
   return (
     <div className="space-y-6 p-4 md:p-6 lg:p-8">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Ajustes</h1>
           <p className="text-sm text-muted-foreground">
-            Configura la IA y los tiempos de la técnica Pomodoro.
+            Gestiona tu cuenta, IA, notificaciones y preferencias por módulos.
           </p>
         </div>
         {configured ? (
@@ -255,337 +281,551 @@ export function SettingsClient() {
         )}
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <div className="hidden lg:block">
-              <CardTitle className="text-base">Personalización e IA</CardTitle>
-            </div>
+      {/* Selector de módulos: scroll horizontal suave en móvil, sin scroll kilométrico */}
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none sm:gap-2">
+        {MODULES.map((m) => {
+          const Icon = m.icon;
+          const isActive = activeTab === m.id;
+          return (
             <button
+              key={m.id}
               type="button"
-              onClick={() => setAiOpen((value) => !value)}
-              aria-expanded={aiOpen}
-              className="flex w-full items-center justify-between gap-3 text-left lg:hidden"
+              onClick={() => setActiveTab(m.id)}
+              className={cn(
+                "flex shrink-0 items-center gap-2 rounded-xl px-3.5 py-2 text-xs font-medium transition-all sm:text-sm",
+                isActive
+                  ? "bg-primary text-primary-foreground shadow-sm"
+                  : "bg-muted/60 text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
             >
-              <CardTitle className="text-base">Personalización e IA</CardTitle>
-              <span className="shrink-0 text-muted-foreground">
-                <motion.span
-                  animate={{ rotate: aiOpen ? 180 : 0 }}
-                  transition={{ duration: 0.2 }}
-                  className="block"
-                >
-                  <ChevronDown className="h-4 w-4" />
-                </motion.span>
-              </span>
+              <Icon className="h-4 w-4" />
+              <span>{m.label}</span>
             </button>
-          </CardHeader>
-          <div className="hidden lg:block">
-            {aiContent}
-          </div>
-          <div className="lg:hidden">
-            <AnimatePresence initial={false}>
-              {aiOpen && (
-                <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: "auto", opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={{ height: { duration: 0.25 }, opacity: { duration: 0.15 } }} className="overflow-hidden">
-                  {aiContent}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
-        </Card>
-
-        <div className="space-y-6">
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0" />
-                <p>
-                  Tu API key se guarda <strong>solo en este navegador</strong>{" "}
-                  (localStorage) y se envía únicamente a tu propio servidor para
-                  hablar con el proveedor. Adecuado para uso personal en tu
-                  dispositivo.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-1.5">
-                <Bell className="h-4 w-4 text-primary" />
-                Notificaciones
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <PushManager />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-1.5">
-                <Timer className="h-4 w-4 text-primary" />
-                Pomodoro
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <div className={fieldClass}>
-                <label className={labelClass} htmlFor="pomodoro-work">
-                  Trabajo (minutos)
-                </label>
-                <input
-                  id="pomodoro-work"
-                  type="number"
-                  min={1}
-                  max={120}
-                  inputMode="numeric"
-                  value={settings.pomodoroWorkMinutes ?? 25}
-                  onChange={(e) =>
-                    update({ pomodoroWorkMinutes: Number(e.target.value) || 25 })
-                  }
-                  className={inputClass}
-                />
-              </div>
-              <div className={fieldClass}>
-                <label className={labelClass} htmlFor="pomodoro-break">
-                  Descanso (minutos)
-                </label>
-                <input
-                  id="pomodoro-break"
-                  type="number"
-                  min={1}
-                  max={60}
-                  inputMode="numeric"
-                  value={settings.pomodoroBreakMinutes ?? 5}
-                  onChange={(e) =>
-                    update({ pomodoroBreakMinutes: Number(e.target.value) || 5 })
-                  }
-                  className={inputClass}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-1.5">
-                <Dumbbell className="h-4 w-4 text-primary" />
-                Entrenamientos
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <WorkoutScheduleCard />
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-1.5">
-                <Leaf className="h-4 w-4 text-emerald-600" />
-                Bosque de progreso
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                El bosque limita el XP diario a 120. Con el límite desactivado,
-                el árbol crece sin tope.
-              </p>
-              <Button
-                type="button"
-                variant={xpCapDisabled ? "outline" : "default"}
-                className={xpCapDisabled ? "w-full" : "w-full bg-emerald-600 hover:bg-emerald-700"}
-                onClick={() => {
-                  const next = !xpCapDisabled;
-                  setXpCapDisabledState(next);
-                  setXpCapDisabled(next);
-                }}
-              >
-                {xpCapDisabled ? "Restaurar límite diario (120 XP)" : "Quitar límite diario de XP"}
-              </Button>
-              {xpCapDisabled && (
-                <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-700 dark:text-emerald-300">
-                  Límite diario desactivado: el XP del bosque ya no se corta a 120
-                  por día.
-                </p>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={handleResetTree}
-              >
-                <RotateCcw className="h-4 w-4" />
-                {confirmingTreeReset
-                  ? "¿Seguro? Se pierde todo el XP…"
-                  : "Reiniciar progreso del árbol"}
-              </Button>
-              <p className="text-xs text-muted-foreground">
-                Borra todo el XP, el nivel y las penalizaciones del árbol en este
-                dispositivo, y vuelve a empezar desde el brote.
-              </p>
-            </CardContent>
-          </Card>
-
-        </div>
+          );
+        })}
       </div>
 
-      {/* Sincronización con Apple Wallet y Atajos de iOS */}
-      <AppleWalletCard />
+      {/* Contenido enfocado por módulo */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={activeTab}
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.2 }}
+          className="space-y-6"
+        >
+          {/* MÓDULO 1: CUENTA */}
+          {activeTab === "account" && (
+            <div className="space-y-6 max-w-4xl">
+              {accountEnabled ? (
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <UserX className="h-5 w-5 text-primary" />
+                      Gestión de cuenta
+                    </CardTitle>
+                    <p className="text-xs text-muted-foreground">
+                      Opciones de sesión y seguridad para tu usuario de Núcleo.
+                    </p>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between p-3 rounded-lg border bg-muted/20">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium">Cerrar sesión</p>
+                        <p className="text-xs text-muted-foreground">
+                          Sale de tu cuenta en este dispositivo de forma segura.
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={handleSignOut}
+                        disabled={signingOut || deleting}
+                        className="shrink-0"
+                      >
+                        {signingOut ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <LogOut className="h-4 w-4" />
+                        )}
+                        Cerrar sesión
+                      </Button>
+                    </div>
 
-      {/* Mi objetivo de sueño: colapsado por defecto (se despliega al pulsarlo) */}
-      <MobileCollapsible
-        title="Mi objetivo de sueño"
-        subtitle={`${sleepSettings.bedtime} → ${sleepSettings.wake_time} · objetivo ${sleepSettings.target_hours} h`}
-        icon={<MoonStar className="h-4 w-4 text-violet-500" />}
-        defaultOpen={false}
-      >
-        <SleepScheduleForm
-          key={`${sleepSettings.bedtime}-${sleepSettings.wake_time}-${sleepSettings.target_hours}-${sleepSettings.reminder_enabled}`}
-          initial={sleepSettings}
-          onSave={(input) => actions.setSleepSettings(input)}
-        />
-        <p className="mt-3 text-xs text-muted-foreground">
-          El horario objetivo se usa para calcular el cumplimiento de cada noche y
-          para programar el aviso push antes de acostarte. Los registros de sueño
-          y las gráficas están en{" "}
-          <Link href="/sueno" className="font-medium underline">
-            Sueño
-          </Link>
-          .
-        </p>
-        <p className="mt-2 text-xs text-muted-foreground">
-          De <strong className="font-medium">lunes a viernes a las 07:15</strong> te
-          preguntamos cuánto has dormido: la notificación abre el registro de esa
-          noche con la fecha ya puesta. Si esa noche ya está registrada, no se
-          pregunta nada. Todos los avisos se apagan desde{" "}
-          <strong className="font-medium">Ajustes → Notificaciones</strong>.
-        </p>
-      </MobileCollapsible>
-
-      {/* Gestion de cuenta: cerrar sesion y borrar cuenta (movil + escritorio) */}
-      {accountEnabled && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm flex items-center gap-1.5">
-              <UserX className="h-4 w-4 text-primary" />
-              Cuenta
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Cerrar sesion</p>
-                <p className="text-xs text-muted-foreground">
-                  Sale de tu cuenta en este dispositivo.
-                </p>
-              </div>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleSignOut}
-                disabled={signingOut || deleting}
-                className="shrink-0"
-              >
-                {signingOut ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <LogOut className="h-4 w-4" />
-                )}
-                Cerrar sesion
-              </Button>
-            </div>
-
-            <div className="border-t pt-3">
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-destructive">
-                    Borrar cuenta
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Elimina <strong>permanentemente</strong> tu cuenta y todos
-                    tus datos en la nube. Esta accion no se puede deshacer.
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="destructive"
-                  onClick={handleDeleteAccount}
-                  disabled={deleting || signingOut}
-                  className="shrink-0"
-                >
-                  {deleting ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <UserX className="h-4 w-4" />
-                  )}
-                  {confirmingDelete
-                    ? "¿Seguro? Se borrara todo..."
-                    : deleting
-                      ? "Borrando..."
-                      : "Borrar cuenta"}
-                </Button>
-              </div>
-              {deleteResult && (
-                <p
-                  className={`mt-2 rounded-lg border p-3 text-sm ${
-                    deleteResult.ok
-                      ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                      : "border-destructive/30 bg-destructive/10 text-destructive"
-                  }`}
-                >
-                  {deleteResult.message}
-                </p>
+                    <div className="border-t pt-4">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between p-3 rounded-lg border border-destructive/20 bg-destructive/5">
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium text-destructive">
+                            Borrar cuenta
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Elimina <strong>permanentemente</strong> tu cuenta y todos tus datos en la nube. Esta acción no se puede deshacer.
+                          </p>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          onClick={handleDeleteAccount}
+                          disabled={deleting || signingOut}
+                          className="shrink-0"
+                        >
+                          {deleting ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <UserX className="h-4 w-4" />
+                          )}
+                          {confirmingDelete
+                            ? "¿Seguro? Se borrará todo..."
+                            : deleting
+                            ? "Borrando..."
+                            : "Borrar cuenta"}
+                        </Button>
+                      </div>
+                      {deleteResult && (
+                        <p
+                          className={`mt-2 rounded-lg border p-3 text-sm ${
+                            deleteResult.ok
+                              ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                              : "border-destructive/30 bg-destructive/10 text-destructive"
+                          }`}
+                        >
+                          {deleteResult.message}
+                        </p>
+                      )}
+                    </div>
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent className="p-5 text-center text-sm text-muted-foreground">
+                    Modo local / invitado: actualmente no hay sesión remota vinculada.
+                  </CardContent>
+                </Card>
               )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
-      {/* Zona de peligro: restablecer de fábrica (conserva la API key) */}
-      <Card className="border-destructive/30">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm flex items-center gap-1.5 text-destructive">
-            <AlertTriangle className="h-4 w-4" />
-            Zona de peligro
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-sm text-muted-foreground">
-            Restablece la app de fábrica: borra <strong>todas</strong> tus
-            asignaturas, tareas, entrenamientos, hábitos, transacciones
-            y calificaciones — tanto de este navegador como de tu cuenta en la
-            nube. Se conserva la <strong>API key de la IA</strong> y la
-            configuración del Secretario.
-          </p>
-          <Button
-            type="button"
-            variant="destructive"
-            onClick={handleResetAll}
-            disabled={resetting}
-          >
-            {resetting ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Trash2 className="h-4 w-4" />
-            )}
-            {confirmingReset
-              ? "¿Seguro? Se borrará todo…"
-              : resetting
-                ? "Restableciendo…"
-                : "Restablecer de fábrica"}
-          </Button>
-          {resetResult && (
-            <p
-              className={`rounded-lg border p-3 text-sm ${
-                resetResult.ok
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
-                  : "border-destructive/30 bg-destructive/10 text-destructive"
-              }`}
-            >
-              {resetResult.message}
-            </p>
+              {/* Zona de peligro */}
+              <Card className="border-destructive/30">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm flex items-center gap-1.5 text-destructive">
+                    <AlertTriangle className="h-4 w-4" />
+                    Zona de peligro
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <p className="text-sm text-muted-foreground">
+                    Restablece la app de fábrica: borra <strong>todas</strong> tus asignaturas, tareas, entrenamientos, hábitos, transacciones y calificaciones — tanto de este navegador como de tu cuenta en la nube. Se conserva la <strong>API key de la IA</strong>.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    onClick={handleResetAll}
+                    disabled={resetting}
+                  >
+                    {resetting ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="h-4 w-4" />
+                    )}
+                    {confirmingReset
+                      ? "¿Seguro? Se borrará todo…"
+                      : resetting
+                      ? "Restableciendo…"
+                      : "Restablecer de fábrica"}
+                  </Button>
+                  {resetResult && (
+                    <p
+                      className={`rounded-lg border p-3 text-sm ${
+                        resetResult.ok
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                          : "border-destructive/30 bg-destructive/10 text-destructive"
+                      }`}
+                    >
+                      {resetResult.message}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           )}
-        </CardContent>
-      </Card>
+
+          {/* MÓDULO 2: INTELIGENCIA ARTIFICIAL */}
+          {activeTab === "ai" && (
+            <div className="grid gap-6 lg:grid-cols-3 max-w-5xl">
+              <Card className="lg:col-span-2">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Bot className="h-5 w-5 text-primary" />
+                    Personalización del Secretario IA
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Configura el proveedor, el modelo y el comportamiento de tu asistente.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-5">
+                  <div className={fieldClass}>
+                    <label className={`${labelClass} flex items-center gap-1.5`} htmlFor="ai-assistant-name">
+                      Nombre de tu Secretario IA
+                    </label>
+                    <input
+                      id="ai-assistant-name"
+                      value={settings.assistantName ?? "Núcleo"}
+                      onChange={(e) => update({ assistantName: e.target.value })}
+                      placeholder="ej. Núcleo, Jarvis, Sofía, Alex..."
+                      className={inputClass}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Nombre con el que se identificará tu asistente en el chat y los saludos.
+                    </p>
+                  </div>
+
+                  <div className="border-t pt-4">
+                    <div className={fieldClass}>
+                      <label className={labelClass} htmlFor="ai-provider">
+                        Proveedor
+                      </label>
+                      <select
+                        id="ai-provider"
+                        value={settings.provider}
+                        onChange={(e) => changeProvider(e.target.value as AiProviderId)}
+                        className={selectClass}
+                      >
+                        {PROVIDERS.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {provider.models.length > 0 && (
+                    <div className={fieldClass}>
+                      <label className={labelClass} htmlFor="ai-model">
+                        Modelo
+                      </label>
+                      <select
+                        id="ai-model"
+                        value={settings.model}
+                        onChange={(e) => update({ model: e.target.value })}
+                        className={selectClass}
+                      >
+                        {provider.models.map((m) => (
+                          <option key={m.id} value={m.id}>
+                            {m.label} ({m.id})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className={fieldClass}>
+                    <label className={labelClass} htmlFor="ai-model-custom">
+                      Modelo personalizado (opcional)
+                    </label>
+                    <input
+                      id="ai-model-custom"
+                      value={settings.model}
+                      onChange={(e) => update({ model: e.target.value })}
+                      placeholder={provider.defaultModel || "ej. nombre-del-modelo"}
+                      className={inputClass}
+                    />
+                  </div>
+
+                  {provider.needsBaseURL && (
+                    <div className={fieldClass}>
+                      <label className={labelClass} htmlFor="ai-baseurl">
+                        Base URL (API compatible con OpenAI)
+                      </label>
+                      <input
+                        id="ai-baseurl"
+                        value={settings.baseURL}
+                        onChange={(e) => update({ baseURL: e.target.value })}
+                        placeholder={provider.baseURLPlaceholder}
+                        className={inputClass}
+                      />
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {provider.presets.map((preset) => (
+                          <Button
+                            key={preset.label}
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full text-xs"
+                            onClick={() => update({ baseURL: preset.baseURL })}
+                          >
+                            {preset.label}
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className={fieldClass}>
+                    <label className={labelClass} htmlFor="ai-key">
+                      {provider.apiKeyLabel}
+                    </label>
+                    <div className="relative">
+                      <input
+                        id="ai-key"
+                        type={showKey ? "text" : "password"}
+                        value={settings.apiKey}
+                        onChange={(e) => update({ apiKey: e.target.value })}
+                        placeholder={provider.apiKeyPlaceholder}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className={`${inputClass} pr-9`}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowKey((v) => !v)}
+                        className="absolute inset-y-0 right-0 flex w-9 items-center justify-center text-muted-foreground hover:text-foreground"
+                        aria-label={showKey ? "Ocultar clave" : "Mostrar clave"}
+                      >
+                        {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                    {!settings.apiKey && envConfigured && (
+                      <p className="text-xs text-muted-foreground">
+                        Sin clave escrita: se usará la configurada en el servidor (.env.local).
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 pt-1">
+                    <Button type="button" onClick={testConnection} disabled={testing}>
+                      {testing ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <PlugZap className="h-4 w-4" />
+                      )}
+                      Probar conexión
+                    </Button>
+                  </div>
+                  {testResult && (
+                    <p
+                      className={`rounded-lg border p-3 text-sm ${
+                        testResult.ok
+                          ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300"
+                          : "border-destructive/30 bg-destructive/10 text-destructive"
+                      }`}
+                    >
+                      {testResult.message}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+
+              <div className="space-y-6">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-1.5">
+                      <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                      Seguridad y Privacidad
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="text-xs text-muted-foreground space-y-2">
+                    <p>
+                      Tu API key se guarda <strong>solo en este navegador</strong> (localStorage) y se envía únicamente a tu propio servidor para hablar con el proveedor.
+                    </p>
+                    <p>
+                      Ningún tercero tiene acceso a tus tokens ni conversaciones.
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
+          )}
+
+          {/* MÓDULO 3: NOTIFICACIONES */}
+          {activeTab === "notifications" && (
+            <div className="space-y-6 max-w-4xl">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Bell className="h-5 w-5 text-primary" />
+                    Notificaciones Push
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Activa los avisos en tu móvil para recibir recordatorios en tiempo real.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <PushManager />
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm">Avisos automáticos de Núcleo</CardTitle>
+                </CardHeader>
+                <CardContent className="text-xs text-muted-foreground space-y-2">
+                  <p>• <strong>Estudio (15:00)</strong>: Recordatorio diario de exámenes y entregas próximas.</p>
+                  <p>• <strong>Entrenamientos</strong>: Pregunta al terminar el entreno programado si has asistido.</p>
+                  <p>• <strong>Sueño (07:15)</strong>: Pregunta cuánto has dormido para registrar la noche en un toque.</p>
+                  <p>• <strong>Hora de dormir</strong>: Aviso push 15 min antes de tu hora objetivo de descanso.</p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* MÓDULO 4: ESTUDIOS / POMODORO */}
+          {activeTab === "academic" && (
+            <div className="grid gap-6 md:grid-cols-2 max-w-4xl">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Timer className="h-5 w-5 text-primary" />
+                    Tiempos de Pomodoro
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Personaliza los intervalos de concentración y descanso.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-2">
+                  <div className={fieldClass}>
+                    <label className={labelClass} htmlFor="pomodoro-work">
+                      Trabajo / Estudio (minutos)
+                    </label>
+                    <input
+                      id="pomodoro-work"
+                      type="number"
+                      min={1}
+                      max={120}
+                      inputMode="numeric"
+                      value={settings.pomodoroWorkMinutes ?? 25}
+                      onChange={(e) =>
+                        update({ pomodoroWorkMinutes: Number(e.target.value) || 25 })
+                      }
+                      className={inputClass}
+                    />
+                  </div>
+                  <div className={fieldClass}>
+                    <label className={labelClass} htmlFor="pomodoro-break">
+                      Descanso (minutos)
+                    </label>
+                    <input
+                      id="pomodoro-break"
+                      type="number"
+                      min={1}
+                      max={60}
+                      inputMode="numeric"
+                      value={settings.pomodoroBreakMinutes ?? 5}
+                      onChange={(e) =>
+                        update({ pomodoroBreakMinutes: Number(e.target.value) || 5 })
+                      }
+                      className={inputClass}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Leaf className="h-5 w-5 text-emerald-600" />
+                    Bosque de progreso
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    El bosque limita el XP diario a 120. Con el límite desactivado, el árbol crece sin tope.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-3 pt-2">
+                  <Button
+                    type="button"
+                    variant={xpCapDisabled ? "outline" : "default"}
+                    className={xpCapDisabled ? "w-full" : "w-full bg-emerald-600 hover:bg-emerald-700"}
+                    onClick={() => {
+                      const next = !xpCapDisabled;
+                      setXpCapDisabledState(next);
+                      setXpCapDisabled(next);
+                    }}
+                  >
+                    {xpCapDisabled ? "Restaurar límite diario (120 XP)" : "Quitar límite diario de XP"}
+                  </Button>
+                  {xpCapDisabled && (
+                    <p className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2.5 text-xs text-emerald-700 dark:text-emerald-300">
+                      Límite desactivado: el XP del bosque ya no se corta a 120 por día.
+                    </p>
+                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={handleResetTree}
+                  >
+                    <RotateCcw className="h-4 w-4" />
+                    {confirmingTreeReset
+                      ? "¿Seguro? Se pierde todo el XP…"
+                      : "Reiniciar progreso del árbol"}
+                  </Button>
+                  <p className="text-xs text-muted-foreground">
+                    Borra todo el XP, el nivel y las penalizaciones del árbol en este dispositivo.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* MÓDULO 5: ENTRENAMIENTOS */}
+          {activeTab === "sport" && (
+            <div className="max-w-4xl space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Dumbbell className="h-5 w-5 text-primary" />
+                    Plan semanal de entrenamientos
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    Dinos qué días entrenas. Al terminar la sesión te preguntaremos si has ido para apuntarlo en un toque.
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <WorkoutScheduleCard />
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* MÓDULO 6: FINANZAS */}
+          {activeTab === "finance" && (
+            <div className="max-w-4xl space-y-4">
+              <AppleWalletCard />
+            </div>
+          )}
+
+          {/* MÓDULO 7: SALUD / SUEÑO */}
+          {activeTab === "health" && (
+            <div className="max-w-4xl space-y-4">
+              <Card>
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <MoonStar className="h-5 w-5 text-violet-500" />
+                    Mi objetivo de sueño
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {sleepSettings.bedtime} → {sleepSettings.wake_time} · objetivo {sleepSettings.target_hours} h
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4 pt-1">
+                  <SleepScheduleForm
+                    key={`${sleepSettings.bedtime}-${sleepSettings.wake_time}-${sleepSettings.target_hours}-${sleepSettings.reminder_enabled}`}
+                    initial={sleepSettings}
+                    onSave={(input) => actions.setSleepSettings(input)}
+                  />
+                  <p className="text-xs text-muted-foreground border-t pt-3">
+                    El horario objetivo se usa para calcular el cumplimiento de cada noche y para programar el aviso push 15 min antes de acostarte. Los registros y gráficas están en{" "}
+                    <Link href="/sueno" className="font-medium underline text-primary">
+                      Sueño
+                    </Link>
+                    .
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </motion.div>
+      </AnimatePresence>
     </div>
   );
 }

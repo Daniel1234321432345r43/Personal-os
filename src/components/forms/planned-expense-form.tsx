@@ -62,31 +62,27 @@ export function PlannedExpenseForm({
 
   return (
     <form onSubmit={submit} className="space-y-4">
-      {/* Gasto o ingreso: la misma tabla sirve para las dos direcciones. */}
-      <div className="grid grid-cols-2 gap-2 rounded-lg border p-1">
-        {(
-          [
-            { value: "expense", label: "Gasto previsto" },
-            { value: "income", label: "Ingreso previsto" },
-          ] as const
-        ).map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            onClick={() => setKind(option.value)}
-            aria-pressed={kind === option.value}
-            className={cn(
-              "rounded-md px-3 py-2 text-sm font-medium transition-colors",
-              kind === option.value
-                ? option.value === "income"
-                  ? "bg-emerald-600 text-white"
-                  : "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted",
-            )}
-          >
-            {option.label}
-          </button>
-        ))}
+      {/* Gasto o ingreso: mismo estilo que el formulario de movimientos
+          (gasto en rojo, ingreso en verde). */}
+      <div className="grid grid-cols-2 gap-2">
+        <Button
+          type="button"
+          variant={kind === "expense" ? "default" : "outline"}
+          onClick={() => setKind("expense")}
+          aria-pressed={kind === "expense"}
+          className={cn(kind === "expense" && "bg-red-600 text-white hover:bg-red-700")}
+        >
+          Gasto previsto
+        </Button>
+        <Button
+          type="button"
+          variant={kind === "income" ? "default" : "outline"}
+          onClick={() => setKind("income")}
+          aria-pressed={kind === "income"}
+          className={cn(kind === "income" && "bg-emerald-600 text-white hover:bg-emerald-700")}
+        >
+          Ingreso previsto
+        </Button>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">
@@ -200,7 +196,13 @@ export function PlannedExpenseForm({
             Cancelar
           </Button>
         )}
-        <Button type="submit">
+        <Button
+          type="submit"
+          className={cn(
+            "text-white",
+            isIncome ? "bg-emerald-600 hover:bg-emerald-700" : "bg-red-600 hover:bg-red-700",
+          )}
+        >
           {isIncome ? "Programar ingreso" : "Planificar gasto"}
         </Button>
       </div>

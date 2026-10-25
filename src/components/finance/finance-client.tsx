@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { useData } from "@/components/providers/data-provider";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,173 +13,18 @@ import { cn } from "@/lib/utils";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { BudgetForm } from "@/components/forms/budget-form";
 import { PlannedExpenseForm } from "@/components/forms/planned-expense-form";
+import { BalanceHistoryChart } from "@/components/finance/balance-history-chart";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Check,
-  ChevronDown,
   Clock,
   Plus,
   RotateCw,
   Trash2,
-  TrendingDown,
-  TrendingUp,
   Wallet,
 } from "lucide-react";
 import type { PlannedExpense } from "@/lib/types";
-
-type BalanceHistoryPoint = {
-  date: string | null;
-  balance: number;
-  net: number;
-};
-
-function formatChartDate(date: string | null): string {
-  if (!date) return "Inicio";
-  const [year, month, day] = date.split("-").map(Number);
-  return new Intl.DateTimeFormat("es-ES", {
-    day: "numeric",
-    month: "short",
-  }).format(new Date(year, month - 1, day));
-}
-
-function BalanceHistoryChart({ points }: { points: BalanceHistoryPoint[] }) {
-  if (points.length === 0) {
-    return (
-      <div className="rounded-lg border border-dashed p-8 text-center">
-        <TrendingUp className="mx-auto mb-2 h-8 w-8 text-muted-foreground/40" />
-        <p className="text-sm text-muted-foreground">
-          Añade movimientos para ver cómo evoluciona tu saldo con el tiempo.
-        </p>
-      </div>
-    );
-  }
-
-  const width = 800;
-  const height = 320;
-  const padding = { top: 24, right: 24, bottom: 52, left: 78 };
-  const plotWidth = width - padding.left - padding.right;
-  const plotHeight = height - padding.top - padding.bottom;
-  const values = points.map((point) => point.balance);
-  const rawMin = Math.min(...values);
-  const rawMax = Math.max(...values);
-  const rawRange = rawMax - rawMin;
-  const chartPadding = rawRange === 0 ? Math.max(Math.abs(rawMax) * 0.15, 10) : rawRange * 0.12;
-  const minValue = rawMin - chartPadding;
-  const maxValue = rawMax + chartPadding;
-  const valueRange = maxValue - minValue || 1;
-  const x = (index: number) =>
-    padding.left + (points.length === 1 ? plotWidth / 2 : (index / (points.length - 1)) * plotWidth);
-  const y = (value: number) =>
-    padding.top + ((maxValue - value) / valueRange) * plotHeight;
-  const linePoints = points.map((point, index) => `${x(index)},${y(point.balance)}`).join(" ");
-  const areaPoints = `${padding.left},${padding.top + plotHeight} ${linePoints} ${padding.left + plotWidth},${padding.top + plotHeight}`;
-  const tickCount = 4;
-  const ticks = Array.from({ length: tickCount + 1 }, (_, index) => {
-    const value = maxValue - (index / tickCount) * valueRange;
-    return { value, y: y(value) };
-  });
-  const labelIndexes = Array.from(
-    new Set([0, Math.floor((points.length - 1) / 2), points.length - 1]),
-  );
-  const latest = points[points.length - 1];
-  const trendIsPositive = latest.balance >= 0;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-        <span>Saldo acumulado después de cada día con movimientos</span>
-        <span
-          className={trendIsPositive ? "font-medium text-emerald-600 dark:text-emerald-400" : "font-medium text-red-600 dark:text-red-400"}
-        >
-          {latest.balance >= 0 ? "Saldo positivo" : "Saldo negativo"}: {formatCurrency(latest.balance)}
-        </span>
-      </div>
-      <div className="overflow-x-auto rounded-lg border bg-muted/10 p-2 sm:p-4">
-        <svg
-          viewBox={`0 0 ${width} ${height}`}
-          className="h-auto min-w-[560px] w-full"
-          role="img"
-          aria-label="Evolución del saldo acumulado a lo largo del tiempo"
-        >
-          <defs>
-            <linearGradient id="balance-area-gradient" x1="0" x2="0" y1="0" y2="1">
-              <stop offset="0%" stopColor="currentColor" stopOpacity="0.22" />
-              <stop offset="100%" stopColor="currentColor" stopOpacity="0.02" />
-            </linearGradient>
-          </defs>
-
-          {ticks.map((tick) => (
-            <g key={tick.y}>
-              <line
-                x1={padding.left}
-                x2={padding.left + plotWidth}
-                y1={tick.y}
-                y2={tick.y}
-                className="stroke-border"
-                strokeDasharray="3 5"
-              />
-              <text
-                x={padding.left - 10}
-                y={tick.y + 4}
-                textAnchor="end"
-                className="fill-muted-foreground"
-                fontSize="12"
-              >
-                {formatCurrency(tick.value)}
-              </text>
-            </g>
-          ))}
-
-          <polygon
-            points={areaPoints}
-            fill="url(#balance-area-gradient)"
-            className="text-primary"
-          />
-          <polyline
-            points={linePoints}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="4"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-primary"
-          />
-
-          {points.map((point, index) => (
-            <g key={`${point.date ?? "start"}-${index}`}>
-              <circle
-                cx={x(index)}
-                cy={y(point.balance)}
-                r="5"
-                className="fill-card stroke-primary"
-                strokeWidth="3"
-              >
-                <title>
-                  {formatChartDate(point.date)}: {formatCurrency(point.balance)}
-                  {point.net !== 0 ? ` (${point.net > 0 ? "+" : "−"}${formatCurrency(Math.abs(point.net))} ese día)` : ""}
-                </title>
-              </circle>
-            </g>
-          ))}
-
-          {labelIndexes.map((index) => (
-            <text
-              key={index}
-              x={x(index)}
-              y={height - 17}
-              textAnchor={index === 0 ? "start" : index === points.length - 1 ? "end" : "middle"}
-              className="fill-muted-foreground"
-              fontSize="12"
-            >
-              {formatChartDate(points[index].date)}
-            </text>
-          ))}
-        </svg>
-      </div>
-    </div>
-  );
-}
 
 function LoadingState() {
   return (
@@ -198,8 +43,7 @@ function LoadingState() {
 export function FinanceClient() {
   const { data, hydrated, actions } = useData();
   const [showTx, setShowTx] = useState(false);
-  const [movimientosOpen, setMovimientosOpen] = useState(false);
-  const [showBudget, setShowBudget] = useState(false);
+    const [showBudget, setShowBudget] = useState(false);
   const [showPlanned, setShowPlanned] = useState(false);
 
   const {
@@ -237,28 +81,6 @@ export function FinanceClient() {
     b.date.localeCompare(a.date),
   );
 
-  const balanceHistory = useMemo<BalanceHistoryPoint[]>(() => {
-    if (data.transactions.length === 0) return [];
-
-    const netByDate = new Map<string, number>();
-    for (const transaction of data.transactions) {
-      const amount = Number(transaction.amount);
-      const signedAmount = transaction.type === "income" ? amount : -amount;
-      netByDate.set(transaction.date, (netByDate.get(transaction.date) ?? 0) + signedAmount);
-    }
-
-    let runningBalance = 0;
-    const points: BalanceHistoryPoint[] = [
-      { date: null, balance: 0, net: 0 },
-    ];
-    for (const date of [...netByDate.keys()].sort()) {
-      const net = netByDate.get(date) ?? 0;
-      runningBalance += net;
-      points.push({ date, balance: runningBalance, net });
-    }
-    return points;
-  }, [data.transactions]);
-
   const summary = [
     { label: "Ingresos", value: income, positive: true },
     { label: "Gastos", value: expenses, positive: false },
@@ -285,7 +107,7 @@ export function FinanceClient() {
             "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
             isIncome
               ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-              : "bg-amber-500/10 text-amber-600 dark:text-amber-400",
+              : "bg-red-500/10 text-red-600 dark:text-red-400",
           )}
         >
           <Clock className="h-4 w-4" />
@@ -310,7 +132,7 @@ export function FinanceClient() {
             "shrink-0 font-semibold",
             isIncome
               ? "text-emerald-600 dark:text-emerald-400"
-              : "text-amber-600 dark:text-amber-400",
+              : "text-red-600 dark:text-red-400",
           )}
         >
           {isIncome ? "+" : "~"}
@@ -598,7 +420,7 @@ export function FinanceClient() {
                   title: "Gastos previstos",
                   items: plannedExpenseItems,
                   total: plannedExpenses,
-                  badge: "bg-amber-500/15 text-amber-700 dark:text-amber-300",
+                  badge: "bg-red-500/15 text-red-700 dark:text-red-300",
                   empty:
                     "No tienes gastos previstos añadidos. Programa las mensualidades y compras futuras para saber de cuánto dinero dispondrás en realidad.",
                 },
@@ -637,135 +459,107 @@ export function FinanceClient() {
         </CardContent>
       </Card>
 
-      {/* Movimientos */}
-      <Card className="order-4 overflow-hidden">
-        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-          <button
-            type="button"
-            onClick={() => setMovimientosOpen((v) => !v)}
-            aria-expanded={movimientosOpen}
-            className="flex min-w-0 flex-1 items-center gap-3 text-left transition-colors hover:opacity-80"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted text-foreground">
-              <Wallet className="h-4 w-4" />
-            </div>
-            <div className="min-w-0">
-              <CardTitle className="text-base">Movimientos</CardTitle>
-              <p className="truncate text-xs text-muted-foreground">
-                {sorted.length === 0
-                  ? "Sin movimientos registrados"
-                  : `${sorted.length} ${sorted.length === 1 ? "movimiento" : "movimientos"}`}
-              </p>
-            </div>
-            <motion.span
-              animate={{ rotate: movimientosOpen ? 180 : 0 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="ml-auto mr-2 shrink-0 text-muted-foreground"
-            >
-              <ChevronDown className="h-4 w-4" />
-            </motion.span>
-          </button>
-
-          <Button
-            size="sm"
-            onClick={() => {
-              setShowTx((v) => !v);
-              if (!movimientosOpen) setMovimientosOpen(true);
-            }}
-            className="shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            Nuevo
-          </Button>
+      {/* Evolución del saldo (encima de los movimientos) */}
+      <Card className="order-4">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base">Evolución del saldo</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Cómo ha ido cambiando el dinero acumulado día a día. Toca la gráfica para ver un día concreto.
+          </p>
         </CardHeader>
-
-        <AnimatePresence initial={false}>
-          {movimientosOpen && (
-            <motion.div
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: "auto", opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{
-                height: { duration: 0.4, ease: [0.25, 0.1, 0.25, 1] },
-                opacity: { duration: 0.25 },
-              }}
-              className="overflow-hidden"
-            >
         <CardContent>
-          {/* Escritorio: formulario inline (como antes) */}
-          <div className="mb-4 hidden rounded-lg border bg-muted/30 p-4 md:block">
-            {showTx && <TransactionForm onDone={() => setShowTx(false)} />}
-          </div>
-          {/* Móvil: bottom sheet */}
-          <ResponsiveFormSheet
-            open={showTx}
-            onOpenChange={setShowTx}
-            title="Nuevo movimiento"
-          >
-            <TransactionForm onDone={() => setShowTx(false)} />
-          </ResponsiveFormSheet>
+          <BalanceHistoryChart transactions={data.transactions} />
+        </CardContent>
+      </Card>
 
-          <ul className="divide-y">
-            <AnimatePresence initial={sorted.length === 0}>
-            {sorted.map((t) => {
-              const isIncome = t.type === "income";
-              return (
-                <motion.li
-                  key={t.id}
-                  layout
-                  initial={{ opacity: 0, y: -18, scale: 0.96 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{
-                    opacity: 0,
-                    x: 40,
-                    transition: { duration: 0.55, ease: "easeInOut" },
-                  }}
-                  transition={{ duration: 0.55, ease: "easeOut" }}
-                    className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
-                  >
-                    <div
-                      className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
-                        isIncome
-                          ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                          : "bg-red-500/10 text-red-600 dark:text-red-400"
-                      }`}
+      {/* Movimientos: acordeón colapsado por defecto, igual que el resto de la app */}
+      <div className="order-5">
+        <MobileCollapsible
+          title="Movimientos"
+          subtitle={
+            sorted.length === 0
+              ? "Sin movimientos registrados"
+              : `${sorted.length} ${sorted.length === 1 ? "movimiento" : "movimientos"}`
+          }
+          icon={<Wallet className="h-4 w-4 text-primary" />}
+          defaultOpen={false}
+        >
+          <div className="space-y-4 pt-1">
+            <div className="flex justify-end">
+              <Button size="sm" onClick={() => setShowTx((v) => !v)} className="gap-1.5">
+                <Plus className="h-4 w-4" />
+                Nuevo movimiento
+              </Button>
+            </div>
+
+            {/* Escritorio: formulario inline */}
+            {showTx && (
+              <div className="hidden rounded-lg border bg-muted/30 p-4 md:block">
+                <TransactionForm onDone={() => setShowTx(false)} />
+              </div>
+            )}
+
+            <ul className="divide-y">
+              <AnimatePresence initial={false}>
+                {sorted.map((t) => {
+                  const isIncome = t.type === "income";
+                  return (
+                    <motion.li
+                      key={t.id}
+                      layout
+                      initial={{ opacity: 0, y: -18, scale: 0.96 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{
+                        opacity: 0,
+                        x: 40,
+                        transition: { duration: 0.55, ease: "easeInOut" },
+                      }}
+                      transition={{ duration: 0.55, ease: "easeOut" }}
+                      className="flex items-center gap-3 py-3 first:pt-0 last:pb-0"
                     >
-                      {isIncome ? (
-                        <ArrowDownLeft className="h-4 w-4" />
-                      ) : (
-                        <ArrowUpRight className="h-4 w-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {t.description || t.category}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {t.category} · {formatDate(t.date)}
-                      </p>
-                    </div>
-                    <span
-                      className={`shrink-0 text-sm font-semibold ${
-                        isIncome
-                          ? "text-emerald-600 dark:text-emerald-400"
-                          : "text-red-600 dark:text-red-400"
-                      }`}
-                    >
-                      {isIncome ? "+" : "−"}
-                      {formatCurrency(Number(t.amount))}
-                    </span>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-8 md:w-8"
-                      onClick={() => actions.deleteTransaction(t.id)}
-                      title="Eliminar"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </motion.li>
-                );
-              })}
+                      <div
+                        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                          isIncome
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "bg-red-500/10 text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {isIncome ? (
+                          <ArrowDownLeft className="h-4 w-4" />
+                        ) : (
+                          <ArrowUpRight className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium">
+                          {t.description || t.category}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.category} · {formatDate(t.date)}
+                        </p>
+                      </div>
+                      <span
+                        className={`shrink-0 text-sm font-semibold ${
+                          isIncome
+                            ? "text-emerald-600 dark:text-emerald-400"
+                            : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {isIncome ? "+" : "−"}
+                        {formatCurrency(Number(t.amount))}
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-11 w-11 shrink-0 text-muted-foreground hover:text-destructive md:h-8 md:w-8"
+                        onClick={() => actions.deleteTransaction(t.id)}
+                        title="Eliminar"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </motion.li>
+                  );
+                })}
               </AnimatePresence>
             </ul>
             {sorted.length === 0 && (
@@ -773,33 +567,14 @@ export function FinanceClient() {
                 No hay movimientos. Añade tu primer ingreso o gasto.
               </p>
             )}
-        </CardContent>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </Card>
-
-      {/* Evolución del saldo */}
-      <Card className="order-5">
-        <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-          <div>
-            <CardTitle className="text-base">Evolución del saldo</CardTitle>
-            <p className="text-xs text-muted-foreground">
-              Cómo ha ido cambiando el dinero acumulado según tus movimientos.
-            </p>
           </div>
-          {balanceHistory.length > 1 && (
-            totalBalance >= 0 ? (
-              <TrendingUp className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-            ) : (
-              <TrendingDown className="h-5 w-5 text-red-600 dark:text-red-400" />
-            )
-          )}
-        </CardHeader>
-        <CardContent>
-          <BalanceHistoryChart points={balanceHistory} />
-        </CardContent>
-      </Card>
+        </MobileCollapsible>
+
+        {/* Móvil: bottom sheet (fuera del acordeón para que no se desmonte) */}
+        <ResponsiveFormSheet open={showTx} onOpenChange={setShowTx} title="Nuevo movimiento">
+          <TransactionForm onDone={() => setShowTx(false)} />
+        </ResponsiveFormSheet>
+      </div>
     </div>
   );
 }
