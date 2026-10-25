@@ -330,6 +330,13 @@ export const secretaryTools = {
             .string()
             .optional()
             .describe("Fecha prevista aproximada en formato YYYY-MM-DD"),
+          recurrence: z
+            .enum(["once", "monthly", "weekly", "yearly"])
+            .optional()
+            .default("once")
+            .describe(
+              "Periodicidad: 'monthly' para mensualidades o suscripciones recurrentes (gimnasio, netflix, spotify, alquiler, nómina mensual), 'weekly', 'yearly' o 'once' para un movimiento puntual",
+            ),
         }),
       ),
     }),

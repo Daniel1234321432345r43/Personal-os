@@ -359,12 +359,17 @@ function ToolPartView({ part }: { part: Parameters<typeof isToolUIPart>[0] }) {
       <div className="mb-2 rounded-xl border border-amber-500/20 bg-amber-500/5 p-2.5 text-xs">
         <div className="mb-1 flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
           <Clock className="h-3.5 w-3.5" />
-          <span>Gasto previsto planificado</span>
+          <span>Movimiento previsto / mensualidad programada</span>
         </div>
-        <div className="text-muted-foreground">
+        <div className="text-muted-foreground flex flex-wrap gap-2">
           {input.plannedExpenses.map((pe, i) => (
-            <span key={i}>
+            <span key={i} className="inline-flex items-center gap-1">
               ~{pe.amount}€ {pe.description ? `(${pe.description})` : `(${pe.category})`}
+              {pe.recurrence && pe.recurrence !== "once" && (
+                <span className="rounded bg-amber-500/15 px-1 py-0.2 text-[10px] text-amber-700 dark:text-amber-300 font-medium">
+                  {pe.recurrence === "monthly" ? "🔁 Mensual" : `🔁 ${pe.recurrence}`}
+                </span>
+              )}
             </span>
           ))}
         </div>

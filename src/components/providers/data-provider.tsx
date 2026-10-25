@@ -45,6 +45,7 @@ import type {
   Transaction,
   Grade,
   PlannedExpense,
+  RecurrenceFrequency,
   SleepLog,
   SleepSettings,
 } from "@/lib/types";
@@ -136,6 +137,8 @@ export type PlannedExpenseInput = {
   category: string;
   description?: string | null;
   date?: string | null;
+  /** Periodicidad: "monthly" para mensualidades (gimnasio, netflix, alquiler), "weekly", "yearly" o "once" (puntual). */
+  recurrence?: RecurrenceFrequency | null;
 };
 export type GradeInput = {
   subject_id?: string | null;
@@ -1737,6 +1740,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           category: input.category.trim(),
           description: input.description?.trim() || null,
           date: input.date ?? null,
+          recurrence: input.recurrence ?? "once",
           is_completed: false,
           created_at: iso,
         };
@@ -1763,6 +1767,7 @@ export function DataProvider({ children }: { children: ReactNode }) {
           category: input.category.trim(),
           description: input.description?.trim() || null,
           date: input.date ?? null,
+          recurrence: input.recurrence ?? "once",
           is_completed: false,
           created_at: iso,
         }));
@@ -1803,9 +1808,47 @@ export function DataProvider({ children }: { children: ReactNode }) {
           date: txDate,
           created_at: iso,
         };
+
+        // Si es recurrente (mensualidad, suscripción, semanal, anual),
+        // programamos automáticamente la siguiente ocurrencia para el próximo ciclo.
+        let nextPlanned: PlannedExpense | null = null;
+        if (target.recurrence && target.recurrence !== "once") {
+          const baseDate = target.date ? new Date(target.date + "T00:00:00") : new Date();
+          const nextD = new Date(baseDate);
+
+          if (target.recurrence === "monthly") {
+            nextD.setMonth(nextD.getMonth() + 1);
+          } else if (target.recurrence === "weekly") {
+            nextD.setDate(nextD.getDate() + 7);
+          } else if (target.recurrence === "yearly") {
+            nextD.setFullYear(nextD.getFullYear() + 1);
+          }
+
+          const ny = nextD.getFullYear();
+          const nm = String(nextD.getMonth() + 1).padStart(2, "0");
+          const nd = String(nextD.getDate()).padStart(2, "0");
+          const nextDateStr = `${ny}-${nm}-${nd}`;
+
+          nextPlanned = {
+            id: newId(),
+            user_id: userId,
+            kind: target.kind,
+            amount: target.amount,
+            category: target.category,
+            description: target.description,
+            date: nextDateStr,
+            recurrence: target.recurrence,
+            is_completed: false,
+            created_at: iso,
+          };
+        }
+
         setState((prev) => ({
           ...prev,
-          plannedExpenses: prev.plannedExpenses.filter((p) => p.id !== id),
+          plannedExpenses: [
+            ...prev.plannedExpenses.filter((p) => p.id !== id),
+            ...(nextPlanned ? [nextPlanned] : []),
+          ],
           transactions: [...prev.transactions, newTx],
         }));
         if (userId !== "local") {
@@ -1813,8 +1856,14 @@ export function DataProvider({ children }: { children: ReactNode }) {
             _supabase.from("transactions").insert(newTx),
             "guardar transacción",
           );
+          if (nextPlanned) {
+            void syncSupabase(
+              _supabase.from("planned_expenses").insert(nextPlanned),
+              "guardar siguiente mensualidad",
+            );
+          }
         }
-        // Lo planificado pasa a ser un movimiento real: su fila se borra (con
+        // Lo planificado pasa a ser un movimiento real: su fila original se borra (con
         // lápida) para que el otro dispositivo no la devuelva.
         markDeleted([{ table: "planned_expenses", key: id }]);
       },

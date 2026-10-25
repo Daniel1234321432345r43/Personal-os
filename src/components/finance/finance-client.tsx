@@ -13,12 +13,14 @@ import { cn } from "@/lib/utils";
 import { TransactionForm } from "@/components/forms/transaction-form";
 import { BudgetForm } from "@/components/forms/budget-form";
 import { PlannedExpenseForm } from "@/components/forms/planned-expense-form";
+import { AppleWalletCard } from "@/components/finance/apple-wallet-card";
 import {
   ArrowDownLeft,
   ArrowUpRight,
   Check,
   Clock,
   Plus,
+  RotateCw,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -288,7 +290,15 @@ export function FinanceClient() {
           <Clock className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate font-medium">{p.description || p.category}</p>
+          <div className="flex items-center gap-1.5 truncate">
+            <p className="truncate font-medium">{p.description || p.category}</p>
+            {p.recurrence && p.recurrence !== "once" && (
+              <span className="inline-flex shrink-0 items-center gap-1 rounded bg-primary/10 px-1.5 py-0.5 text-[10px] font-medium text-primary">
+                <RotateCw className="h-2.5 w-2.5" />
+                {p.recurrence === "monthly" ? "Mensual" : p.recurrence === "weekly" ? "Semanal" : "Anual"}
+              </span>
+            )}
+          </div>
           <p className="text-xs text-muted-foreground">
             {p.category}
             {p.date ? ` · Previsto: ${formatDate(p.date)}` : ""}
@@ -626,8 +636,13 @@ export function FinanceClient() {
         </CardContent>
       </Card>
 
+      {/* Sincronización con Apple Wallet y Atajos de iOS */}
+      <div className="order-4">
+        <AppleWalletCard />
+      </div>
+
       {/* Movimientos */}
-      <Card className="order-4">
+      <Card className="order-5">
         <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
           <CardTitle className="text-base">Movimientos</CardTitle>
           <Button size="sm" onClick={() => setShowTx((v) => !v)}>

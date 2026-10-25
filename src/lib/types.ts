@@ -132,6 +132,8 @@ export interface Budget {
  * cobrar (una nómina, un trabajo puntual). Permite proyectar el presupuesto
  * mensual antes de que el dinero se mueva.
  */
+export type RecurrenceFrequency = "once" | "monthly" | "weekly" | "yearly";
+
 export interface PlannedExpense {
   id: string;
   user_id: string;
@@ -141,6 +143,8 @@ export interface PlannedExpense {
   category: string;
   description: string | null;
   date: string | null; // YYYY-MM-DD (fecha prevista u objetivo)
+  /** Periodicidad: "monthly" para mensualidades (gimnasio, netflix, alquiler), "weekly", "yearly" o "once" (puntual). */
+  recurrence?: RecurrenceFrequency | null;
   is_completed: boolean;
   created_at: string;
 }

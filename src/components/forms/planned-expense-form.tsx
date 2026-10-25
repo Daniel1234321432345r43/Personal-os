@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { fieldClass, inputClass, labelClass } from "./ui";
 
+import type { RecurrenceFrequency } from "@/lib/types";
+
 const CATEGORIES = [
   "Alimentación",
   "Transporte",
@@ -33,6 +35,7 @@ export function PlannedExpenseForm({
   const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [date, setDate] = useState(initialDate || "");
+  const [recurrence, setRecurrence] = useState<RecurrenceFrequency>("once");
 
   const isIncome = kind === "income";
 
@@ -47,11 +50,13 @@ export function PlannedExpenseForm({
       category: category.trim(),
       description: description.trim() || null,
       date: date.trim() || null,
+      recurrence,
     });
     setAmount("");
     setCategory("");
     setDescription("");
     setDate("");
+    setRecurrence("once");
     onDone?.();
   }
 
@@ -155,6 +160,38 @@ export function PlannedExpenseForm({
             className={inputClass}
           />
         </div>
+      </div>
+
+      <div className={fieldClass}>
+        <label className={labelClass}>Repetición / Frecuencia</label>
+        <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+          {[
+            { value: "once", label: "Puntual", desc: "Una sola vez" },
+            { value: "monthly", label: "Mensual", desc: "Suscripción / Recibo" },
+            { value: "weekly", label: "Semanal", desc: "Cada semana" },
+            { value: "yearly", label: "Anual", desc: "Cada año" },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              onClick={() => setRecurrence(opt.value as RecurrenceFrequency)}
+              className={cn(
+                "flex flex-col items-center justify-center rounded-lg border p-2 text-center text-xs transition-colors",
+                recurrence === opt.value
+                  ? "border-primary bg-primary/10 font-semibold text-primary"
+                  : "border-border text-muted-foreground hover:bg-muted/50",
+              )}
+            >
+              <span>{opt.label}</span>
+              <span className="text-[10px] font-normal opacity-75">{opt.desc}</span>
+            </button>
+          ))}
+        </div>
+        {recurrence === "monthly" && (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            💡 Al marcar este movimiento como realizado, se registrará el gasto y se programará automáticamente la cuota del mes siguiente.
+          </p>
+        )}
       </div>
 
       <div className="flex justify-end gap-2 pt-1">
