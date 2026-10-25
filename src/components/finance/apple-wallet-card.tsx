@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,14 +13,17 @@ import {
   ChevronUp,
   Sparkles,
   Smartphone,
-  ExternalLink,
   ShieldCheck,
   Zap,
+  AlertCircle,
 } from "lucide-react";
 import { isSupabaseConfigured } from "@/lib/env";
 import { createClient } from "@/lib/supabase/client";
+import { useData } from "@/components/providers/data-provider";
+import { todayKey } from "@/lib/format";
 
 export function AppleWalletCard() {
+  const { actions } = useData();
   const [loading, setLoading] = useState(true);
   const [webhookUrl, setWebhookUrl] = useState<string | null>(null);
   const [token, setToken] = useState<string | null>(null);
@@ -29,17 +32,25 @@ export function AppleWalletCard() {
   const [showInstructions, setShowInstructions] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testSuccess, setTestSuccess] = useState(false);
+  const [testError, setTestError] = useState<string | null>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  useEffect(() => {
-    async function loadToken() {
-      if (!isSupabaseConfigured()) {
-        setLoading(false);
-        return;
-      }
+  const loadToken = useCallback(async () => {
+    setLoading(true);
+    setErrorMsg(null);
 
+    if (!isSupabaseConfigured()) {
+      setIsLoggedIn(false);
+      setLoading(false);
+      return;
+    }
+
+    try {
       const supabase = createClient();
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
 
       if (!user) {
         setIsLoggedIn(false);
@@ -49,23 +60,32 @@ export function AppleWalletCard() {
 
       setIsLoggedIn(true);
 
-      try {
-        const res = await fetch("/api/finance/webhook/token");
-        if (res.ok) {
-          const data = await res.json();
-          setWebhookUrl(data.webhookUrl);
-          setToken(data.token);
-          setLastUsedAt(data.lastUsedAt);
-        }
-      } catch (err) {
-        console.error("Error cargando token de webhook:", err);
-      } finally {
-        setLoading(false);
+      const res = await fetch("/api/finance/webhook/token");
+      if (res.ok) {
+        const data = await res.json();
+        const url =
+          data.webhookUrl ||
+          `${window.location.origin}/api/finance/webhook?token=${data.token}`;
+        setWebhookUrl(url);
+        setToken(data.token);
+        setLastUsedAt(data.lastUsedAt || null);
+      } else {
+        const errData = await res.json().catch(() => null);
+        setErrorMsg(
+          errData?.error || "No se pudo generar el enlace del webhook.",
+        );
       }
+    } catch (err) {
+      console.error("Error cargando token de webhook:", err);
+      setErrorMsg("Error de conexión al cargar tu enlace de webhook.");
+    } finally {
+      setLoading(false);
     }
-
-    loadToken();
   }, []);
+
+  useEffect(() => {
+    void loadToken();
+  }, [loadToken]);
 
   async function copyUrl() {
     if (!webhookUrl) return;
@@ -75,19 +95,31 @@ export function AppleWalletCard() {
   }
 
   async function regenerateToken() {
-    if (!confirm("¿Seguro que quieres generar una nueva clave? Si ya configuraste el atajo en tu iPhone tendrás que actualizar la URL.")) {
+    if (
+      !confirm(
+        "¿Seguro que quieres generar una nueva clave? Si ya configuraste el atajo en tu iPhone tendrás que actualizar la URL en Atajos.",
+      )
+    ) {
       return;
     }
     setLoading(true);
+    setErrorMsg(null);
     try {
       const res = await fetch("/api/finance/webhook/token", { method: "POST" });
       if (res.ok) {
         const data = await res.json();
-        setWebhookUrl(data.webhookUrl);
+        const url =
+          data.webhookUrl ||
+          `${window.location.origin}/api/finance/webhook?token=${data.token}`;
+        setWebhookUrl(url);
         setToken(data.token);
+      } else {
+        const errData = await res.json().catch(() => null);
+        setErrorMsg(errData?.error || "No se pudo regenerar el token.");
       }
     } catch (err) {
       console.error("Error regenerando token:", err);
+      setErrorMsg("Error de conexión al regenerar token.");
     } finally {
       setLoading(false);
     }
@@ -97,6 +129,7 @@ export function AppleWalletCard() {
     if (!token) return;
     setTesting(true);
     setTestSuccess(false);
+    setTestError(null);
     try {
       const res = await fetch(`/api/finance/webhook?token=${token}`, {
         method: "POST",
@@ -104,15 +137,30 @@ export function AppleWalletCard() {
         body: JSON.stringify({
           amount: 1.0,
           merchant: "Mercadona (Prueba)",
-          category: "Alimentación",
+          category: "food",
         }),
       });
       if (res.ok) {
+        const data = await res.json();
+        // Insertar en local para que la UI de Finanzas se actualice inmediatamente
+        actions.addTransaction({
+          type: "expense",
+          amount: 1.0,
+          category: data.transaction?.category || "food",
+          description: "Mercadona (Prueba)",
+          date: todayKey(),
+        });
         setTestSuccess(true);
         setTimeout(() => setTestSuccess(false), 4000);
+      } else {
+        const errData = await res.json().catch(() => null);
+        setTestError(errData?.error || "Error en el test");
+        setTimeout(() => setTestError(null), 5000);
       }
     } catch (err) {
       console.error("Error en prueba de webhook:", err);
+      setTestError("Error de conexión al realizar la prueba");
+      setTimeout(() => setTestError(null), 5000);
     } finally {
       setTesting(false);
     }
@@ -129,7 +177,10 @@ export function AppleWalletCard() {
             <div>
               <CardTitle className="text-base flex items-center gap-2">
                 Apple Wallet & Atajos de iOS
-                <Badge variant="secondary" className="text-[10px] gap-1 font-normal bg-primary/10 text-primary">
+                <Badge
+                  variant="secondary"
+                  className="text-[10px] gap-1 font-normal bg-primary/10 text-primary"
+                >
                   <Zap className="h-3 w-3" /> Tiempo real
                 </Badge>
               </CardTitle>
@@ -146,31 +197,62 @@ export function AppleWalletCard() {
             className="text-xs gap-1.5"
           >
             {showInstructions ? "Ocultar guía" : "Ver guía de configuración"}
-            {showInstructions ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+            {showInstructions ? (
+              <ChevronUp className="h-3.5 w-3.5" />
+            ) : (
+              <ChevronDown className="h-3.5 w-3.5" />
+            )}
           </Button>
         </div>
       </CardHeader>
 
       <CardContent className="space-y-4 pt-1">
         {!isLoggedIn ? (
-          <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-            <ShieldCheck className="mx-auto mb-1.5 h-6 w-6 text-primary/60" />
-            <p className="font-medium text-foreground">Inicia sesión con tu cuenta</p>
-            <p className="text-xs mt-0.5">
-              Para generar tu enlace personal y privado de sincronización con Apple Pay es necesario tener una cuenta iniciada.
-            </p>
+          <div className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground space-y-2.5">
+            <ShieldCheck className="mx-auto h-6 w-6 text-primary/60" />
+            <div>
+              <p className="font-medium text-foreground">Inicia sesión con tu cuenta</p>
+              <p className="text-xs text-muted-foreground mt-0.5 max-w-md mx-auto">
+                Para generar tu enlace personal y privado de sincronización con Apple Pay es necesario tener una cuenta iniciada.
+              </p>
+            </div>
+            <Button asChild size="sm" className="text-xs">
+              <a href="/login">Iniciar sesión</a>
+            </Button>
           </div>
         ) : loading ? (
           <div className="flex items-center gap-2 text-xs text-muted-foreground py-2">
             <RotateCw className="h-3.5 w-3.5 animate-spin" />
             Cargando tu enlace de conexión seguro...
           </div>
+        ) : errorMsg ? (
+          <div className="rounded-lg border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-700 dark:text-red-300 flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <span>{errorMsg}</span>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={loadToken}
+              className="h-7 text-xs shrink-0"
+            >
+              Reintentar
+            </Button>
+          </div>
         ) : (
           <div className="space-y-3">
             <div>
-              <label className="text-xs font-medium text-muted-foreground block mb-1.5">
-                Tu URL personal de webhook para Atajos
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Tu URL personal de webhook para Atajos
+                </label>
+                {lastUsedAt && (
+                  <span className="text-[10px] text-muted-foreground">
+                    Último uso: {new Date(lastUsedAt).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -182,6 +264,7 @@ export function AppleWalletCard() {
                   size="sm"
                   variant="outline"
                   onClick={copyUrl}
+                  disabled={!webhookUrl}
                   className="gap-1.5 shrink-0 text-xs"
                 >
                   {copied ? (
@@ -210,19 +293,30 @@ export function AppleWalletCard() {
 
             <div className="flex flex-wrap items-center justify-between gap-2 pt-1 text-xs">
               <div className="flex items-center gap-1.5 text-muted-foreground">
-                <Sparkles className="h-3.5 w-3.5 text-amber-500" />
-                <span>Categorización automática por nombre de comercio (Mercadona, Zara, Uber, etc.)</span>
+                <Sparkles className="h-3.5 w-3.5 text-amber-500 shrink-0" />
+                <span>
+                  Categorización automática por nombre de comercio (Mercadona, Zara, Uber, etc.)
+                </span>
               </div>
 
-              <Button
-                size="sm"
-                variant="secondary"
-                onClick={testWebhook}
-                disabled={testing}
-                className="h-7 text-[11px] gap-1.5"
-              >
-                {testing ? "Probando..." : testSuccess ? "¡Prueba registrada! ✅" : "Probar envío de prueba (1 €)"}
-              </Button>
+              <div className="flex items-center gap-2">
+                {testError && (
+                  <span className="text-[11px] text-destructive">{testError}</span>
+                )}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={testWebhook}
+                  disabled={testing || !token}
+                  className="h-7 text-[11px] gap-1.5"
+                >
+                  {testing
+                    ? "Probando..."
+                    : testSuccess
+                    ? "¡Prueba registrada! ✅"
+                    : "Probar envío de prueba (1 €)"}
+                </Button>
+              </div>
             </div>
           </div>
         )}
@@ -240,10 +334,10 @@ export function AppleWalletCard() {
                 Abre la app nativa <strong>Atajos (Shortcuts)</strong> en tu iPhone.
               </li>
               <li>
-                Ve a la pestaña inferior <strong>Automatización</strong> y pulsa en el botón <strong>+</strong> (Crear automatización personal).
+                Ve a la pestaña inferior <strong>Automatización</strong> y pulsa en el botón <strong>+</strong> (o Crear automatización personal).
               </li>
               <li>
-                Busca y pulsa en <strong>Transacción</strong> (el icono de tarjeta de crédito).
+                Busca y pulsa en <strong>Transacción</strong> (icono de tarjeta de crédito).
               </li>
               <li>
                 Selecciona la tarjeta o tarjetas que uses con Apple Pay y pulsa <strong>Siguiente</strong>.
@@ -251,14 +345,20 @@ export function AppleWalletCard() {
               <li>
                 Añade la acción: <strong>Obtener contenido de URL</strong>:
                 <ul className="list-disc pl-4 mt-1 space-y-1 text-foreground/80">
-                  <li><strong>URL:</strong> Pega tu URL personal copiada arriba.</li>
-                  <li><strong>Método:</strong> Elige <code className="bg-muted px-1 rounded">POST</code>.</li>
-                  <li><strong>Solicitar cuerpo:</strong> Elige <code className="bg-muted px-1 rounded">JSON</code>.</li>
                   <li>
-                    Añade un campo: clave <code className="bg-muted px-1 rounded">amount</code> → pulsa en el teclado y selecciona la variable <strong>«Importe»</strong> del atajo.
+                    <strong>URL:</strong> Pega tu URL personal copiada arriba.
                   </li>
                   <li>
-                    Añade un campo: clave <code className="bg-muted px-1 rounded">merchant</code> → pulsa y selecciona la variable <strong>«Comercio»</strong>.
+                    <strong>Método:</strong> Elige <code className="bg-muted px-1 rounded">POST</code>.
+                  </li>
+                  <li>
+                    <strong>Solicitar cuerpo:</strong> Elige <code className="bg-muted px-1 rounded">JSON</code>.
+                  </li>
+                  <li>
+                    Añade un campo de texto: clave <code className="bg-muted px-1 rounded">amount</code> → pulsa en el teclado y selecciona la variable <strong>«Importe»</strong> del atajo.
+                  </li>
+                  <li>
+                    Añade un campo de texto: clave <code className="bg-muted px-1 rounded">merchant</code> → pulsa y selecciona la variable <strong>«Comercio»</strong>.
                   </li>
                 </ul>
               </li>

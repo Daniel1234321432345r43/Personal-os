@@ -1,12 +1,25 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
-import crypto from "crypto";
+import {
+  createSignedWebhookToken,
+  verifySignedWebhookToken,
+} from "@/lib/finance/webhook-token";
 
 export const maxDuration = 15;
 
-function generateSecureToken(): string {
-  return crypto.randomBytes(24).toString("hex");
+function resolveOrigin(req: Request): string {
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  const forwardedHost = req.headers.get("x-forwarded-host");
+  if (forwardedHost) {
+    const proto = forwardedProto || "https";
+    return `${proto}://${forwardedHost}`;
+  }
+  const host = req.headers.get("host");
+  if (host) {
+    const proto = forwardedProto || (host.startsWith("localhost") ? "http" : "https");
+    return `${proto}://${host}`;
+  }
+  return new URL(req.url).origin;
 }
 
 export async function GET(req: Request) {
@@ -14,58 +27,73 @@ export async function GET(req: Request) {
     const supabase = await createClient();
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
         { error: "Debes iniciar sesión para obtener tu token de webhook." },
         { status: 401 },
       );
     }
 
-    const admin = createAdminClient();
+    let token = (user.user_metadata?.finance_webhook_token as string) || null;
+    let lastUsedAt: string | null = null;
+    let createdAt = user.created_at || new Date().toISOString();
 
-    // Buscar si ya tiene un token
-    const { data: existing, error: findError } = await admin
-      .from("finance_webhooks")
-      .select("token, created_at, last_used_at")
-      .eq("user_id", user.id)
-      .maybeSingle();
+    // 1. Intentar consultar si existe registro en la tabla finance_webhooks (si la migración ya se aplicó)
+    try {
+      const { data: existing } = await supabase
+        .from("finance_webhooks")
+        .select("token, created_at, last_used_at")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-    if (findError) {
-      console.error("[finance/webhook/token] error buscando token:", findError);
-      return NextResponse.json({ error: "Error de base de datos" }, { status: 500 });
+      if (existing?.token) {
+        token = existing.token;
+        lastUsedAt = existing.last_used_at || null;
+        createdAt = existing.created_at || createdAt;
+      }
+    } catch {
+      // Si la tabla no existe en la base de datos remota, continuamos de forma transparente
     }
 
-    let token = existing?.token;
+    // 2. Si no tiene token o el token no es válido para este usuario, generamos uno nuevo firmado
+    const validUserId = token ? verifySignedWebhookToken(token) : null;
+    if (!token || validUserId !== user.id) {
+      token = createSignedWebhookToken(user.id);
 
-    // Si no tiene, crear uno nuevo
-    if (!token) {
-      token = generateSecureToken();
-      const { error: insertError } = await admin.from("finance_webhooks").insert({
-        user_id: user.id,
-        token,
-        name: "Apple Wallet / Atajos",
+      // Guardar en user_metadata (siempre disponible sin necesidad de migraciones de tablas)
+      await supabase.auth.updateUser({
+        data: { finance_webhook_token: token },
+      }).catch((err) => {
+        console.warn("[finance/webhook/token] no se pudo actualizar user_metadata:", err);
       });
 
-      if (insertError) {
-        console.error("[finance/webhook/token] error creando token:", insertError);
-        return NextResponse.json({ error: "No se pudo generar el token" }, { status: 500 });
+      // Intentar también guardar en finance_webhooks si la tabla existe
+      try {
+        await supabase.from("finance_webhooks").upsert({
+          user_id: user.id,
+          token,
+          name: "Apple Wallet / Atajos",
+        });
+      } catch {
+        // Ignorar si la tabla aún no existe
       }
     }
 
-    const origin = new URL(req.url).origin;
+    const origin = resolveOrigin(req);
     const webhookUrl = `${origin}/api/finance/webhook?token=${token}`;
 
     return NextResponse.json({
       token,
       webhookUrl,
-      lastUsedAt: existing?.last_used_at || null,
-      createdAt: existing?.created_at || new Date().toISOString(),
+      lastUsedAt,
+      createdAt,
     });
   } catch (error) {
     console.error("[finance/webhook/token] error:", error);
-    return NextResponse.json({ error: "Error del servidor" }, { status: 500 });
+    return NextResponse.json({ error: "Error del servidor al obtener el token" }, { status: 500 });
   }
 }
 
@@ -75,33 +103,38 @@ export async function POST(req: Request) {
     const supabase = await createClient();
     const {
       data: { user },
+      error: authError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (authError || !user) {
       return NextResponse.json(
         { error: "Debes iniciar sesión para regenerar tu token." },
         { status: 401 },
       );
     }
 
-    const admin = createAdminClient();
-    const newToken = generateSecureToken();
+    const newToken = createSignedWebhookToken(user.id);
 
-    // Eliminar o actualizar los anteriores
-    await admin.from("finance_webhooks").delete().eq("user_id", user.id);
-
-    const { error: insertError } = await admin.from("finance_webhooks").insert({
-      user_id: user.id,
-      token: newToken,
-      name: "Apple Wallet / Atajos",
+    // Guardar nuevo token en user_metadata
+    await supabase.auth.updateUser({
+      data: { finance_webhook_token: newToken },
+    }).catch((err) => {
+      console.warn("[finance/webhook/token] no se pudo actualizar user_metadata:", err);
     });
 
-    if (insertError) {
-      console.error("[finance/webhook/token] error regenerando token:", insertError);
-      return NextResponse.json({ error: "No se pudo regenerar el token" }, { status: 500 });
+    // Actualizar tabla si existe
+    try {
+      await supabase.from("finance_webhooks").delete().eq("user_id", user.id);
+      await supabase.from("finance_webhooks").insert({
+        user_id: user.id,
+        token: newToken,
+        name: "Apple Wallet / Atajos",
+      });
+    } catch {
+      // Ignorar si la tabla no existe
     }
 
-    const origin = new URL(req.url).origin;
+    const origin = resolveOrigin(req);
     const webhookUrl = `${origin}/api/finance/webhook?token=${newToken}`;
 
     return NextResponse.json({
@@ -111,6 +144,6 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     console.error("[finance/webhook/token] error regenerando:", error);
-    return NextResponse.json({ error: "Error del servidor" }, { status: 500 });
+    return NextResponse.json({ error: "Error del servidor al regenerar token" }, { status: 500 });
   }
 }

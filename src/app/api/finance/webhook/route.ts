@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { verifySignedWebhookToken } from "@/lib/finance/webhook-token";
 import { inferExpenseCategory } from "@/lib/finance/categorizer";
 import { todayKey } from "@/lib/format";
 import webpush from "web-push";
@@ -102,19 +103,29 @@ export async function POST(req: Request) {
 
     const supabase = createAdminClient();
 
-    // 1. Validar token del usuario en la base de datos
-    const { data: webhook, error: whError } = await supabase
-      .from("finance_webhooks")
-      .select("id, user_id, name")
-      .eq("token", token)
-      .maybeSingle();
+    // 1. Validar el token y obtener el userId
+    let userId: string | null = verifySignedWebhookToken(token);
+    let webhookId: string | null = null;
 
-    if (whError) {
-      console.error("[finance/webhook] error consultando token:", whError);
-      return NextResponse.json({ error: "Error interno al verificar token" }, { status: 500 });
+    if (!userId) {
+      // Fallback a consultar en la tabla finance_webhooks
+      try {
+        const { data: webhook } = await supabase
+          .from("finance_webhooks")
+          .select("id, user_id")
+          .eq("token", token)
+          .maybeSingle();
+
+        if (webhook?.user_id) {
+          userId = webhook.user_id;
+          webhookId = webhook.id;
+        }
+      } catch {
+        // Ignorar si la tabla no existe
+      }
     }
 
-    if (!webhook) {
+    if (!userId) {
       return NextResponse.json(
         { error: "Token de webhook no válido o revocado." },
         { status: 403 },
@@ -125,7 +136,7 @@ export async function POST(req: Request) {
     const { data: transaction, error: txError } = await supabase
       .from("transactions")
       .insert({
-        user_id: webhook.user_id,
+        user_id: userId,
         type,
         amount,
         category,
@@ -137,16 +148,27 @@ export async function POST(req: Request) {
 
     if (txError) {
       console.error("[finance/webhook] error insertando transacción:", txError);
+      if (txError.code === "42501") {
+        return NextResponse.json(
+          {
+            error:
+              "Permisos insuficientes en la base de datos remota. Añade la variable SUPABASE_SERVICE_ROLE_KEY en el panel de Netlify.",
+          },
+          { status: 500 },
+        );
+      }
       return NextResponse.json({ error: "No se pudo registrar la transacción" }, { status: 500 });
     }
 
-    // 3. Actualizar fecha de último uso del webhook
-    void supabase
-      .from("finance_webhooks")
-      .update({ last_used_at: new Date().toISOString() })
-      .eq("id", webhook.id);
+    // 3. Actualizar fecha de último uso si existe registro en la tabla
+    if (webhookId) {
+      void supabase
+        .from("finance_webhooks")
+        .update({ last_used_at: new Date().toISOString() })
+        .eq("id", webhookId);
+    }
 
-    // 4. Notificación push silenciosa/informativa si el usuario tiene suscripciones Web Push activas
+    // 4. Notificación push si el usuario tiene suscripciones Web Push activas
     const publicKey =
       process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || "";
     const privateKey = process.env.VAPID_PRIVATE_KEY || "";
@@ -156,7 +178,7 @@ export async function POST(req: Request) {
       const { data: subs } = await supabase
         .from("push_subscriptions")
         .select("endpoint, p256dh, auth")
-        .eq("user_id", webhook.user_id);
+        .eq("user_id", userId);
 
       if (subs && subs.length > 0) {
         webpush.setVapidDetails(subject, publicKey, privateKey);
