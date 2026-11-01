@@ -84,6 +84,7 @@ export function AppleWalletCard() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadToken();
   }, [loadToken]);
 
@@ -258,7 +259,7 @@ export function AppleWalletCard() {
                   type="text"
                   readOnly
                   value={webhookUrl || ""}
-                  className="flex-1 rounded-md border bg-muted/40 px-3 py-1.5 text-xs font-mono select-all focus:outline-none"
+                  className="flex-1 min-w-0 rounded-md border bg-muted/40 px-3 py-1.5 text-xs font-mono select-all focus:outline-none"
                 />
                 <Button
                   size="sm"
